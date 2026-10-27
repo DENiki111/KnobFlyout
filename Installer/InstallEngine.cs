@@ -29,6 +29,7 @@ namespace KnobFlyoutSetup
         public const string ExeName = "KnobFlyout.exe";
         private const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\KnobFlyout";
         private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        private const string ApprovedKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 
         // Vorgänger unter dem alten Namen: wird bei der Installation übernommen (Einstellungen) und entfernt.
         private const string LegacyName = "ModernFlyout";
@@ -174,11 +175,11 @@ namespace KnobFlyoutSetup
             SetShortcut(StartMenuShortcut, o.StartMenu, exe, dir);
 
             progress(96, L.T("Programm wird registriert …", "Registering the program …"));
+            // Autostart: Run-Eintrag immer anlegen, an/aus wie der Task-Manager über StartupApproved – so steht KnobFlyout
+            // immer unter „Autostart-Apps“ im Task-Manager und lässt sich dort oder in den Einstellungen umschalten.
             using (var run = Registry.CurrentUser.CreateSubKey(RunKey))
-            {
-                if (o.Autostart) run.SetValue(AppName, "\"" + exe + "\"");
-                else if (run.GetValue(AppName) != null) run.DeleteValue(AppName, false);
-            }
+                run.SetValue(AppName, "\"" + exe + "\"");
+            SetStartupApproved(AppName, o.Autostart);
 
             string uninstall = Path.Combine(dir, "uninstall.cmd");
             File.WriteAllText(uninstall, UninstallScript(dir), new UTF8Encoding(false));
@@ -204,6 +205,29 @@ namespace KnobFlyoutSetup
             progress(100, L.T("Fertig.", "Done."));
         }
 
+        /// <summary>Autostart gerade an? (Run-Eintrag vorhanden und nicht im Task-Manager deaktiviert)</summary>
+        public static bool AutostartEnabled()
+        {
+            try
+            {
+                using (var run = Registry.CurrentUser.OpenSubKey(RunKey))
+                using (var approved = Registry.CurrentUser.OpenSubKey(ApprovedKey))
+                    return run?.GetValue(AppName) != null
+                        && !(approved?.GetValue(AppName) is byte[] state && state.Length > 0 && (state[0] & 1) == 1);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>An/aus wie im Task-Manager: 12 Bytes, erstes Byte 2 = an, 3 = aus (dahinter der Zeitpunkt des Abschaltens).</summary>
+        private static void SetStartupApproved(string name, bool enabled)
+        {
+            var state = new byte[12];
+            state[0] = enabled ? (byte)2 : (byte)3;
+            if (!enabled) BitConverter.GetBytes(DateTime.UtcNow.ToFileTimeUtc()).CopyTo(state, 4);
+            using (var key = Registry.CurrentUser.CreateSubKey(ApprovedKey))
+                key.SetValue(name, state, RegistryValueKind.Binary);
+        }
+
         private static bool SamePath(string a, string b) =>
             string.Equals(Path.GetFullPath(a).TrimEnd('\\'), Path.GetFullPath(b).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
 
@@ -215,6 +239,8 @@ namespace KnobFlyoutSetup
         {
             using (var run = Registry.CurrentUser.CreateSubKey(RunKey))
                 if (run.GetValue(LegacyName) != null) run.DeleteValue(LegacyName, false);
+            using (var approved = Registry.CurrentUser.CreateSubKey(ApprovedKey))
+                if (approved.GetValue(LegacyName) != null) approved.DeleteValue(LegacyName, false);
             foreach (var folder in new[] { Environment.SpecialFolder.DesktopDirectory, Environment.SpecialFolder.Programs })
             {
                 string path = Path.Combine(Environment.GetFolderPath(folder), LegacyName + ".lnk");
@@ -283,6 +309,7 @@ namespace KnobFlyoutSetup
             sb.AppendLine("taskkill /f /im " + ExeName + " >nul 2>&1");
             sb.AppendLine("timeout /t 2 /nobreak >nul");
             sb.AppendLine("reg delete \"HKCU\\" + RunKey + "\" /v " + AppName + " /f >nul 2>&1");
+            sb.AppendLine("reg delete \"HKCU\\" + ApprovedKey + "\" /v " + AppName + " /f >nul 2>&1");
             sb.AppendLine("reg delete \"HKCU\\" + UninstallKey + "\" /f >nul 2>&1");
             sb.AppendLine("del /f /q \"" + DesktopShortcut + "\" >nul 2>&1");
             sb.AppendLine("del /f /q \"" + StartMenuShortcut + "\" >nul 2>&1");

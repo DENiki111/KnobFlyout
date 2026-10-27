@@ -1,0 +1,56 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KnobFlyout", "KnobFlyout\KnobFlyout.csproj", "{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Installer", "Installer", "{1860D2E4-5C43-71D5-59A5-599A4DE1DF67}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KnobFlyoutSetup", "Installer\KnobFlyoutSetup.csproj", "{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}"
+	ProjectSection(ProjectDependencies) = postProject
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10} = {9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}.Debug|x64.Build.0 = Debug|Any CPU
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}.Debug|x86.Build.0 = Debug|Any CPU
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}.Release|x64.ActiveCfg = Release|Any CPU
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}.Release|x64.Build.0 = Release|Any CPU
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}.Release|x86.ActiveCfg = Release|Any CPU
+		{9B1B6E2B-4E1C-4B7B-9B8A-6E2C6B7B1A10}.Release|x86.Build.0 = Release|Any CPU
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}.Debug|x64.Build.0 = Debug|Any CPU
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}.Debug|x86.Build.0 = Debug|Any CPU
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}.Release|x64.ActiveCfg = Release|Any CPU
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}.Release|x64.Build.0 = Release|Any CPU
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}.Release|x86.ActiveCfg = Release|Any CPU
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{E6DB61BB-55DF-4CD8-A221-0C3C1AE61B6A} = {1860D2E4-5C43-71D5-59A5-599A4DE1DF67}
+	EndGlobalSection
+EndGlobal

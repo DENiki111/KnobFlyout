@@ -12,15 +12,13 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>KnobFlyout-Setup</AssemblyName>
     <RootNamespace>KnobFlyoutSetup</RootNamespace>
-    <ApplicationIcon>..\KnobEarTrumpet\app.ico</ApplicationIcon>
+    <ApplicationIcon>..\KnobFlyout\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <Version>1.0.0</Version>
     <Product>KnobFlyout</Product>
     <Company>KnobFlyout</Company>
-    <OutputPath>..\dist\</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <PayloadDir>$(MSBuildProjectDirectory)\obj\payload\</PayloadDir>
     <PayloadZip>$(MSBuildProjectDirectory)\obj\payload.zip</PayloadZip>
@@ -43,10 +41,15 @@
 
   <Target Name="BuildPayload" BeforeTargets="BeforeBuild" Condition="'$(Configuration)' == 'Release'">
     <RemoveDir Directories="$(PayloadDir)" />
-    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\KnobEarTrumpet\KnobEarTrumpet.csproj&quot; -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o &quot;$(PayloadDir)publish&quot;" />
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\KnobFlyout\KnobFlyout.csproj&quot; -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o &quot;$(PayloadDir)publish&quot;" />
     <MakeDir Directories="$(PayloadDir)zip" />
-    <Copy SourceFiles="$(PayloadDir)publish\KnobEarTrumpet.exe" DestinationFiles="$(PayloadDir)zip\KnobFlyout.exe" />
+    <Copy SourceFiles="$(PayloadDir)publish\KnobFlyout.exe" DestinationFiles="$(PayloadDir)zip\KnobFlyout.exe" />
     <ZipDirectory SourceDirectory="$(PayloadDir)zip" DestinationFile="$(PayloadZip)" Overwrite="true" />
+  </Target>
+
+  <!-- Nur die fertige Setup-exe nach dist\ (die Build-Abhängigkeit auf die App legt sonst deren Startdateien mit ins Ausgabeverzeichnis). -->
+  <Target Name="CopySetupToDist" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(MSBuildProjectDirectory)\..\dist\" />
   </Target>
 
 </Project>

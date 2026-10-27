@@ -38,6 +38,7 @@ Turn your knob and KnobFlyout changes the volume of exactly the apps you want (f
 - **Free placement** – 9 places per monitor, multi-monitor support, drag with the mouse, saved positions you can cycle through by key.
 - **Spotify Web API** (optional) – controls Spotify's own volume.
 - **English and German**, light, dark or system color scheme.
+- **Autostart** – start with Windows, switchable in the settings and in Task Manager (“Startup apps”).
 - Runs in the notification area, **no administrator rights** needed.
 
 ## Requirements
@@ -52,13 +53,14 @@ The setup brings everything it needs, no separate .NET installation is required.
 1. Download **`KnobFlyout-Setup.exe`** from the [Releases](../../releases) page and run it.
 2. Choose the language (English / Deutsch).
 3. Choose the destination folder – default `%LocalAppData%\Programs`. The folder **`KnobFlyout`** is created there automatically.
-4. Choose the additional tasks: desktop shortcut, start menu entry, start with Windows.
+4. Choose the additional tasks: desktop shortcut, start menu entry (so Windows search finds KnobFlyout), start with Windows.
 5. Click **Install**, then **Finish** – KnobFlyout starts and appears in the notification area (next to the clock).
 
 Notes:
 
 - **Windows SmartScreen** may warn because the setup is not signed: click “More info” → “Run anyway”.
 - For protected folders such as `C:\Program Files`, the setup offers to restart itself as administrator.
+- **Autostart** can be switched on and off later in the settings (page **General**) or in Task Manager under “Startup apps” – KnobFlyout is always listed there.
 - **Update:** simply run the newer setup – it suggests the existing folder and keeps your settings.
 - **Coming from ModernFlyout** (the old name): the setup takes over your settings and the Spotify connection and removes the old version.
 - **Uninstall:** Windows Settings → Apps → Installed apps → KnobFlyout → Uninstall. This removes the program folder including the settings.
@@ -175,7 +177,7 @@ Open via tray icon → right-click → **Settings**. Changes apply when you clic
 
 | Page | Contents |
 |---|---|
-| General | Language, light or dark, reload settings |
+| General | Language, light or dark, start with Windows, reload settings |
 | Volume & apps | Step size, Spotify step size, app list with profile assignment, ignored apps |
 | Profiles | Switch key, controlled apps, skip empty profiles, edit profiles, assign keys |
 | OSD | On / off, duration, click to dismiss, design, opacity, colors |
@@ -206,9 +208,9 @@ Requirements: Windows, [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet
 
 ```bash
 # Run (Debug)
-dotnet run --project KnobEarTrumpet
+dotnet run --project KnobFlyout
 
-# Portable single exe → publish\KnobEarTrumpet.exe
+# Portable single exe → publish\KnobFlyout.exe
 publish.bat
 
 # Setup → dist\KnobFlyout-Setup.exe (publishes the app automatically)
@@ -219,7 +221,7 @@ Project layout:
 
 | Folder | Contents |
 |---|---|
-| `KnobEarTrumpet/` | The app (WPF, .NET 8) – `Audio/` (sessions, Spotify), `Input/` (keyboard hook), `Osd/` (OSD, media flyout, designs), `Media/` (Windows media sessions), `Settings/`, `Tray/`, `Config/` |
+| `KnobFlyout/` | The app (WPF, .NET 8) – `Audio/` (sessions, Spotify), `Input/` (keyboard hook), `Osd/` (OSD, media flyout, designs), `Media/` (Windows media sessions), `Settings/`, `Tray/`, `Config/` |
 | `Installer/` | Setup wizard (WinForms, .NET Framework 4.8) with the app embedded |
 
 Built with [NAudio](https://github.com/naudio/NAudio) (audio sessions), [Hardcodet NotifyIcon](https://github.com/hardcodet/wpf-notifyicon) (tray icon) and the Windows media control API (GSMTC).

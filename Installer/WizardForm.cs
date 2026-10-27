@@ -189,8 +189,12 @@ namespace KnobFlyoutSetup
             var page = Page();
             AddText(page, L.T("Welche zusätzlichen Aufgaben sollen ausgeführt werden?", "Which additional tasks should be performed?"), 0);
             _desktop = Check(page, L.T("Verknüpfung auf dem Desktop", "Desktop shortcut"), 36, args.Desktop ?? true);
-            _startMenu = Check(page, L.T("Eintrag im Startmenü", "Start menu entry"), 64, args.StartMenu ?? true);
-            _autostart = Check(page, L.T("Mit Windows starten (Autostart)", "Start with Windows (autostart)"), 92, args.Autostart ?? true);
+            _startMenu = Check(page, L.T("Eintrag im Startmenü (damit die Windows-Suche KnobFlyout findet)", "Start menu entry (so Windows search finds KnobFlyout)"), 64, args.StartMenu ?? true);
+            // Bei einem Update den aktuellen Stand übernehmen (z. B. im Task-Manager abgeschaltet), sonst an.
+            _autostart = Check(page, L.T("Mit Windows starten (Autostart)", "Start with Windows (autostart)"), 92,
+                args.Autostart ?? (_existing == null || InstallEngine.AutostartEnabled()));
+            AddText(page, L.T("Autostart lässt sich später jederzeit in den Einstellungen von KnobFlyout (Seite „Allgemein“) oder im Task-Manager unter „Autostart-Apps“ ein- und ausschalten.",
+                "Autostart can be switched on and off at any time later in the KnobFlyout settings (“General” page) or in Task Manager under “Startup apps”."), 132);
             return page;
         }
 
