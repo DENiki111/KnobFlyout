@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Installer für ModernFlyout: eine einzige exe (dist\ModernFlyout-Setup.exe), die die App eingebettet mitbringt.
+    Bauen (Release), z. B. in Visual Studio oder per „dotnet build Installer -c Release“: veröffentlicht die App
+    automatisch (self-contained, eine Datei), packt sie als payload.zip und bettet sie ein. .NET Framework 4.8
+    ist in Windows 10/11 enthalten, der Installer braucht also nichts zusätzlich.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>ModernFlyout-Setup</AssemblyName>
+    <RootNamespace>ModernFlyoutSetup</RootNamespace>
+    <ApplicationIcon>..\KnobEarTrumpet\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Version>1.0.0</Version>
+    <Product>ModernFlyout</Product>
+    <Company>ModernFlyout</Company>
+    <OutputPath>..\dist\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <PayloadDir>$(MSBuildProjectDirectory)\obj\payload\</PayloadDir>
+    <PayloadZip>$(MSBuildProjectDirectory)\obj\payload.zip</PayloadZip>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+  </ItemGroup>
+
+  <!-- Programmdateien nur im Release-Build einbetten (Debug = nur Oberfläche testen, ohne Veröffentlichen). -->
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <EmbeddedResource Include="$(PayloadZip)" LogicalName="payload.zip" />
+  </ItemGroup>
+
+  <Target Name="BuildPayload" BeforeTargets="BeforeBuild" Condition="'$(Configuration)' == 'Release'">
+    <RemoveDir Directories="$(PayloadDir)" />
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\KnobEarTrumpet\KnobEarTrumpet.csproj&quot; -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o &quot;$(PayloadDir)publish&quot;" />
+    <MakeDir Directories="$(PayloadDir)zip" />
+    <Copy SourceFiles="$(PayloadDir)publish\KnobEarTrumpet.exe" DestinationFiles="$(PayloadDir)zip\ModernFlyout.exe" />
+    <ZipDirectory SourceDirectory="$(PayloadDir)zip" DestinationFile="$(PayloadZip)" Overwrite="true" />
+  </Target>
+
+</Project>
