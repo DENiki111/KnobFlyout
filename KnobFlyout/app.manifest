@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="KnobFlyout.app"/>
+
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <!-- Python-Original forderte per ShellExecuteW "runas" Admin-Rechte an, braucht sie aber
+             für nichts, was diese App tut: WASAPI-Lautstärke, Keyboard-Hook, GSMTC-Media,
+             Spotify-API und Tray-Icon funktionieren alle ohne Elevation. "asInvoker" läuft daher
+             ganz normal als aktueller Nutzer - kein UAC-Dialog mehr bei jedem Start.
+             Einzige Ausnahme: ein Low-Level-Keyboard-Hook aus einem NICHT erhöhten Prozess
+             bekommt wegen UIPI keine Tastendrücke, solange ein ERHÖHTES Fenster (z.B. ein als
+             Administrator laufendes Programm) im Vordergrund ist - der Knob reagiert in dem
+             Moment nicht. Das betrifft nur diesen einen Moment, nicht den Rest der App. -->
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 8.1 / 10 / 11 -->
+      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
+      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+    </application>
+  </compatibility>
+</assembly>

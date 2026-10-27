@@ -1,5 +1,5 @@
 @echo off
-dotnet publish KnobEarTrumpet\KnobEarTrumpet.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+dotnet publish KnobFlyout\KnobFlyout.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 echo.
-echo Fertig: publish\KnobEarTrumpet.exe
+echo Fertig: publish\KnobFlyout.exe
 pause

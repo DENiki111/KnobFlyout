@@ -38,6 +38,7 @@ Am Knopf drehen, und KnobFlyout ändert die Lautstärke genau der Apps, die du w
 - **Freie Platzierung** – 9 Plätze je Bildschirm, mehrere Bildschirme, Verschieben mit der Maus, gespeicherte Positionen, per Taste durchschaltbar.
 - **Spotify Web API** (optional) – steuert Spotifys eigene Lautstärke.
 - **Deutsch und Englisch**, Farbschema hell, dunkel oder wie das System.
+- **Autostart** – mit Windows starten, umschaltbar in den Einstellungen und im Task-Manager („Autostart-Apps“).
 - Läuft im Infobereich der Taskleiste, **keine Administratorrechte** nötig.
 
 ## Voraussetzungen
@@ -52,13 +53,14 @@ Das Setup bringt alles mit, eine eigene .NET-Installation ist nicht nötig.
 1. **`KnobFlyout-Setup.exe`** unter [Releases](../../releases) herunterladen und starten.
 2. Sprache wählen (Deutsch / English).
 3. Zielordner wählen – Standard `%LocalAppData%\Programs`. Der Ordner **`KnobFlyout`** wird dort automatisch angelegt.
-4. Zusätzliche Aufgaben wählen: Desktop-Verknüpfung, Startmenü-Eintrag, mit Windows starten.
+4. Zusätzliche Aufgaben wählen: Desktop-Verknüpfung, Startmenü-Eintrag (damit die Windows-Suche KnobFlyout findet), mit Windows starten.
 5. **Installieren**, dann **Fertigstellen** – KnobFlyout startet und erscheint im Infobereich der Taskleiste (neben der Uhr).
 
 Hinweise:
 
 - **Windows SmartScreen** warnt eventuell, weil das Setup nicht signiert ist: „Weitere Informationen“ → „Trotzdem ausführen“.
 - Für geschützte Ordner wie `C:\Program Files` bietet das Setup an, sich als Administrator neu zu starten.
+- **Autostart** lässt sich später in den Einstellungen (Seite **Allgemein**) oder im Task-Manager unter „Autostart-Apps“ ein- und ausschalten – KnobFlyout steht dort immer in der Liste.
 - **Update:** einfach das neuere Setup ausführen – es schlägt den vorhandenen Ordner vor, die Einstellungen bleiben erhalten.
 - **Umstieg von ModernFlyout** (dem alten Namen): Das Setup übernimmt Einstellungen und Spotify-Verbindung und entfernt die alte Version.
 - **Deinstallieren:** Windows-Einstellungen → Apps → Installierte Apps → KnobFlyout → Deinstallieren. Dabei wird der Programmordner samt Einstellungen gelöscht.
@@ -175,7 +177,7 @@ Der Token liegt in `.spotify_cache` im Programmordner. Für Spotify gibt es eine
 
 | Seite | Inhalt |
 |---|---|
-| Allgemein | Sprache, hell oder dunkel, Einstellungen neu laden |
+| Allgemein | Sprache, hell oder dunkel, mit Windows starten, Einstellungen neu laden |
 | Lautstärke & Apps | Schrittweite, Schrittweite Spotify, App-Liste mit Profil-Zuweisung, ignorierte Apps |
 | Profile | Profil-Taste, gesteuerte Apps, leere Profile überspringen, Profile bearbeiten, Zuweisen-Tasten |
 | OSD | An / aus, Anzeigedauer, per Klick ausblenden, Design, Deckkraft, Farben |
@@ -206,9 +208,9 @@ Voraussetzungen: Windows, [.NET 8 SDK](https://dotnet.microsoft.com/download/dot
 
 ```bash
 # Starten (Debug)
-dotnet run --project KnobEarTrumpet
+dotnet run --project KnobFlyout
 
-# Portable einzelne exe → publish\KnobEarTrumpet.exe
+# Portable einzelne exe → publish\KnobFlyout.exe
 publish.bat
 
 # Setup → dist\KnobFlyout-Setup.exe (veröffentlicht die App automatisch mit)
@@ -219,7 +221,7 @@ Aufbau:
 
 | Ordner | Inhalt |
 |---|---|
-| `KnobEarTrumpet/` | Die App (WPF, .NET 8) – `Audio/` (Sessions, Spotify), `Input/` (Tastatur-Hook), `Osd/` (OSD, Media-Flyout, Designs), `Media/` (Windows-Mediensitzungen), `Settings/`, `Tray/`, `Config/` |
+| `KnobFlyout/` | Die App (WPF, .NET 8) – `Audio/` (Sessions, Spotify), `Input/` (Tastatur-Hook), `Osd/` (OSD, Media-Flyout, Designs), `Media/` (Windows-Mediensitzungen), `Settings/`, `Tray/`, `Config/` |
 | `Installer/` | Setup-Assistent (WinForms, .NET Framework 4.8) mit eingebetteter App |
 
 Gebaut mit [NAudio](https://github.com/naudio/NAudio) (Audio-Sessions), [Hardcodet NotifyIcon](https://github.com/hardcodet/wpf-notifyicon) (Tray-Symbol) und der Windows-Mediensteuerung (GSMTC).
