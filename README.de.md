@@ -117,7 +117,8 @@ Ein Profil ist eine Gruppe von Apps, die der Knopf gemeinsam steuert – zum Bei
 Das OSD erscheint beim Drehen, beim Profilwechsel, bei Feststelltasten und beim Positionswechsel. Werden mehrere Apps geändert, steht die erste mit „+N“ da.
 
 - An / aus, Anzeigedauer 0,5–10 s
-- Design, Deckkraft, Ecken (ältere Designs), Farben (Design „Eigenes“)
+- Design, Ecken (ältere Designs), Farben (Design „Eigenes“)
+- Deckkraft getrennt für Hintergrund (0–100 %) und Text/Symbole (20–100 %) – bei allen Designs, auch fürs Neue-App-Popup
 - 👁-Knopf neben dem Design: Live-Vorschau aller Ansichten neben dem Einstellungsfenster
 
 ## Media-Flyout
@@ -127,8 +128,12 @@ Das Media-Flyout erscheint bei einem Titelwechsel und wenn die Wiedergabe starte
 - **Inhalt:** App-Name und Logo, Cover, Titel und Interpret, Fortschrittsleiste mit Zeiten, Zurück / Play-Pause / Weiter, ±10-Sekunden-Knöpfe
 - **Quellen-Leiste:** spielen mehrere Apps gleichzeitig, gibt es einen Eintrag je App – Klick schaltet um
 - **„…“-Menü** (Einträge wählbar): Zufallswiedergabe, Wiederholen, Nächste Quelle, Hotkeys ±10 s an/aus, Angeheftet lassen, Position speichern, Nächste Position, Position zurücksetzen, Einstellungen öffnen, Ausblenden
-- **Optionen:** an / aus, Anzeigedauer 2–30 s, Fortschrittsleiste, ±10-s-Knöpfe, Cover als unscharfer Hintergrund (Unschärfe und Abdunkelung einstellbar), Deckkraft
-- **Design „Eigenes“:** Reihenfolge der Bereiche, Cover-Position und -Größe, runde oder flache Knöpfe, Ausrichtung und Größe, Titelgröße, eigene Farben
+- **Optionen:** an / aus, Anzeigedauer 2–30 s, Fortschrittsleiste, ±10-s-Knöpfe, Cover als unscharfer Hintergrund (Unschärfe und Abdunkelung einstellbar), Deckkraft getrennt für Hintergrund und Text/Symbole
+- **Design „Eigenes“:** Aussehen → **Eigenes Design gestalten** öffnet einen Editor mit Live-Vorschau oben:
+  - **Vorlagen** als Startpunkt: Standard, Kompakt, Minimal, Großes Cover (die Farben bleiben)
+  - **Was soll zu sehen sein?** – alle Bereiche in der Reihenfolge des Flyouts: App-Zeile, Titel und Cover, Zeitleiste, Quellen-Leiste, Knöpfe. Schalter blendet einen Bereich ein oder aus, ↑ ↓ ändert die Reihenfolge, Klick auf die Zeile zeigt mehr
+  - einzelne Elemente als Kacheln an/aus: Titel, Interpret, Cover · Zurück, ±10 s, Play/Pause, Weiter, „…“
+  - dazu Cover-Platz und -Größe, Titelgröße, Zeiten, „…“ oben rechts, runde oder flache Knöpfe, Ausrichtung, Größe und eigene Farben
 
 ## Position
 
@@ -181,7 +186,7 @@ Der Token liegt in `.spotify_cache` im Programmordner. Für Spotify gibt es eine
 | Lautstärke & Apps | Schrittweite, Schrittweite Spotify, App-Liste mit Profil-Zuweisung, ignorierte Apps |
 | Profile | Profil-Taste, gesteuerte Apps, leere Profile überspringen, Profile bearbeiten, Zuweisen-Tasten |
 | OSD | An / aus, Anzeigedauer, per Klick ausblenden, Design, Deckkraft, Farben |
-| Media-Flyout | An / aus, Anzeigedauer, Inhalt, „…“-Menü, Design, Cover-Hintergrund, Spul-Tasten, Gesten |
+| Media-Flyout | An / aus, Anzeigedauer, Inhalt, „…“-Menü, Design (mit Editor für „Eigenes“), Deckkraft, Cover-Hintergrund, Spul-Tasten, Gesten |
 | Position | Anordnung, Platz auf dem Bildschirm, testen, verschieben, gespeicherte Positionen, zurücksetzen |
 | Design | Alle Einstellungen zum Aussehen an einem Ort |
 | Tastenkürzel | Alle Tasten und Halte-/Doppeldruck-Zeiten an einem Ort |

@@ -31,7 +31,7 @@ namespace KnobFlyout.Osd
             // Ganze Fläche klickbar halten (sonst fallen Klicks zwischen den Knöpfen durch das durchsichtige Fenster)
             root.Background = Brushes.Transparent;
 
-            var panel = new StackPanel { Margin = new Thickness(16, 12, 16, 0) };
+            var panel = new StackPanel { Margin = new Thickness(16, 12, 16, 0), Opacity = _contentAlpha };
             panel.Children.Add(new TextBlock
             {
                 Text = "▲ " + HudParts.Caps(Loc.T("Neue App erkannt", "New app detected")), FontFamily = spec.Font, FontSize = 11,

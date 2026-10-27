@@ -68,7 +68,8 @@ namespace KnobFlyout.Osd
         private readonly double _w;
         private readonly double _h;
         private readonly double _darkBarW;
-        private readonly double _targetOpacity;
+        private readonly double _targetOpacity;  // Hintergrund (win_alpha)
+        private readonly double _contentOpacity; // Text, Symbole, Leisten (osd_content_opacity) = Deckkraft von _canvas
         private readonly Canvas _canvas = new();
         private readonly SolidColorBrush _fg;
         private readonly SolidColorBrush _sub;
@@ -112,6 +113,8 @@ namespace KnobFlyout.Osd
             (_w, _h, _) = Dims(cfg);
             _darkBarW = DarkW - 24;
             _targetOpacity = Math.Clamp(cfg.WinAlpha, 0.0, 1.0);
+            _contentOpacity = Math.Clamp(cfg.OsdContentOpacity, 20, 100) / 100.0;
+            _canvas.Opacity = _contentOpacity;
 
             bool light = (_modern || _spec != null) && ThemeHelper.IsLight(cfg);
             _pal = _spec?.Palette(light); // Design-System: alle Farben aus der Palette
@@ -132,7 +135,7 @@ namespace KnobFlyout.Osd
             Height = _h;
             AllowsTransparency = true;
             Background = Brushes.Transparent;
-            // Deckkraft (cfg.WinAlpha) wirkt nur auf den Hintergrund, Text/Symbole bleiben voll deckend.
+            // Deckkraft: cfg.WinAlpha nur für den Hintergrund, cfg.OsdContentOpacity für den Inhalt (_canvas).
             Opacity = _modern ? 0.0 : 1.0; // modern/win11 blenden per FadeIn() ein
             Content = _shell = new Border
             {
@@ -346,7 +349,7 @@ namespace KnobFlyout.Osd
             _shell.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(_spec.AppearFadeMs)));
             if (_spec.ContentDelayMs <= 0) return; // Inhalt erscheint gleich mit der Fläche
             _canvas.Opacity = 0;
-            _canvas.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150))
+            _canvas.BeginAnimation(OpacityProperty, new DoubleAnimation(0, _contentOpacity, TimeSpan.FromMilliseconds(150))
             {
                 BeginTime = TimeSpan.FromMilliseconds(_spec.ContentDelayMs),
             });

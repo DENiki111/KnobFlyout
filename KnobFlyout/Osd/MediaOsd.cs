@@ -59,6 +59,7 @@ namespace KnobFlyout.Osd
         private readonly SolidColorBrush? _customButtonBg;
         private readonly string _styleKey; // Design + Farbschema bzw. alle eigenen Einstellungen (StyleChanged)
         private FrameworkElement? _progressBlock; // eigenes Design: Fortschritt-Bereich (mit Leiste ein-/ausgeblendet)
+        private readonly bool _hideSources;       // eigenes Design: Quellen-Leiste abgeschaltet
 
         // Design-System (DesignSystem.cs): gesetzt, wenn media_design eines der Designs aus Designs.All ist
         private readonly DesignSpec? _spec;
@@ -74,6 +75,7 @@ namespace KnobFlyout.Osd
         private Popup? _menuPopup;
         private readonly Border _card;
         private readonly Grid _host;
+        private readonly Grid _content; // alles außer dem Hintergrund (Deckkraft: media_content_opacity)
         private readonly AppConfig? _previewCfg; // gesetzt = Vorschau in den Einstellungen
         private double _radius;
         private bool _pressed;        // Maus auf freier Fläche gedrückt (für "Klick blendet aus")
@@ -113,6 +115,9 @@ namespace KnobFlyout.Osd
         private readonly Border _moreBtn;
         private readonly Border _skipBackBtn;
         private readonly Border _skipFwdBtn;
+        private readonly Border _prevBtn;
+        private readonly Border _playBtn;
+        private readonly Border _nextBtn;
 
         private MediaInfo? _lastInfo;
         private byte[]? _logoData;
@@ -154,6 +159,7 @@ namespace KnobFlyout.Osd
             {
                 _buttonScale = Math.Clamp(cfg.MediaCustomButtonSize, 70, 140) / 100.0;
                 _customButtonBg = Hex(NormHex(cfg.MediaCustomButtonBg, "#3a3a3a"));
+                _hideSources = !cfg.MediaCustomShowSources;
             }
             if (_spec != null) _radius = _spec.MediaRadius; // Form des Designs statt Ecken-Einstellung
 
@@ -231,7 +237,7 @@ namespace KnobFlyout.Osd
             host.Children.Add(bgLayer);
             host.Children.Add(_bgOverlay);
 
-            var root = new Grid { Margin = _spec != null ? new Thickness(18, 16, 18, 14) : _win11 ? new Thickness(16, 12, 16, 10) : new Thickness(14) };
+            var root = _content = new Grid { Margin = _spec != null ? new Thickness(18, 16, 18, 14) : _win11 ? new Thickness(16, 12, 16, 10) : new Thickness(14) };
             for (int i = 0; i < 6; i++) root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             host.Children.Add(root);
 
@@ -375,13 +381,16 @@ namespace KnobFlyout.Osd
             // Reihenfolge: Zurück | -10 s | Play/Pause | +10 s | Weiter - die ±10-s-Knöpfe sitzen direkt
             // neben Play/Pause und sind per Einstellung ausblendbar (siehe UpdateFrom).
             // Design-System: gefüllte Symbole (PreviousSolid/NextSolid, Play/PauseSolid)
-            center.Children.Add(MakeButton(_spec != null ? "\uF8AC" : "\uE892", 38, false, () => { _media.Previous(); ResetHideTimer(); }, out _));
+            _prevBtn = MakeButton(_spec != null ? "\uF8AC" : "\uE892", 38, false, () => { _media.Previous(); ResetHideTimer(); }, out _);
+            center.Children.Add(_prevBtn);
             _skipBackBtn = MakeButton("\uED3C", 34, false, () => SkipLocal(-1), out _);
             center.Children.Add(_skipBackBtn);
-            center.Children.Add(MakeButton("\uE768", 46, true, () => { _media.TogglePlayPause(); ResetHideTimer(); }, out _playPauseGlyph));
+            _playBtn = MakeButton("\uE768", 46, true, () => { _media.TogglePlayPause(); ResetHideTimer(); }, out _playPauseGlyph);
+            center.Children.Add(_playBtn);
             _skipFwdBtn = MakeButton("\uED3D", 34, false, () => SkipLocal(+1), out _);
             center.Children.Add(_skipFwdBtn);
-            center.Children.Add(MakeButton(_spec != null ? "\uF8AD" : "\uE893", 38, false, () => { _media.Next(); ResetHideTimer(); }, out _));
+            _nextBtn = MakeButton(_spec != null ? "\uF8AD" : "\uE893", 38, false, () => { _media.Next(); ResetHideTimer(); }, out _);
+            center.Children.Add(_nextBtn);
             controls.Children.Add(center);
             if (!_win11) controls.Children.Add(_moreBtn);
             if (_custom) ArrangeCustom(cfg, root, header, left, appRow, controls, center);
@@ -481,7 +490,11 @@ namespace KnobFlyout.Osd
             ? string.Join("|", "custom", string.Join(",", c.MediaCustomOrder), c.MediaCustomShowApp, c.MediaCustomShowTimes,
                 c.MediaCustomCover, c.MediaCustomCoverSize, c.MediaCustomButtons, c.MediaCustomButtonsAlign, c.MediaCustomButtonSize,
                 c.MediaCustomMorePos, c.MediaCustomTitleSize, c.MediaCustomBg, c.MediaCustomFg, c.MediaCustomSub,
-                c.MediaCustomAccent, c.MediaCustomButtonBg, c.MediaCustomTrack)
+                c.MediaCustomAccent, c.MediaCustomButtonBg, c.MediaCustomTrack,
+                c.MediaCustomShowTitle, c.MediaCustomShowArtist, c.MediaCustomShowSources,
+                c.MediaCustomShowPrev, c.MediaCustomShowPlay, c.MediaCustomShowNext,
+                // entscheiden mit, ob die Knopfreihe ganz wegfällt (ArrangeCustom)
+                c.MediaShowMore, c.MediaSkipButtons)
             : c.MediaDesign + "|" + ThemeHelper.IsLight(c);
 
         /// <summary>Bereiche des eigenen Designs in gültiger Reihenfolge: jeder genau einmal, fehlende hinten angehängt.</summary>
@@ -522,14 +535,29 @@ namespace KnobFlyout.Osd
                 appBlock.Children.Add(_moreBtn);
             }
 
-            // Titel/Interpret mit Cover
+            // Titel/Interpret mit Cover (jedes Element einzeln abschaltbar)
             _title.Margin = new Thickness(0);
+            _title.Visibility = cfg.MediaCustomShowTitle ? Visibility.Visible : Visibility.Collapsed;
+            _artist.Visibility = cfg.MediaCustomShowArtist ? Visibility.Visible : Visibility.Collapsed;
+            if (!cfg.MediaCustomShowTitle) _artist.Margin = new Thickness(0);
+            bool hasText = cfg.MediaCustomShowTitle || cfg.MediaCustomShowArtist;
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(_title);
             text.Children.Add(_artist);
             _art.VerticalAlignment = VerticalAlignment.Center;
-            FrameworkElement info;
-            switch (cfg.MediaCustomCover)
+            FrameworkElement? info;
+            if (!hasText)
+            {
+                // Nur das Cover (oder gar nichts): ohne leere Textspalte, auf der gewählten Seite
+                _art.HorizontalAlignment = cfg.MediaCustomCover switch
+                {
+                    "left" => HorizontalAlignment.Left,
+                    "right" => HorizontalAlignment.Right,
+                    _ => HorizontalAlignment.Center,
+                };
+                info = cfg.MediaCustomCover == "none" ? null : _art;
+            }
+            else switch (cfg.MediaCustomCover)
             {
                 case "none":
                     info = text;
@@ -581,7 +609,12 @@ namespace KnobFlyout.Osd
             // Quellen-Leiste: ohne mehrere Quellen ganz weg (RenderSources), damit kein leerer Abstand bleibt
             _sourcesRow.Margin = new Thickness(0);
 
-            // Knöpfe; „…“ auf der freien Seite
+            // Knöpfe (einzeln abschaltbar; ±10 s und „…“ blendet UpdateFrom nach den allgemeinen Schaltern aus); „…“ auf der freien Seite
+            _prevBtn.Visibility = cfg.MediaCustomShowPrev ? Visibility.Visible : Visibility.Collapsed;
+            _playBtn.Visibility = cfg.MediaCustomShowPlay ? Visibility.Visible : Visibility.Collapsed;
+            _nextBtn.Visibility = cfg.MediaCustomShowNext ? Visibility.Visible : Visibility.Collapsed;
+            bool hasButtons = cfg.MediaCustomShowPrev || cfg.MediaCustomShowPlay || cfg.MediaCustomShowNext
+                || cfg.MediaSkipButtons || (cfg.MediaShowMore && !moreTop);
             controls.Margin = new Thickness(0);
             center.HorizontalAlignment = cfg.MediaCustomButtonsAlign switch
             {
@@ -597,14 +630,15 @@ namespace KnobFlyout.Osd
                 controls.Children.Add(_moreBtn);
             }
 
-            var blocks = new Dictionary<string, FrameworkElement>
+            var blocks = new Dictionary<string, FrameworkElement?>
             {
-                ["app"] = appBlock, ["info"] = info, ["progress"] = progress, ["sources"] = _sourcesRow, ["controls"] = controls,
+                ["app"] = appBlock, ["info"] = info, ["progress"] = progress, ["sources"] = _sourcesRow,
+                ["controls"] = hasButtons ? controls : null,
             };
             foreach (var key in NormalizeOrder(cfg.MediaCustomOrder))
             {
                 if (key == "app" && !cfg.MediaCustomShowApp) continue;
-                var block = blocks[key];
+                if (blocks[key] is not { } block) continue; // Bereich ohne sichtbare Elemente: samt Abstand weglassen
                 block.Margin = new Thickness(0, stack.Children.Count == 0 ? 0 : 10, 0, 0);
                 stack.Children.Add(block);
             }
@@ -917,8 +951,9 @@ namespace KnobFlyout.Osd
             if (IsMaterial) ApplyMaterial(cover, useBackground); // Farben aus dem Cover (vor dem Kartenhintergrund)
             _bgImage.Source = useBackground ? cover : null;
             _bgImage.Visibility = _bgOverlay.Visibility = useBackground ? Visibility.Visible : Visibility.Collapsed;
-            // Deckkraft nur für den Hintergrund (Fläche, Rand, Cover-Hintergrund); Inhalt bleibt deckend.
-            double opacity = Math.Clamp(cfg.MediaOpacity, 20, 100) / 100.0;
+            // Deckkraft: media_opacity für den Hintergrund (Fläche, Rand, Cover-Hintergrund), media_content_opacity für den Inhalt.
+            double opacity = Math.Clamp(cfg.MediaOpacity, 0, 100) / 100.0;
+            _content.Opacity = Math.Clamp(cfg.MediaContentOpacity, 20, 100) / 100.0;
             _card.Background = _pal != null ? _pal.Background(opacity) : Hex($"#{(byte)Math.Round(255 * opacity):X2}{_cardHex[1..]}");
             if (IsHud) ApplyHudBackground(opacity); // abgeschrägte Fläche statt Rechteck
             if (_win11)
@@ -1354,6 +1389,11 @@ namespace KnobFlyout.Osd
             if (IsHardware)
             {
                 RenderInputs(sources); // Hardware: Eingangswahl mit LED-Punkten
+                return;
+            }
+            if (_hideSources)
+            {
+                _sourcesRow.Visibility = Visibility.Collapsed; // eigenes Design: Quellen-Leiste abgeschaltet
                 return;
             }
             if (_custom || _spec != null) _sourcesRow.Visibility = sources.Count < 2 ? Visibility.Collapsed : Visibility.Visible;

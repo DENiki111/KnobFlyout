@@ -117,7 +117,8 @@ A profile is a group of apps the knob controls together – for example *Gaming*
 The OSD appears when you turn the knob, switch profiles, press a lock key or switch positions. If several apps are changed, the first one is shown with “+N”.
 
 - On / off, duration 0.5–10 s
-- Design, opacity, corners (classic designs), colors (design “Custom”)
+- Design, corners (classic designs), colors (design “Custom”)
+- Opacity separately for the background (0–100 %) and text/icons (20–100 %) – in every design, also for the new-app popup
 - 👁 button next to the design: live preview of all views next to the settings window
 
 ## Media flyout
@@ -127,8 +128,12 @@ The media flyout appears when a track changes or playback starts or pauses – f
 - **Content:** app name and logo, cover, title and artist, progress bar with times, Previous / Play-Pause / Next, ±10-second buttons
 - **Source bar:** when several apps play at the same time, one entry per app – click to switch
 - **“…” menu** (items selectable): Shuffle, Repeat, Next source, ±10 s hotkeys on/off, Keep pinned, Save position, Next position, Reset position, Open settings, Hide
-- **Options:** on / off, duration 2–30 s, progress bar, ±10 s buttons, cover as blurred background (blur and dimming adjustable), opacity
-- **Design “Custom”:** order of the sections, cover position and size, round or flat buttons, alignment and size, title size, own colors
+- **Options:** on / off, duration 2–30 s, progress bar, ±10 s buttons, cover as blurred background (blur and dimming adjustable), opacity separately for background and text/icons
+- **Design “Custom”:** Appearance → **Design your own** opens an editor with a live preview at the top:
+  - **Templates** as a starting point: Standard, Compact, Minimal, Large album art (your colors are kept)
+  - **What should be shown?** – all sections in the order of the flyout: app row, title and album art, timeline, sources bar, buttons. The switch shows or hides a section, ↑ ↓ changes the order, clicking the row shows more
+  - single elements as tiles on/off: title, artist, album art · previous, ±10 s, play/pause, next, “…”
+  - plus album art position and size, title size, times, “…” at the top right, round or flat buttons, alignment, size and your own colors
 
 ## Position
 
@@ -181,7 +186,7 @@ Open via tray icon → right-click → **Settings**. Changes apply when you clic
 | Volume & apps | Step size, Spotify step size, app list with profile assignment, ignored apps |
 | Profiles | Switch key, controlled apps, skip empty profiles, edit profiles, assign keys |
 | OSD | On / off, duration, click to dismiss, design, opacity, colors |
-| Media flyout | On / off, duration, content, “…” menu, design, cover background, skip keys, gestures |
+| Media flyout | On / off, duration, content, “…” menu, design (with editor for “Custom”), opacity, cover background, skip keys, gestures |
 | Position | Arrangement, place on screen, test, drag, saved positions, reset |
 | Design | All appearance settings in one place |
 | Shortcuts | All keys and hold / double-press times in one place |

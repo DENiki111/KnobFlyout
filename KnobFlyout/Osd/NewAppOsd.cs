@@ -28,12 +28,14 @@ namespace KnobFlyout.Osd
         /// <param name="previewCfg">Nur für die Vorschau in den Einstellungen: diese (ungespeicherte) Config, kein Auto-Hide.</param>
         private readonly string _processName;
         private readonly bool _preview;
+        private readonly double _contentAlpha; // Deckkraft von Text und Knöpfen (osd_content_opacity), Hintergrund: win_alpha
 
         public NewAppOsd(string processName, AppConfig? previewCfg = null)
         {
             _processName = processName;
             _preview = previewCfg != null;
             var cfg = previewCfg ?? ConfigManager.Load();
+            _contentAlpha = Math.Clamp(cfg.OsdContentOpacity, 20, 100) / 100.0;
             var spec = Designs.Get(cfg.OsdDesign); // Design-System (z. B. Dynamic Island): eigene Form und Größe
             double width = spec?.PopupWidth ?? W, height = spec?.PopupHeight ?? H;
             bool win11 = cfg.OsdDesign == "win11";
@@ -121,6 +123,7 @@ namespace KnobFlyout.Osd
                 row.Children.Add(CircleButton(logo, p.Color, size, () => AssignTo(key), hotkey.Length > 0 ? $"{p.Name} ({hotkey})" : p.Name));
             }
             panel.Children.Add(row);
+            panel.Opacity = _contentAlpha;
 
             return new Border
             {
@@ -156,7 +159,7 @@ namespace KnobFlyout.Osd
         /// <summary>Ältere Designs („Eigenes“, ModernFlyouts, Windows 11): Karte mit Text oben und Knopfreihe.</summary>
         private void BuildClassic(AppConfig cfg, string processName, bool win11, bool modern, bool flat, bool light, double alpha)
         {
-            var canvas = new Canvas();
+            var canvas = new Canvas { Opacity = _contentAlpha };
             Content = new Border
             {
                 CornerRadius = new CornerRadius(Math.Clamp(cfg.OsdCornerRadius, 0, 30)),

@@ -74,6 +74,9 @@ namespace KnobFlyout.Config
         [JsonPropertyName("color_profiles")] public Dictionary<string, Dictionary<string, string>> ColorProfiles { get; set; } = new();
         [JsonPropertyName("win_alpha")] public double WinAlpha { get; set; } = 0.88;
 
+        /// <summary>Deckkraft von Text, Symbolen, Leisten und Knöpfen der OSD-Karten und des Neue-App-Popups in % (20–100; Hintergrund: win_alpha).</summary>
+        [JsonPropertyName("osd_content_opacity")] public int OsdContentOpacity { get; set; } = 100;
+
         /// <summary>
         /// Profile (max. 6, Reihenfolge = Wechsel-Reihenfolge): Schlüssel für profiles/active_profile, Name,
         /// Logo und Farbe. Leer = die 4 Standard-Profile (ConfigManager füllt beim Laden auf, Farben aus
@@ -126,6 +129,14 @@ namespace KnobFlyout.Config
         [JsonPropertyName("media_custom_button_size")] public int MediaCustomButtonSize { get; set; } = 100;
         [JsonPropertyName("media_custom_more_pos")] public string MediaCustomMorePos { get; set; } = "controls";
         [JsonPropertyName("media_custom_title_size")] public int MediaCustomTitleSize { get; set; } = 14;
+        // Einzelne Elemente ein/aus (Fortschrittsleiste, ±10 s und „…“ gelten für alle Designs: media_show_progress,
+        // media_skip_buttons, media_show_more).
+        [JsonPropertyName("media_custom_show_title")] public bool MediaCustomShowTitle { get; set; } = true;
+        [JsonPropertyName("media_custom_show_artist")] public bool MediaCustomShowArtist { get; set; } = true;
+        [JsonPropertyName("media_custom_show_sources")] public bool MediaCustomShowSources { get; set; } = true;
+        [JsonPropertyName("media_custom_show_prev")] public bool MediaCustomShowPrev { get; set; } = true;
+        [JsonPropertyName("media_custom_show_play")] public bool MediaCustomShowPlay { get; set; } = true;
+        [JsonPropertyName("media_custom_show_next")] public bool MediaCustomShowNext { get; set; } = true;
         [JsonPropertyName("media_custom_bg")] public string MediaCustomBg { get; set; } = "#222222";
         [JsonPropertyName("media_custom_fg")] public string MediaCustomFg { get; set; } = "#ffffff";
         [JsonPropertyName("media_custom_sub")] public string MediaCustomSub { get; set; } = "#a0a0a6";
@@ -149,8 +160,11 @@ namespace KnobFlyout.Config
         /// <summary>Klick auf OSD-Karte oder Media-Flyout (nicht auf einen Knopf) blendet es sofort aus.</summary>
         [JsonPropertyName("click_to_dismiss")] public bool ClickToDismiss { get; set; } = false;
 
-        /// <summary>Deckkraft des Media-Flyout-Hintergrunds in % (Inhalt bleibt deckend).</summary>
+        /// <summary>Deckkraft des Media-Flyout-Hintergrunds in % (0–100; Inhalt: media_content_opacity).</summary>
         [JsonPropertyName("media_opacity")] public int MediaOpacity { get; set; } = 97;
+
+        /// <summary>Deckkraft von Text, Symbolen, Cover, Leiste und Knöpfen des Media-Flyouts in % (20–100).</summary>
+        [JsonPropertyName("media_content_opacity")] public int MediaContentOpacity { get; set; } = 100;
 
         /// <summary>Cover-Hintergrund des Media-Flyouts: Unschärfe-Radius (0–60) und Abdunkelung/Aufhellung darüber (0–100 %).</summary>
         [JsonPropertyName("media_art_blur")] public int MediaArtBlur { get; set; } = 28;

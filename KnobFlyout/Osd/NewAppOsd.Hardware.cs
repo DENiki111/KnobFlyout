@@ -25,7 +25,7 @@ namespace KnobFlyout.Osd
             var fg = UiColor.Brush(pal.Fg);
             var sub = UiColor.Brush(pal.Sub);
 
-            var root = new StackPanel { Margin = new Thickness(13, 11, 13, 0) };
+            var root = new StackPanel { Margin = new Thickness(13, 11, 13, 0), Opacity = _contentAlpha };
             root.Children.Add(new TextBlock
             {
                 Text = HudParts.Caps(Loc.T("Neue App erkannt", "New app detected")), FontFamily = spec.Font, FontSize = 9.5,

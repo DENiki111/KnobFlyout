@@ -19,7 +19,7 @@ namespace KnobFlyout.Osd
         {
             var pal = spec.Palette(ThemeHelper.IsLight(cfg));
             var fg = UiColor.Brush(pal.Fg);
-            var root = new StackPanel { Margin = new Thickness(13, 11, 13, 0) };
+            var root = new StackPanel { Margin = new Thickness(13, 11, 13, 0), Opacity = _contentAlpha };
 
             var top = new Grid();
             top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });

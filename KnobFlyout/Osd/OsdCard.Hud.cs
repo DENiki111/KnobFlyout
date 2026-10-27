@@ -36,15 +36,29 @@ namespace KnobFlyout.Osd
             _shell.BorderBrush = Brushes.Transparent;
             _shell.CornerRadius = new CornerRadius(0);
             double c = _spec!.Chamfer;
-            Place(HudParts.ChamferPath(_w, _h, c, pal.Background(_targetOpacity), UiColor.Brush(pal.Edge)), -1, -1);
+            // Eigene Ebene unter der Zeichenfläche: die Deckkraft des Inhalts (_canvas.Opacity) soll die Fläche nicht mit abblenden.
+            var back = new Canvas();
+            void Back(UIElement el)
+            {
+                Canvas.SetLeft(el, -1);
+                Canvas.SetTop(el, -1);
+                back.Children.Add(el);
+            }
+            Back(HudParts.ChamferPath(_w, _h, c, pal.Background(_targetOpacity), UiColor.Brush(pal.Edge)));
             if (pal.Scan != null)
             {
-                Place(new Rectangle
+                Back(new Rectangle
                 {
                     Width = _w, Height = _h, Fill = HudParts.Scanlines(pal.Scan), Clip = HudParts.Chamfer(_w, _h, c), IsHitTestVisible = false,
-                }, -1, -1);
+                });
             }
-            Place(HudParts.Brackets(_w, _h, _accent), -1, -1);
+            Back(HudParts.Brackets(_w, _h, _accent));
+            var front = _shell.Child;
+            _shell.Child = null;
+            var layers = new Grid();
+            layers.Children.Add(back);
+            layers.Children.Add(front);
+            _shell.Child = layers;
         }
 
         /// <summary>Lautstärke: große Zahl (bzw. rotes Stumm-Symbol) | Trennlinie | Symbol + APP-NAME (+ „STUMM“) über 20 Segmenten.</summary>

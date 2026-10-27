@@ -65,6 +65,7 @@ namespace KnobFlyout.Settings
         private readonly List<TextBlock> _navLabels = new();
         private ColumnDefinition? _navColumn;
         private ScrollViewer? _pageScroll;
+        private Border? _pinnedTop; // über der Seite, scrollt nicht mit (Unterseite „Eigenes Design“: Kopf + Live-Vorschau)
         private bool _navExpanded = true;
 
         /// <summary>Wird ausgelöst, wenn sich das Fenster (Farbschema, Sprache, Neu laden) durch ein neues ersetzt.</summary>
@@ -124,12 +125,20 @@ namespace KnobFlyout.Settings
             DockPanel.SetDock(bottom, Dock.Bottom);
             right.Children.Add(bottom);
 
+            _pinnedTop = new Border
+            {
+                Visibility = Visibility.Collapsed, Background = ContentBg,
+                BorderBrush = CardBorder, BorderThickness = new Thickness(0, 0, 0, 1),
+            };
+            DockPanel.SetDock(_pinnedTop, Dock.Top);
+            right.Children.Add(_pinnedTop);
+
             _pageScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             right.Children.Add(_pageScroll);
 
             SelectPage(_navItems.ContainsKey(startPage) ? startPage : "general");
 
-            Closed += (_, _) => { CloseEyePopup(); _liveAudio.Dispose(); };
+            Closed += (_, _) => { CloseEyePopup(); _customPreviewTimer?.Stop(); _liveAudio.Dispose(); };
             // Live-Vorschau steht neben dem Fenster: beim Verschieben/Minimieren schließen statt zu verwaisen.
             LocationChanged += (_, _) => CloseEyePopup();
             StateChanged += (_, _) => CloseEyePopup();
@@ -320,9 +329,12 @@ namespace KnobFlyout.Settings
         {
             CloseEyePopup();
             _currentPage = key;
+            if (key == "media_custom") _pages.Remove(key); // Unterseite immer frisch (Werte können sich auf der Fachseite geändert haben)
+            else HideMediaCustomHeader();
+            string navKey = key == "media_custom" ? _subParent : key; // Unterseite: Eintrag der Fachseite bleibt markiert
             foreach (var kv in _navItems)
             {
-                bool sel = kv.Key == key;
+                bool sel = kv.Key == navKey;
                 kv.Value.Background = sel ? NavSelectedBg : Brushes.Transparent;
                 var bar = (kv.Value.Child as Grid)?.Children.OfType<Border>().FirstOrDefault(b => (b.Tag as string) == "bar");
                 if (bar != null) bar.Visibility = sel ? Visibility.Visible : Visibility.Hidden;
@@ -363,6 +375,7 @@ namespace KnobFlyout.Settings
                 case "profiles": BuildProfilesPage(page); break;
                 case "osd": BuildOsdPage(page); break;
                 case "media": BuildMediaPage(page); break;
+                case "media_custom": BuildMediaCustomPage(page); break;
                 case "position": BuildPositionPage(page); break;
                 case "design": BuildDesignPage(page); break;
                 case "hotkeys": BuildHotkeysPage(page); break;
@@ -1073,9 +1086,14 @@ namespace KnobFlyout.Settings
             void ShowOsdCorners() => osdCorners.Visibility = Designs.Get(_cfg.OsdDesign) == null ? Visibility.Visible : Visibility.Collapsed;
             ShowOsdCorners();
             designCombo.SelectionChanged += (_, _) => ShowOsdCorners();
-            page.Children.Add(SettingCard("\uE706", T("Deckkraft", "Opacity"), T("Nur der Hintergrund", "Background only"),
-                ResetSlider(SliderControl(20, 100, Math.Round(_cfg.WinAlpha * 100), "0' %'", v => _cfg.WinAlpha = Math.Clamp(v / 100.0, 0.0, 1.0), tick: 1),
+            page.Children.Add(SettingCard("\uE706", T("Deckkraft Hintergrund", "Background opacity"),
+                T("Fl\u00E4che der Karten und des Neue-App-Popups \u00B7 0 % = nur Text und Symbole", "Surface of the cards and the new-app popup \u00B7 0 % = text and icons only"),
+                ResetSlider(SliderControl(0, 100, Math.Round(_cfg.WinAlpha * 100), "0' %'", v => _cfg.WinAlpha = Math.Clamp(v / 100.0, 0.0, 1.0), tick: 1),
                     Math.Round(Defaults.WinAlpha * 100))));
+            page.Children.Add(SettingCard("\uE8D2", T("Deckkraft Text und Symbole", "Text and icon opacity"),
+                T("Schrift, Symbole, Leisten und Kn\u00F6pfe", "Text, icons, bars and buttons"),
+                ResetSlider(SliderControl(20, 100, Math.Clamp(_cfg.OsdContentOpacity, 20, 100), "0' %'", v => _cfg.OsdContentOpacity = (int)v, tick: 1),
+                    Defaults.OsdContentOpacity)));
 
             // ── Farben ──
             page.Children.Add(SectionTitle(colorsTitle));
@@ -1169,7 +1187,7 @@ namespace KnobFlyout.Settings
             }
             Refresh();
 
-            var header = new DockPanel { Margin = new Thickness(2, 0, 0, 8) };
+            var header = new DockPanel();
             var close = FlatIconButton("\uE711", T("Schließen", "Close"), CloseEyePopup); // Cancel
             close.Margin = new Thickness(0);
             DockPanel.SetDock(close, Dock.Right);
@@ -1180,29 +1198,24 @@ namespace KnobFlyout.Settings
                 VerticalAlignment = VerticalAlignment.Center,
             });
 
-            var content = new StackPanel();
-            content.Children.Add(header);
+            // Nur die Kopfzeile ist eine Karte; die Vorschau darunter hat keinen Hintergrund (Jasper-Wunsch):
+            // der Desktop scheint durch, so sieht man die Deckkraft wie im Betrieb.
+            var content = new StackPanel { Margin = new Thickness(8) };
             content.Children.Add(new Border
             {
-                // Dezentes Schachbrett in den Farben der Einstellungsseiten (kein bunter „Desktop“ mehr, Jasper-Wunsch):
-                // zeigt wie in Bildprogrammen, wo die Karten durchsichtig sind – sonst sähe man die Deckkraft hier nicht.
-                CornerRadius = new CornerRadius(6), Padding = new Thickness(6),
-                Background = CheckerBrush(), BorderBrush = CardBorder, BorderThickness = new Thickness(1),
-                Child = host,
+                CornerRadius = new CornerRadius(8), Padding = new Thickness(12, 6, 6, 6), Margin = new Thickness(6, 0, 6, 0),
+                Background = CardBg, BorderBrush = CardBorder, BorderThickness = new Thickness(1),
+                Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 3, Direction = 270, Opacity = 0.35 },
+                Child = header,
             });
+            content.Children.Add(host);
 
             _eyePopup = new System.Windows.Controls.Primitives.Popup
             {
                 // Neben dem Fenster, damit die Einstellungen frei bleiben (kein Platz → automatisch links).
                 PlacementTarget = this, Placement = System.Windows.Controls.Primitives.PlacementMode.Right,
                 HorizontalOffset = 6, StaysOpen = true, AllowsTransparency = true,
-                Child = new Border
-                {
-                    CornerRadius = new CornerRadius(8), Padding = new Thickness(10), Margin = new Thickness(8),
-                    Background = CardBg, BorderBrush = CardBorder, BorderThickness = new Thickness(1),
-                    Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 3, Direction = 270, Opacity = 0.35 },
-                    Child = content,
-                },
+                Child = content,
             };
             owner.Children.Add(_eyePopup); // im Fensterbaum, damit Theme-Ressourcen greifen
             var popup = _eyePopup;
@@ -1212,27 +1225,6 @@ namespace KnobFlyout.Settings
             _eyeTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             _eyeTimer.Tick += (_, _) => Refresh();
             _eyeTimer.Start();
-        }
-
-        /// <summary>Schachbrett aus der Seitenfarbe und einer etwas helleren (hell: dunkleren) Abstufung, 8-px-Felder.</summary>
-        private static Brush CheckerBrush()
-        {
-            var a = ((SolidColorBrush)ContentBg).Color;
-            byte Shift(byte v) => (byte)Math.Clamp(v + (Light ? -18 : 18), 0, 255);
-            var b = Color.FromRgb(Shift(a.R), Shift(a.G), Shift(a.B));
-            var squares = new GeometryGroup();
-            squares.Children.Add(new RectangleGeometry(new Rect(0, 0, 8, 8)));
-            squares.Children.Add(new RectangleGeometry(new Rect(8, 8, 8, 8)));
-            var drawing = new DrawingGroup();
-            drawing.Children.Add(new GeometryDrawing(new SolidColorBrush(a), null, new RectangleGeometry(new Rect(0, 0, 16, 16))));
-            drawing.Children.Add(new GeometryDrawing(new SolidColorBrush(b), null, squares));
-            var brush = new DrawingBrush(drawing)
-            {
-                TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 16, 16), ViewportUnits = BrushMappingMode.Absolute,
-                Viewbox = new Rect(0, 0, 16, 16), ViewboxUnits = BrushMappingMode.Absolute, Stretch = Stretch.None,
-            };
-            brush.Freeze();
-            return brush;
         }
 
         private void CloseEyePopup()
@@ -1462,7 +1454,10 @@ namespace KnobFlyout.Settings
             page.Children.Add(SettingCard("\uE8D6", "Design", T("„Eigenes“: Aufbau, Größen und Farben frei wählbar", "“Custom”: layout, sizes and colors of your choice"),
                 WithEye(WithReset(mediaDesign, () => mediaDesign.SelectedIndex = Math.Max(0, Array.IndexOf(mediaDesigns, Defaults.MediaDesign))),
                     () => new[] { MediaOsd.CreatePreview(_cfg) }, T("Media-Flyout", "Media flyout"))));
-            BuildMediaCustomCards(mediaCustomHost);
+            mediaCustomHost.Children.Add(NavCard("\uE70F", T("Eigenes Design gestalten", "Design your own"), // Edit
+                T("Elemente ein- und ausschalten, Reihenfolge, Cover, Knöpfe und Farben – mit Live-Vorschau",
+                    "Turn elements on and off, order, album art, buttons and colors – with live preview"),
+                () => OpenMediaCustomEditor(designPage ? "design" : "media")));
             ShowMediaCustom();
             page.Children.Add(mediaCustomHost);
             page.Children.Add(SettingCard("\uE8D6", T("Ecken", "Corners"), null,
@@ -1471,9 +1466,14 @@ namespace KnobFlyout.Settings
             void ShowMediaCorners() => mediaCorners.Visibility = Designs.Get(_cfg.MediaDesign) == null ? Visibility.Visible : Visibility.Collapsed;
             ShowMediaCorners();
             mediaDesign.SelectionChanged += (_, _) => ShowMediaCorners();
-            page.Children.Add(SettingCard("\uE706", T("Deckkraft", "Opacity"), T("Nur der Hintergrund", "Background only"),
-                ResetSlider(SliderControl(20, 100, Math.Clamp(_cfg.MediaOpacity, 20, 100), "0' %'", v => _cfg.MediaOpacity = (int)v, tick: 1),
+            page.Children.Add(SettingCard("\uE706", T("Deckkraft Hintergrund", "Background opacity"),
+                T("Fl\u00E4che, Rand und Cover-Hintergrund \u00B7 0 % = nur Text und Symbole", "Surface, border and album art background \u00B7 0 % = text and icons only"),
+                ResetSlider(SliderControl(0, 100, Math.Clamp(_cfg.MediaOpacity, 0, 100), "0' %'", v => _cfg.MediaOpacity = (int)v, tick: 1),
                     Defaults.MediaOpacity)));
+            page.Children.Add(SettingCard("\uE8D2", T("Deckkraft Text und Symbole", "Text and icon opacity"),
+                T("Schrift, Symbole, Cover, Leiste und Kn\u00F6pfe", "Text, icons, album art, bar and buttons"),
+                ResetSlider(SliderControl(20, 100, Math.Clamp(_cfg.MediaContentOpacity, 20, 100), "0' %'", v => _cfg.MediaContentOpacity = (int)v, tick: 1),
+                    Defaults.MediaContentOpacity)));
 
             var art = new StackPanel();
             art.Children.Add(OptionRow(T("Unschärfe", "Blur"),
@@ -1488,97 +1488,160 @@ namespace KnobFlyout.Settings
                 page.Children.Add(Hint(T("Hell oder dunkel: Seite „Allgemein“.", "Light or dark: “General” page.")));
         }
 
-        /// <summary>
-        /// Einstellungen des eigenen Media-Designs (media_custom_*): Anordnung der Bereiche, Cover, Knöpfe,
-        /// Text, Farben. Stehen direkt unter der Design-Auswahl und erscheinen nur bei „Eigenes“.
-        /// </summary>
-        private void BuildMediaCustomCards(StackPanel host)
+        // ══ Unterseite „Eigenes Design“ des Media-Flyouts (Key media_custom) ═══════════
+        // Aufbau nach gängigen Vorbildern (Windows-Schnelleinstellungen, iOS-Kontrollzentrum, Shopify-Abschnitte,
+        // Overlay-Baukästen): Vorlagen als Startpunkt, alle Elemente in der Reihenfolge des Flyouts mit Ein/Aus und
+        // ↑/↓, Feineinstellungen erst aufgeklappt, und eine Live-Vorschau, die beim Scrollen oben stehen bleibt.
+
+        private string _subParent = "media";                      // Seite, von der der Editor geöffnet wurde (Zurück, Navigation)
+        private readonly HashSet<string> _customExpanded = new(); // aufgeklappte Bereiche (bleiben beim Umsortieren offen)
+        private System.Windows.Threading.DispatcherTimer? _customPreviewTimer;
+
+        /// <summary>Karte, die wie in den Windows-11-Einstellungen auf eine Unterseite führt (ganze Karte klickbar, › rechts).</summary>
+        private static Border NavCard(string glyph, string title, string description, Action open)
         {
-            // ── Anordnung: Bereiche von oben nach unten, per ↑/↓ verschieben ──
-            var orderList = new StackPanel();
-            string BlockName(string key) => key switch
+            var card = SettingCard(glyph, title, description, new TextBlock
             {
-                "app" => T("App-Zeile (Name und Symbol)", "App row (name and icon)"),
-                "info" => T("Titel, Interpret und Cover", "Title, artist and album art"),
-                "progress" => T("Fortschrittsleiste", "Progress bar"),
-                "sources" => T("Quellen-Leiste (bei mehreren Quellen)", "Sources bar (with several sources)"),
-                _ => T("Knöpfe", "Buttons"),
+                Text = "\uE76C", FontFamily = IconFont, FontSize = 12, Foreground = Fg, // ChevronRight
+            });
+            card.Cursor = System.Windows.Input.Cursors.Hand;
+            card.MouseEnter += (_, _) => card.Background = HoverBg;
+            card.MouseLeave += (_, _) => card.Background = CardBg;
+            card.MouseLeftButtonUp += (_, _) => open();
+            return card;
+        }
+
+        private void OpenMediaCustomEditor(string parent)
+        {
+            _subParent = parent;
+            _customExpanded.Clear();
+            SelectPage("media_custom");
+            _pageScroll?.ScrollToTop();
+        }
+
+        /// <summary>Vorlage gewählt: Seite neu aufbauen (Schalter zeigen die neuen Werte), Scroll-Position bleibt.</summary>
+        private void RebuildMediaCustomPage()
+        {
+            double offset = _pageScroll?.VerticalOffset ?? 0;
+            SelectPage("media_custom");
+            if (_pageScroll == null) return;
+            _pageScroll.UpdateLayout();
+            _pageScroll.ScrollToVerticalOffset(offset);
+        }
+
+        /// <summary>Kopf (Zurück + Pfad) und Live-Vorschau über der scrollenden Seite; die Vorschau baut sich bei jeder Änderung neu.</summary>
+        private void ShowMediaCustomHeader()
+        {
+            if (_pinnedTop == null) return;
+            var back = FlatIconButton("\uE72B", T("Zurück", "Back"), () => SelectPage(_subParent)); // Back
+            back.Width = back.Height = 32;
+            back.FontSize = 14;
+            back.Foreground = Fg;
+            var parentName = new TextBlock
+            {
+                Text = _subParent == "design" ? "Design" : "Media-Flyout", FontSize = 20, FontWeight = FontWeights.SemiBold,
+                Foreground = SubFg, Cursor = System.Windows.Input.Cursors.Hand, VerticalAlignment = VerticalAlignment.Center,
             };
-            void RenderOrder()
+            parentName.MouseLeftButtonUp += (_, _) => SelectPage(_subParent);
+            var crumbs = new StackPanel { Orientation = Orientation.Horizontal };
+            crumbs.Children.Add(back);
+            crumbs.Children.Add(parentName);
+            crumbs.Children.Add(new TextBlock
             {
-                orderList.Children.Clear();
+                Text = "\uE76C", FontFamily = IconFont, FontSize = 12, Foreground = SubFg, // ChevronRight
+                Margin = new Thickness(10, 3, 10, 0), VerticalAlignment = VerticalAlignment.Center,
+            });
+            crumbs.Children.Add(new TextBlock
+            {
+                Text = T("Eigenes Design", "Custom design"), FontSize = 20, FontWeight = FontWeights.SemiBold, Foreground = Fg,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+
+            // Echte Größe, bei hohen Aufbauten (Cover oben) bzw. niedrigem Fenster verkleinert, damit unten genug Platz für die Einstellungen bleibt.
+            var previewHost = new Viewbox { StretchDirection = StretchDirection.DownOnly, HorizontalAlignment = HorizontalAlignment.Center };
+            void Fit() => previewHost.MaxHeight = Math.Clamp(ActualHeight - 450, 110, 230);
+            string snapshot = "";
+            void Refresh()
+            {
+                Fit();
+                string now = ConfigSnapshot();
+                if (now == snapshot) return;
+                snapshot = now;
+                try
+                {
+                    var preview = MediaOsd.CreatePreview(_cfg);
+                    preview.IsHitTestVisible = false; // reine Ansicht
+                    previewHost.Child = preview;
+                }
+                catch (Exception ex) { Logger.Error($"Design-Vorschau: {ex.Message}"); }
+            }
+            Refresh();
+
+            var panel = new StackPanel { Margin = new Thickness(24, 14, 32, 12), MaxWidth = 968 };
+            panel.Children.Add(crumbs);
+            panel.Children.Add(new Border { Margin = new Thickness(0, 12, 0, 0), Child = previewHost });
+            panel.Children.Add(new TextBlock
+            {
+                Text = T("Live-Vorschau · gilt nach „Speichern“", "Live preview · applies after “Save”"), FontSize = 11, Foreground = SubFg,
+                HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0),
+            });
+            _pinnedTop.Child = panel;
+            _pinnedTop.Visibility = Visibility.Visible;
+
+            _customPreviewTimer?.Stop();
+            _customPreviewTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+            _customPreviewTimer.Tick += (_, _) => Refresh();
+            _customPreviewTimer.Start();
+        }
+
+        private void HideMediaCustomHeader()
+        {
+            _customPreviewTimer?.Stop();
+            _customPreviewTimer = null;
+            if (_pinnedTop == null) return;
+            _pinnedTop.Child = null;
+            _pinnedTop.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Unterseite „Eigenes Design“: Vorlagen als Startpunkt, alle Bereiche in der Reihenfolge des Flyouts (Ein/Aus,
+        /// ↑/↓, aufgeklappt die einzelnen Elemente als Kacheln und die Feineinstellungen), darunter die Farben.
+        /// </summary>
+        private void BuildMediaCustomPage(StackPanel page)
+        {
+            ShowMediaCustomHeader();
+
+            page.Children.Add(SectionTitle(T("Vorlage", "Template")));
+            page.Children.Add(Hint(T("Startpunkt wählen und danach beliebig anpassen. Die Farben bleiben erhalten.",
+                "Pick a starting point and adjust it as you like. Your colors are kept.")));
+            page.Children.Add(BuildMediaTemplates());
+
+            page.Children.Add(SectionTitle(T("Was soll zu sehen sein?", "What should be shown?")));
+            page.Children.Add(Hint(T("Schalter und Kacheln blenden ein oder aus · ↑ ↓ ändert die Reihenfolge von oben nach unten · Klick auf eine Zeile zeigt mehr.",
+                "Switches and tiles show or hide · ↑ ↓ changes the order from top to bottom · click a row for more.")));
+            var elements = new StackPanel();
+            page.Children.Add(elements);
+            void RenderElements()
+            {
+                elements.Children.Clear();
                 var order = _cfg.MediaCustomOrder = MediaOsd.NormalizeOrder(_cfg.MediaCustomOrder);
                 for (int i = 0; i < order.Count; i++)
                 {
-                    int idx = i;
-                    var up = FlatIconButton("\uE70E", T("Nach oben", "Move up"), () => MoveBlock(idx, -1));     // ChevronUp
-                    var down = FlatIconButton("\uE70D", T("Nach unten", "Move down"), () => MoveBlock(idx, +1)); // ChevronDown
-                    up.IsEnabled = i > 0;
-                    down.IsEnabled = i < order.Count - 1;
-                    orderList.Children.Add(OptionRow($"{i + 1}.  {BlockName(order[i])}", Inline(up, down)));
+                    elements.Children.Add(MediaBlockCard(order[i], i, order.Count, (from, delta) =>
+                    {
+                        int to = from + delta;
+                        if (to < 0 || to >= order.Count) return;
+                        (order[from], order[to]) = (order[to], order[from]);
+                        RenderElements();
+                    }));
                 }
             }
-            void MoveBlock(int i, int delta)
-            {
-                var order = _cfg.MediaCustomOrder;
-                int j = i + delta;
-                if (j < 0 || j >= order.Count) return;
-                (order[i], order[j]) = (order[j], order[i]);
-                RenderOrder();
-            }
-            RenderOrder();
-            var layout = new StackPanel();
-            layout.Children.Add(orderList);
-            layout.Children.Add(OptionRow(T("App-Zeile anzeigen", "Show app row"),
-                Toggle(_cfg.MediaCustomShowApp, v => _cfg.MediaCustomShowApp = v)));
-            layout.Children.Add(OptionRow(T("Zeiten unter der Leiste", "Times below the bar"),
-                Toggle(_cfg.MediaCustomShowTimes, v => _cfg.MediaCustomShowTimes = v)));
-            host.Children.Add(ExpanderCard("\uE8FD", T("Anordnung", "Layout"), T("Reihenfolge der Bereiche von oben nach unten", "Order of the sections from top to bottom"), layout));
-
-            // ── Cover ──
-            string[] covers = { "right", "left", "top", "none" };
-            var coverCombo = Combo(160, Math.Max(0, Array.IndexOf(covers, _cfg.MediaCustomCover)),
-                T("Rechts", "Right"), T("Links", "Left"), T("Oben", "Top"), T("Aus", "Off"));
-            coverCombo.SelectionChanged += (_, _) => _cfg.MediaCustomCover = covers[Math.Max(0, coverCombo.SelectedIndex)];
-            var cover = new StackPanel();
-            cover.Children.Add(OptionRow(T("Position", "Position"),
-                WithReset(coverCombo, () => coverCombo.SelectedIndex = Math.Max(0, Array.IndexOf(covers, Defaults.MediaCustomCover)))));
-            cover.Children.Add(OptionRow(T("Größe", "Size"),
-                ResetSlider(SliderControl(32, 140, Math.Clamp(_cfg.MediaCustomCoverSize, 32, 140), "0' px'", v => _cfg.MediaCustomCoverSize = (int)v, tick: 2),
-                    Defaults.MediaCustomCoverSize)));
-            host.Children.Add(ExpanderCard("\uE91B", "Cover", null, cover));
-
-            // ── Knöpfe ──
-            string[] styles = { "round", "flat" };
-            var styleCombo = Combo(160, Math.Max(0, Array.IndexOf(styles, _cfg.MediaCustomButtons)), T("Rund", "Round"), T("Flach", "Flat"));
-            styleCombo.SelectionChanged += (_, _) => _cfg.MediaCustomButtons = styles[Math.Max(0, styleCombo.SelectedIndex)];
-            string[] aligns = { "center", "left", "right" };
-            var alignCombo = Combo(160, Math.Max(0, Array.IndexOf(aligns, _cfg.MediaCustomButtonsAlign)), T("Mittig", "Center"), T("Links", "Left"), T("Rechts", "Right"));
-            alignCombo.SelectionChanged += (_, _) => _cfg.MediaCustomButtonsAlign = aligns[Math.Max(0, alignCombo.SelectedIndex)];
-            string[] morePositions = { "controls", "top" };
-            var moreCombo = Combo(160, Math.Max(0, Array.IndexOf(morePositions, _cfg.MediaCustomMorePos)),
-                T("Bei den Knöpfen", "With the buttons"), T("Oben rechts", "Top right"));
-            moreCombo.SelectionChanged += (_, _) => _cfg.MediaCustomMorePos = morePositions[Math.Max(0, moreCombo.SelectedIndex)];
-            var buttons = new StackPanel();
-            buttons.Children.Add(OptionRow(T("Stil", "Style"),
-                WithReset(styleCombo, () => styleCombo.SelectedIndex = Math.Max(0, Array.IndexOf(styles, Defaults.MediaCustomButtons)))));
-            buttons.Children.Add(OptionRow(T("Ausrichtung", "Alignment"),
-                WithReset(alignCombo, () => alignCombo.SelectedIndex = Math.Max(0, Array.IndexOf(aligns, Defaults.MediaCustomButtonsAlign)))));
-            buttons.Children.Add(OptionRow(T("Größe", "Size"),
-                ResetSlider(SliderControl(70, 140, Math.Clamp(_cfg.MediaCustomButtonSize, 70, 140), "0' %'", v => _cfg.MediaCustomButtonSize = (int)v, tick: 5),
-                    Defaults.MediaCustomButtonSize)));
-            buttons.Children.Add(OptionRow(T("„…“-Knopf", "“…” button"),
-                WithReset(moreCombo, () => moreCombo.SelectedIndex = Math.Max(0, Array.IndexOf(morePositions, Defaults.MediaCustomMorePos)))));
-            host.Children.Add(ExpanderCard("\uE768", T("Knöpfe", "Buttons"), T("„Oben rechts“ braucht die App-Zeile", "“Top right” needs the app row"), buttons));
-
-            // ── Text ──
-            var textBody = new StackPanel();
-            textBody.Children.Add(OptionRow(T("Titelgröße", "Title size"),
-                ResetSlider(SliderControl(11, 22, Math.Clamp(_cfg.MediaCustomTitleSize, 11, 22), "0' pt'", v => _cfg.MediaCustomTitleSize = (int)v, tick: 1),
-                    Defaults.MediaCustomTitleSize)));
-            host.Children.Add(ExpanderCard("\uE8D2", "Text", null, textBody));
+            RenderElements();
+            page.Children.Add(Hint(T("Zeitleiste, ±10 s und „…“ gelten auch für die anderen Designs.",
+                "Timeline, ±10 s and “…” also apply to the other designs.")));
 
             // ── Farben (eigene Farbprofile wie beim OSD) ──
+            page.Children.Add(SectionTitle(T("Aussehen", "Appearance")));
             var boxes = new Dictionary<string, TextBox>();
             var colors = new StackPanel();
             AddColorField(colors, boxes, "media_custom_bg", T("Hintergrund", "Background"), _cfg.MediaCustomBg, Defaults.MediaCustomBg, v => _cfg.MediaCustomBg = v);
@@ -1588,7 +1651,270 @@ namespace KnobFlyout.Settings
             AddColorField(colors, boxes, "media_custom_button_bg", T("Knopf-Fläche", "Button fill"), _cfg.MediaCustomButtonBg, Defaults.MediaCustomButtonBg, v => _cfg.MediaCustomButtonBg = v);
             AddColorField(colors, boxes, "media_custom_track", T("Leiste (Hintergrund)", "Bar (background)"), _cfg.MediaCustomTrack, Defaults.MediaCustomTrack, v => _cfg.MediaCustomTrack = v);
             colors.Children.Insert(0, BuildColorPresets(boxes));
-            host.Children.Add(ExpanderCard("\uE790", T("Farben", "Colors"), null, colors));
+            page.Children.Add(ExpanderCard("\uE790", T("Farben", "Colors"),
+                T("Hintergrund, Text, Akzent, Knöpfe und Leiste", "Background, text, accent, buttons and bar"), colors));
+            page.Children.Add(Hint(T("Deckkraft, Ecken und Cover als Hintergrund: Seite „Media-Flyout“ → Aussehen.",
+                "Opacity, corners and album art background: “Media flyout” page → Appearance.")));
+        }
+
+        /// <summary>Ein Bereich des Flyouts als Karte: ↑/↓ und ggf. Ein/Aus im Kopf, aufgeklappt seine Elemente und Einstellungen.</summary>
+        private Border MediaBlockCard(string key, int index, int count, Action<int, int> move)
+        {
+            var head = new StackPanel { Orientation = Orientation.Horizontal };
+            var up = FlatIconButton("\uE70E", T("Nach oben", "Move up"), () => move(index, -1));     // ChevronUp
+            var down = FlatIconButton("\uE70D", T("Nach unten", "Move down"), () => move(index, +1)); // ChevronDown
+            up.IsEnabled = index > 0;
+            down.IsEnabled = index < count - 1;
+            up.Margin = down.Margin = new Thickness(0, 0, 2, 0);
+            head.Children.Add(up);
+            head.Children.Add(down);
+            void Switch(bool value, Action<bool> set)
+            {
+                var toggle = Toggle(value, set);
+                toggle.Margin = new Thickness(10, 0, 0, 0);
+                toggle.VerticalAlignment = VerticalAlignment.Center;
+                head.Children.Add(toggle);
+            }
+
+            string glyph, title, desc;
+            StackPanel? body = new StackPanel();
+            switch (key)
+            {
+                case "app":
+                    glyph = "\uE71D"; // AllApps
+                    title = T("App-Zeile", "App row");
+                    desc = T("Name und Symbol der App, die gerade spielt", "Name and icon of the app that is playing");
+                    Switch(_cfg.MediaCustomShowApp, v => _cfg.MediaCustomShowApp = v);
+                    body.Children.Add(OptionRow(T("„…“-Knopf rechts in dieser Zeile (statt bei den Knöpfen)", "“…” button on the right of this row (instead of with the buttons)"),
+                        Toggle(_cfg.MediaCustomMorePos == "top", v => _cfg.MediaCustomMorePos = v ? "top" : "controls")));
+                    break;
+                case "info":
+                    glyph = "\uE8D6"; // Audio
+                    title = T("Titel und Cover", "Title and album art");
+                    desc = T("Titel, Interpret und Cover", "Title, artist and album art");
+                    AddInfoOptions(body);
+                    break;
+                case "progress":
+                    glyph = "\uE823"; // Recent
+                    title = T("Zeitleiste", "Timeline");
+                    desc = T("Zeigt, wie weit der Titel ist · zum Springen anklicken oder ziehen", "Shows how far the track is · click or drag to jump");
+                    Switch(_cfg.MediaShowProgress, v => _cfg.MediaShowProgress = v);
+                    body.Children.Add(OptionRow(T("Zeiten darunter", "Times below"),
+                        Toggle(_cfg.MediaCustomShowTimes, v => _cfg.MediaCustomShowTimes = v)));
+                    break;
+                case "sources":
+                    glyph = "\uE8AB"; // Switch
+                    title = T("Quellen-Leiste", "Sources bar");
+                    desc = T("Nur sichtbar, wenn mehrere Apps gleichzeitig Medien melden", "Only visible when several apps report media at once");
+                    Switch(_cfg.MediaCustomShowSources, v => _cfg.MediaCustomShowSources = v);
+                    body = null;
+                    break;
+                default: // "controls"
+                    glyph = "\uE768"; // Play
+                    title = T("Knöpfe", "Buttons");
+                    desc = T("Zurück, ±10 s, Play/Pause, Weiter und „…“", "Previous, ±10 s, play/pause, next and “…”");
+                    AddButtonOptions(body);
+                    break;
+            }
+            if (body == null) return SettingCard(glyph, title, desc, head);
+            return ExpanderCard(glyph, title, desc, body, _customExpanded.Contains(key), head,
+                open => { if (open) _customExpanded.Add(key); else _customExpanded.Remove(key); });
+        }
+
+        /// <summary>Titel/Interpret/Cover als Kacheln, dazu Platz und Größe des Covers und die Titelgröße.</summary>
+        private void AddInfoOptions(StackPanel body)
+        {
+            string[] covers = { "right", "left", "top" };
+            string coverPos = Array.IndexOf(covers, _cfg.MediaCustomCover) >= 0 ? _cfg.MediaCustomCover : "right"; // bei „aus“: Platz fürs Wiedereinschalten
+            var tiles = new WrapPanel();
+            tiles.Children.Add(ElementTile("\uE8D2", T("Titel", "Title"), _cfg.MediaCustomShowTitle, v => _cfg.MediaCustomShowTitle = v));    // Font
+            tiles.Children.Add(ElementTile("\uE77B", T("Interpret", "Artist"), _cfg.MediaCustomShowArtist, v => _cfg.MediaCustomShowArtist = v)); // Contact
+            tiles.Children.Add(ElementTile("\uE91B", "Cover", _cfg.MediaCustomCover != "none", v => _cfg.MediaCustomCover = v ? coverPos : "none")); // Photo
+            body.Children.Add(tiles);
+
+            var coverCombo = Combo(160, Array.IndexOf(covers, coverPos), T("Rechts", "Right"), T("Links", "Left"), T("Oben", "Top"));
+            coverCombo.SelectionChanged += (_, _) =>
+            {
+                coverPos = covers[Math.Max(0, coverCombo.SelectedIndex)];
+                if (_cfg.MediaCustomCover != "none") _cfg.MediaCustomCover = coverPos;
+            };
+            body.Children.Add(OptionRow(T("Platz des Covers", "Album art position"),
+                WithReset(coverCombo, () => coverCombo.SelectedIndex = Math.Max(0, Array.IndexOf(covers, Defaults.MediaCustomCover)))));
+            body.Children.Add(OptionRow(T("Größe des Covers", "Album art size"),
+                ResetSlider(SliderControl(32, 140, Math.Clamp(_cfg.MediaCustomCoverSize, 32, 140), "0' px'", v => _cfg.MediaCustomCoverSize = (int)v, tick: 2),
+                    Defaults.MediaCustomCoverSize)));
+            body.Children.Add(OptionRow(T("Titelgröße", "Title size"),
+                ResetSlider(SliderControl(11, 22, Math.Clamp(_cfg.MediaCustomTitleSize, 11, 22), "0' pt'", v => _cfg.MediaCustomTitleSize = (int)v, tick: 1),
+                    Defaults.MediaCustomTitleSize)));
+        }
+
+        /// <summary>Jeder Knopf als Kachel (in der Reihenfolge des Flyouts), dazu Stil, Ausrichtung und Größe.</summary>
+        private void AddButtonOptions(StackPanel body)
+        {
+            var tiles = new WrapPanel();
+            tiles.Children.Add(ElementTile("\uE892", T("Zurück", "Previous"), _cfg.MediaCustomShowPrev, v => _cfg.MediaCustomShowPrev = v)); // Previous
+            tiles.Children.Add(ElementTile("\uED3C", "±10 s", _cfg.MediaSkipButtons, v => _cfg.MediaSkipButtons = v));                       // SkipBack10
+            tiles.Children.Add(ElementTile("\uE768", "Play/Pause", _cfg.MediaCustomShowPlay, v => _cfg.MediaCustomShowPlay = v));            // Play
+            tiles.Children.Add(ElementTile("\uE893", T("Weiter", "Next"), _cfg.MediaCustomShowNext, v => _cfg.MediaCustomShowNext = v));     // Next
+            tiles.Children.Add(ElementTile("\uE712", T("„…“-Menü", "“…” menu"), _cfg.MediaShowMore, v => _cfg.MediaShowMore = v));          // More
+            body.Children.Add(tiles);
+
+            string[] styles = { "round", "flat" };
+            var styleCombo = Combo(160, Math.Max(0, Array.IndexOf(styles, _cfg.MediaCustomButtons)), T("Rund", "Round"), T("Flach", "Flat"));
+            styleCombo.SelectionChanged += (_, _) => _cfg.MediaCustomButtons = styles[Math.Max(0, styleCombo.SelectedIndex)];
+            string[] aligns = { "center", "left", "right" };
+            var alignCombo = Combo(160, Math.Max(0, Array.IndexOf(aligns, _cfg.MediaCustomButtonsAlign)), T("Mittig", "Center"), T("Links", "Left"), T("Rechts", "Right"));
+            alignCombo.SelectionChanged += (_, _) => _cfg.MediaCustomButtonsAlign = aligns[Math.Max(0, alignCombo.SelectedIndex)];
+            body.Children.Add(OptionRow(T("Stil", "Style"),
+                WithReset(styleCombo, () => styleCombo.SelectedIndex = Math.Max(0, Array.IndexOf(styles, Defaults.MediaCustomButtons)))));
+            body.Children.Add(OptionRow(T("Ausrichtung", "Alignment"),
+                WithReset(alignCombo, () => alignCombo.SelectedIndex = Math.Max(0, Array.IndexOf(aligns, Defaults.MediaCustomButtonsAlign)))));
+            body.Children.Add(OptionRow(T("Größe", "Size"),
+                ResetSlider(SliderControl(70, 140, Math.Clamp(_cfg.MediaCustomButtonSize, 70, 140), "0' %'", v => _cfg.MediaCustomButtonSize = (int)v, tick: 5),
+                    Defaults.MediaCustomButtonSize)));
+            body.Children.Add(Hint(T("Einträge im „…“-Menü: Seite „Media-Flyout“ → Inhalt.", "Items in the “…” menu: “Media flyout” page → Content.")));
+        }
+
+        /// <summary>Kachel für ein einzelnes Element (Symbol + Name): an = Akzentfarbe mit Häkchen, aus = grau; Klick schaltet um.</summary>
+        private static Border ElementTile(string glyph, string label, bool on, Action<bool> set)
+        {
+            var icon = new TextBlock { Text = glyph, FontFamily = IconFont, FontSize = 18, HorizontalAlignment = HorizontalAlignment.Center };
+            var text = new TextBlock { Text = label, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 5, 0, 0) };
+            var check = new TextBlock
+            {
+                Text = "\uE73E", FontFamily = IconFont, FontSize = 10, // CheckMark
+                HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 5, 6, 0),
+            };
+            var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            stack.Children.Add(icon);
+            stack.Children.Add(text);
+            var grid = new Grid();
+            grid.Children.Add(stack);
+            grid.Children.Add(check);
+            var tile = new Border
+            {
+                Width = 84, Height = 62, CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1),
+                Margin = new Thickness(0, 0, 8, 8), Cursor = System.Windows.Input.Cursors.Hand, Child = grid,
+                ToolTip = T("Klicken zum Ein- oder Ausblenden", "Click to show or hide"),
+            };
+            void Apply()
+            {
+                tile.Background = on ? Accent : FieldBg;
+                tile.BorderBrush = on ? Accent : FieldBorder;
+                icon.Foreground = text.Foreground = check.Foreground = on ? Brushes.White : SubFg;
+                check.Visibility = on ? Visibility.Visible : Visibility.Hidden;
+            }
+            Apply();
+            tile.MouseLeftButtonDown += (_, e) => e.Handled = true;
+            tile.MouseLeftButtonUp += (_, e) =>
+            {
+                on = !on;
+                Apply();
+                set(on);
+                e.Handled = true;
+            };
+            return tile;
+        }
+
+        private static readonly (string Key, string De, string En)[] MediaTemplates =
+        {
+            ("standard", "Standard", "Standard"),
+            ("compact", "Kompakt", "Compact"),
+            ("minimal", "Minimal", "Minimal"),
+            ("cover", "Großes Cover", "Large album art"),
+        };
+
+        /// <summary>Vorlage auf c anwenden: Aufbau, Elemente und Größen (die Farben bleiben). „standard“ = Ausgangszustand.</summary>
+        private static void ApplyMediaTemplate(AppConfig c, string key)
+        {
+            var d = Defaults;
+            c.MediaCustomOrder = new List<string>(d.MediaCustomOrder);
+            c.MediaCustomShowApp = d.MediaCustomShowApp;
+            c.MediaCustomShowTimes = d.MediaCustomShowTimes;
+            c.MediaCustomCover = d.MediaCustomCover;
+            c.MediaCustomCoverSize = d.MediaCustomCoverSize;
+            c.MediaCustomButtons = d.MediaCustomButtons;
+            c.MediaCustomButtonsAlign = d.MediaCustomButtonsAlign;
+            c.MediaCustomButtonSize = d.MediaCustomButtonSize;
+            c.MediaCustomMorePos = d.MediaCustomMorePos;
+            c.MediaCustomTitleSize = d.MediaCustomTitleSize;
+            c.MediaCustomShowTitle = d.MediaCustomShowTitle;
+            c.MediaCustomShowArtist = d.MediaCustomShowArtist;
+            c.MediaCustomShowSources = d.MediaCustomShowSources;
+            c.MediaCustomShowPrev = d.MediaCustomShowPrev;
+            c.MediaCustomShowPlay = d.MediaCustomShowPlay;
+            c.MediaCustomShowNext = d.MediaCustomShowNext;
+            c.MediaShowProgress = d.MediaShowProgress;
+            c.MediaSkipButtons = d.MediaSkipButtons;
+            c.MediaShowMore = d.MediaShowMore;
+            switch (key)
+            {
+                case "compact": // eine Zeile Titel mit kleinem Cover links, flache Knöpfe ohne ±10 s
+                    c.MediaCustomShowApp = false;
+                    c.MediaCustomCover = "left";
+                    c.MediaCustomCoverSize = 48;
+                    c.MediaCustomTitleSize = 13;
+                    c.MediaCustomShowTimes = false;
+                    c.MediaCustomButtons = "flat";
+                    c.MediaCustomButtonSize = 90;
+                    c.MediaSkipButtons = false;
+                    break;
+                case "minimal": // nur Titel, Interpret und Zurück/Play/Weiter
+                    c.MediaCustomShowApp = false;
+                    c.MediaCustomCover = "none";
+                    c.MediaCustomButtons = "flat";
+                    c.MediaCustomShowSources = false;
+                    c.MediaShowProgress = false;
+                    c.MediaSkipButtons = false;
+                    c.MediaShowMore = false;
+                    break;
+                case "cover": // großes Cover oben, „…“ in der App-Zeile
+                    c.MediaCustomCover = "top";
+                    c.MediaCustomCoverSize = 140;
+                    c.MediaCustomTitleSize = 16;
+                    c.MediaCustomButtonSize = 110;
+                    c.MediaCustomMorePos = "top";
+                    break;
+            }
+        }
+
+        /// <summary>Vorlagen als Kacheln mit echter Mini-Vorschau (Flyout mit angewendeter Vorlage und den eigenen Farben).</summary>
+        private UIElement BuildMediaTemplates()
+        {
+            var grid = new System.Windows.Controls.Primitives.UniformGrid { Columns = MediaTemplates.Length };
+            for (int i = 0; i < MediaTemplates.Length; i++)
+            {
+                var (key, de, en) = MediaTemplates[i];
+                var sample = CloneConfig(_cfg);
+                ApplyMediaTemplate(sample, key);
+                FrameworkElement thumb;
+                try { thumb = MediaOsd.CreatePreview(sample); }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Vorlagen-Vorschau: {ex.Message}");
+                    thumb = new Border();
+                }
+                thumb.IsHitTestVisible = false;
+                var content = new StackPanel();
+                content.Children.Add(new Viewbox { Height = 96, Stretch = Stretch.Uniform, Child = thumb });
+                content.Children.Add(new TextBlock { Text = T(de, en), Foreground = Fg, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) });
+                var tile = new Border
+                {
+                    Background = CardBg, BorderBrush = CardBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(10), Margin = new Thickness(0, 0, i < MediaTemplates.Length - 1 ? 8 : 0, 0),
+                    Cursor = System.Windows.Input.Cursors.Hand, Child = content,
+                    ToolTip = T("Als Startpunkt übernehmen", "Use as starting point"),
+                };
+                tile.MouseEnter += (_, _) => tile.Background = HoverBg;
+                tile.MouseLeave += (_, _) => tile.Background = CardBg;
+                tile.MouseLeftButtonUp += (_, _) =>
+                {
+                    ApplyMediaTemplate(_cfg, key);
+                    RebuildMediaCustomPage();
+                };
+                grid.Children.Add(tile);
+            }
+            return grid;
         }
 
         // ══════════════════════════════════════════════════════════════════
