@@ -19,7 +19,7 @@ namespace KnobFlyout.Osd
         {
             bool light = ThemeHelper.IsLight(cfg);
             var pal = spec.Palette(light);
-            var root = new StackPanel { Margin = new Thickness(15, 15, 15, 0) };
+            var root = new StackPanel { Margin = new Thickness(15, 15, 15, 0), Opacity = _contentAlpha };
             root.Children.Add(new TextBlock
             {
                 Text = Loc.T("Neue App erkannt", "New app detected"), FontFamily = spec.Font, FontSize = 13, Foreground = UiColor.Brush(pal.Sub),

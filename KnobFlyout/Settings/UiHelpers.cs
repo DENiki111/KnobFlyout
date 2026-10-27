@@ -163,7 +163,7 @@ namespace KnobFlyout.Settings
 
         /// <summary>Aufklappbare Karte (SettingsExpander): Kopf mit Pfeil, Inhalt erst nach Klick sichtbar.</summary>
         public static Border ExpanderCard(string glyph, string title, string? description, UIElement content, bool expanded = false,
-            UIElement? headerControl = null)
+            UIElement? headerControl = null, Action<bool>? onExpandedChanged = null)
         {
             var chevron = new TextBlock { FontFamily = IconFont, FontSize = 12, Foreground = Fg, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             UIElement right = chevron;
@@ -193,7 +193,7 @@ namespace KnobFlyout.Settings
             Apply();
             head.MouseEnter += (_, _) => head.Background = HoverBg;
             head.MouseLeave += (_, _) => head.Background = Brushes.Transparent;
-            head.MouseLeftButtonUp += (_, _) => { expanded = !expanded; Apply(); };
+            head.MouseLeftButtonUp += (_, _) => { expanded = !expanded; Apply(); onExpandedChanged?.Invoke(expanded); };
 
             var panel = new StackPanel();
             panel.Children.Add(head);
