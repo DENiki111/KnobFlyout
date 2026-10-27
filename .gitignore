@@ -1,0 +1,16 @@
+# Build-Ausgaben
+bin/
+obj/
+publish/
+dist/
+.vs/
+*.user
+*.suo
+
+# Laufzeitdateien: Spotify-Token, Einstellungen mit Client Secret, Protokoll
+.spotify_cache
+config.json
+*.log
+
+# Pakete
+*.zip
