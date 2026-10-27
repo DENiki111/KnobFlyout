@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
 
-namespace ModernFlyoutSetup
+namespace KnobFlyoutSetup
 {
     /// <summary>Optionen aus dem Assistenten.</summary>
     internal sealed class InstallOptions
@@ -25,10 +25,15 @@ namespace ModernFlyoutSetup
     /// </summary>
     internal static class InstallEngine
     {
-        public const string AppName = "ModernFlyout";
-        public const string ExeName = "ModernFlyout.exe";
-        private const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\ModernFlyout";
+        public const string AppName = "KnobFlyout";
+        public const string ExeName = "KnobFlyout.exe";
+        private const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\KnobFlyout";
         private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+
+        // Vorgänger unter dem alten Namen: wird bei der Installation übernommen (Einstellungen) und entfernt.
+        private const string LegacyName = "ModernFlyout";
+        private const string LegacyExe = "ModernFlyout.exe";
+        private const string LegacyUninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\ModernFlyout";
 
         public static string DefaultBaseDir =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs");
@@ -41,7 +46,7 @@ namespace ModernFlyoutSetup
 
         public static string Version => Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
 
-        /// <summary>Zielordner = gewählter Ordner + „ModernFlyout“ (außer er heißt schon so).</summary>
+        /// <summary>Zielordner = gewählter Ordner + „KnobFlyout“ (außer er heißt schon so).</summary>
         public static string TargetDir(string baseDir)
         {
             string dir = (baseDir ?? "").Trim().TrimEnd('\\', '/');
@@ -50,14 +55,19 @@ namespace ModernFlyoutSetup
         }
 
         /// <summary>Ordner einer vorhandenen Installation (für Updates), sonst null.</summary>
-        public static string ExistingInstall()
+        public static string ExistingInstall() => InstalledAt(UninstallKey, ExeName);
+
+        /// <summary>Ordner einer installierten Vorgängerversion „ModernFlyout“, sonst null.</summary>
+        public static string LegacyInstall() => InstalledAt(LegacyUninstallKey, LegacyExe);
+
+        private static string InstalledAt(string uninstallKey, string exeName)
         {
             try
             {
-                using (var key = Registry.CurrentUser.OpenSubKey(UninstallKey))
+                using (var key = Registry.CurrentUser.OpenSubKey(uninstallKey))
                 {
                     var dir = key?.GetValue("InstallLocation") as string;
-                    return !string.IsNullOrEmpty(dir) && File.Exists(Path.Combine(dir, ExeName)) ? dir : null;
+                    return !string.IsNullOrEmpty(dir) && File.Exists(Path.Combine(dir, exeName)) ? dir : null;
                 }
             }
             catch { return null; }
@@ -90,9 +100,9 @@ namespace ModernFlyoutSetup
             catch (System.Security.SecurityException) { return false; }
         }
 
-        /// <summary>Laufende ModernFlyout-Prozesse (installiert oder portabel als KnobEarTrumpet.exe).</summary>
+        /// <summary>Laufende KnobFlyout-Prozesse (installiert, als Vorgänger ModernFlyout.exe oder portabel als KnobEarTrumpet.exe).</summary>
         public static List<Process> RunningApps() =>
-            Process.GetProcessesByName("ModernFlyout").Concat(Process.GetProcessesByName("KnobEarTrumpet")).ToList();
+            new[] { "KnobFlyout", LegacyName, "KnobEarTrumpet" }.SelectMany(Process.GetProcessesByName).ToList();
 
         /// <summary>Ordner, aus dem eine laufende Version gestartet wurde (für die Übernahme ihrer Einstellungen).</summary>
         public static string FolderOf(Process p)
@@ -106,13 +116,15 @@ namespace ModernFlyoutSetup
             string dir = o.TargetDir;
             Directory.CreateDirectory(dir);
 
-            // Einstellungen: bei einem Update bleiben config.json & Co. unangetastet; bei einer Neuinstallation die einer
-            // gerade laufenden (portablen) Version übernehmen, sonst nur die gewählte Sprache vorgeben.
+            // Einstellungen: bei einem Update bleiben config.json & Co. unangetastet; bei einer Neuinstallation die der
+            // Vorgängerversion „ModernFlyout“ bzw. einer gerade laufenden (portablen) Version übernehmen, sonst nur die
+            // gewählte Sprache vorgeben.
+            string legacy = LegacyInstall();
             string config = Path.Combine(dir, "config.json");
             if (!File.Exists(config))
             {
-                string source = runningFolders.FirstOrDefault(f => f != null && File.Exists(Path.Combine(f, "config.json"))
-                    && !string.Equals(Path.GetFullPath(f).TrimEnd('\\'), Path.GetFullPath(dir).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
+                string source = new[] { legacy }.Concat(runningFolders).FirstOrDefault(f => f != null && File.Exists(Path.Combine(f, "config.json"))
+                    && !SamePath(f, dir));
                 if (source != null)
                 {
                     progress(2, L.T("Einstellungen werden übernommen …", "Taking over settings …"));
@@ -183,7 +195,44 @@ namespace ModernFlyoutSetup
                 key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
                 key.SetValue("EstimatedSize", (int)Math.Min(int.MaxValue, total / 1024), RegistryValueKind.DWord);
             }
+
+            if (legacy != null)
+            {
+                progress(98, L.T("Alte Version „ModernFlyout“ wird entfernt …", "Removing the old version “ModernFlyout” …"));
+                RemoveLegacy(legacy, dir);
+            }
             progress(100, L.T("Fertig.", "Done."));
+        }
+
+        private static bool SamePath(string a, string b) =>
+            string.Equals(Path.GetFullPath(a).TrimEnd('\\'), Path.GetFullPath(b).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Vorgänger „ModernFlyout“ entfernen (erst nach erfolgreicher Installation): Autostart, Verknüpfungen, Eintrag unter
+        /// „Apps &amp; Features“ und den alten Programmordner. Liegt der neue Ordner darin, nur die alten Programmdateien.
+        /// </summary>
+        private static void RemoveLegacy(string legacyDir, string newDir)
+        {
+            using (var run = Registry.CurrentUser.CreateSubKey(RunKey))
+                if (run.GetValue(LegacyName) != null) run.DeleteValue(LegacyName, false);
+            foreach (var folder in new[] { Environment.SpecialFolder.DesktopDirectory, Environment.SpecialFolder.Programs })
+            {
+                string path = Path.Combine(Environment.GetFolderPath(folder), LegacyName + ".lnk");
+                try { if (File.Exists(path)) File.Delete(path); } catch { /* bleibt liegen */ }
+            }
+            Registry.CurrentUser.DeleteSubKeyTree(LegacyUninstallKey, false);
+
+            // Nur einen Ordner löschen, der wirklich vom alten Setup stammt (heißt „ModernFlyout“, enthält ModernFlyout.exe).
+            if (!string.Equals(Path.GetFileName(legacyDir.TrimEnd('\\')), LegacyName, StringComparison.OrdinalIgnoreCase)) return;
+            string full = Path.GetFullPath(legacyDir).TrimEnd('\\') + "\\";
+            bool containsNew = (Path.GetFullPath(newDir).TrimEnd('\\') + "\\").StartsWith(full, StringComparison.OrdinalIgnoreCase);
+            try
+            {
+                if (!containsNew) Directory.Delete(legacyDir, true);
+                else foreach (var name in new[] { LegacyExe, "uninstall.cmd" })
+                    if (File.Exists(Path.Combine(legacyDir, name))) File.Delete(Path.Combine(legacyDir, name));
+            }
+            catch { /* gerade gesperrte Datei: Ordner bleibt liegen, die neue Version läuft trotzdem */ }
         }
 
         /// <summary>Verknüpfung anlegen (WScript.Shell) bzw. eine frühere entfernen, wenn die Option abgewählt ist.</summary>
@@ -224,12 +273,12 @@ namespace ModernFlyoutSetup
             sb.AppendLine("@echo off");
             sb.AppendLine("chcp 65001 >nul");
             sb.AppendLine("if /i not \"%~1\"==\"/run\" (");
-            sb.AppendLine("  copy /y \"%~f0\" \"%TEMP%\\ModernFlyout-uninstall.cmd\" >nul");
-            sb.AppendLine("  start \"ModernFlyout\" \"%TEMP%\\ModernFlyout-uninstall.cmd\" /run");
+            sb.AppendLine("  copy /y \"%~f0\" \"%TEMP%\\KnobFlyout-uninstall.cmd\" >nul");
+            sb.AppendLine("  start \"KnobFlyout\" \"%TEMP%\\KnobFlyout-uninstall.cmd\" /run");
             sb.AppendLine("  exit /b");
             sb.AppendLine(")");
-            sb.AppendLine("title ModernFlyout");
-            sb.AppendLine("choice /c " + yes + no + " /m \"" + L.T("ModernFlyout wirklich deinstallieren", "Really uninstall ModernFlyout") + "\"");
+            sb.AppendLine("title KnobFlyout");
+            sb.AppendLine("choice /c " + yes + no + " /m \"" + L.T("KnobFlyout wirklich deinstallieren", "Really uninstall KnobFlyout") + "\"");
             sb.AppendLine("if errorlevel 2 goto :end");
             sb.AppendLine("taskkill /f /im " + ExeName + " >nul 2>&1");
             sb.AppendLine("timeout /t 2 /nobreak >nul");
@@ -238,7 +287,7 @@ namespace ModernFlyoutSetup
             sb.AppendLine("del /f /q \"" + DesktopShortcut + "\" >nul 2>&1");
             sb.AppendLine("del /f /q \"" + StartMenuShortcut + "\" >nul 2>&1");
             sb.AppendLine("rd /s /q \"" + dir + "\"");
-            sb.AppendLine("echo " + L.T("ModernFlyout wurde deinstalliert.", "ModernFlyout has been uninstalled."));
+            sb.AppendLine("echo " + L.T("KnobFlyout wurde deinstalliert.", "KnobFlyout has been uninstalled."));
             sb.AppendLine("timeout /t 3 >nul");
             sb.AppendLine(":end");
             sb.AppendLine("(goto) 2>nul & del \"%~f0\"");

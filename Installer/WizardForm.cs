@@ -7,10 +7,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace ModernFlyoutSetup
+namespace KnobFlyoutSetup
 {
     /// <summary>
-    /// Installations-Assistent wie bei üblichen Programmen: Willkommen → Zielordner (der Ordner „ModernFlyout“ wird
+    /// Installations-Assistent wie bei üblichen Programmen: Willkommen → Zielordner (der Ordner „KnobFlyout“ wird
     /// automatisch angelegt) → Optionen → Bereit → Installation → Fertig. Kopfzeile mit Titel und App-Symbol, unten
     /// „Zurück“ / „Weiter“ / „Abbrechen“.
     /// </summary>
@@ -26,6 +26,7 @@ namespace ModernFlyoutSetup
         private readonly Button _back = new Button(), _next = new Button(), _cancel = new Button();
         private readonly List<Panel> _pages = new List<Panel>();
         private readonly string _existing = InstallEngine.ExistingInstall();
+        private readonly string _legacy = InstallEngine.LegacyInstall();
         private readonly long _size = InstallEngine.PayloadSize();
         private int _page;
         private bool _installing, _finished, _restarting;
@@ -37,7 +38,7 @@ namespace ModernFlyoutSetup
 
         public WizardForm(SetupArgs args)
         {
-            Text = L.T("ModernFlyout Setup", "ModernFlyout Setup");
+            Text = L.T("KnobFlyout Setup", "KnobFlyout Setup");
             Font = SystemFonts.MessageBoxFont;
             AutoScaleMode = AutoScaleMode.Font;
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -128,13 +129,16 @@ namespace ModernFlyoutSetup
         {
             var page = Page();
             string text = L.T(
-                $"Dieser Assistent installiert ModernFlyout {InstallEngine.Version} – Lautstärke pro App mit OSD, Media-Flyout und Profilen.\r\n\r\n" +
+                $"Dieser Assistent installiert KnobFlyout {InstallEngine.Version} – Lautstärke pro App mit OSD, Media-Flyout und Profilen.\r\n\r\n" +
                 "Administratorrechte sind nicht nötig, solange der Zielordner in Ihrem Benutzerprofil liegt.\r\n\r\n",
-                $"This wizard installs ModernFlyout {InstallEngine.Version} – per-app volume with OSD, media flyout and profiles.\r\n\r\n" +
+                $"This wizard installs KnobFlyout {InstallEngine.Version} – per-app volume with OSD, media flyout and profiles.\r\n\r\n" +
                 "No administrator rights are needed as long as the target folder is inside your user profile.\r\n\r\n");
             if (_existing != null)
                 text += L.T("Eine vorhandene Installation wird aktualisiert – Ihre Einstellungen bleiben erhalten.\r\n\r\n",
                     "An existing installation will be updated – your settings are kept.\r\n\r\n");
+            else if (_legacy != null)
+                text += L.T("Die vorhandene Installation unter dem alten Namen „ModernFlyout“ wird übernommen: Ihre Einstellungen bleiben erhalten, die alte Version wird danach entfernt.\r\n\r\n",
+                    "The existing installation under the old name “ModernFlyout” is taken over: your settings are kept and the old version is removed afterwards.\r\n\r\n");
             text += L.T("Klicken Sie auf „Weiter“, um fortzufahren.", "Click “Next” to continue.");
             AddText(page, text, 0);
             return page;
@@ -143,19 +147,19 @@ namespace ModernFlyoutSetup
         private Panel BuildFolder(string dir)
         {
             var page = Page();
-            AddText(page, L.T("ModernFlyout wird in den folgenden Ordner installiert. Zum Ändern einen anderen Ordner eingeben oder „Durchsuchen …“ klicken.",
-                "ModernFlyout will be installed into the following folder. To change it, enter another folder or click “Browse …”."), 0);
+            AddText(page, L.T("KnobFlyout wird in den folgenden Ordner installiert. Zum Ändern einen anderen Ordner eingeben oder „Durchsuchen …“ klicken.",
+                "KnobFlyout will be installed into the following folder. To change it, enter another folder or click “Browse …”."), 0);
             _folder = new TextBox
             {
                 Location = new Point(0, 52), Width = 412,
-                Text = dir ?? (_existing != null ? Path.GetDirectoryName(_existing) : InstallEngine.DefaultBaseDir),
+                Text = dir ?? Path.GetDirectoryName((_existing ?? _legacy)?.TrimEnd('\\')) ?? InstallEngine.DefaultBaseDir,
             };
             var browse = new Button { Text = L.T("Durchsuchen …", "Browse …"), Location = new Point(420, 50), Size = new Size(100, 26) };
             browse.Click += (_, __) =>
             {
                 using (var dialog = new FolderBrowserDialog
                 {
-                    Description = L.T("Ordner wählen – darin wird der Ordner „ModernFlyout“ angelegt.", "Choose a folder – the folder “ModernFlyout” is created inside it."),
+                    Description = L.T("Ordner wählen – darin wird der Ordner „KnobFlyout“ angelegt.", "Choose a folder – the folder “KnobFlyout” is created inside it."),
                     ShowNewFolderButton = true,
                 })
                 {
@@ -176,8 +180,8 @@ namespace ModernFlyoutSetup
             string target = InstallEngine.TargetDir(_folder.Text);
             string size = _size > 0 ? $"{_size / (1024 * 1024)} MB" : "–";
             _folderInfo.Text = L.T(
-                $"Installiert wird nach:\r\n{target}\r\n\r\nDer Ordner „ModernFlyout“ wird dort automatisch angelegt.\r\n\r\nBenötigter Speicherplatz: {size}",
-                $"Installing to:\r\n{target}\r\n\r\nThe folder “ModernFlyout” is created there automatically.\r\n\r\nRequired disk space: {size}");
+                $"Installiert wird nach:\r\n{target}\r\n\r\nDer Ordner „KnobFlyout“ wird dort automatisch angelegt.\r\n\r\nBenötigter Speicherplatz: {size}",
+                $"Installing to:\r\n{target}\r\n\r\nThe folder “KnobFlyout” is created there automatically.\r\n\r\nRequired disk space: {size}");
         }
 
         private Panel BuildOptions(SetupArgs args)
@@ -217,9 +221,9 @@ namespace ModernFlyoutSetup
         private Panel BuildFinish()
         {
             var page = Page();
-            AddText(page, L.T("ModernFlyout wurde erfolgreich installiert.\r\n\r\nDas Programm läuft im Infobereich der Taskleiste (neben der Uhr); dort öffnen Sie auch die Einstellungen.",
-                "ModernFlyout has been installed successfully.\r\n\r\nThe program runs in the notification area of the taskbar (next to the clock); the settings are opened from there."), 0);
-            _launch = Check(page, L.T("ModernFlyout jetzt starten", "Launch ModernFlyout now"), 96, true);
+            AddText(page, L.T("KnobFlyout wurde erfolgreich installiert.\r\n\r\nDas Programm läuft im Infobereich der Taskleiste (neben der Uhr); dort öffnen Sie auch die Einstellungen.",
+                "KnobFlyout has been installed successfully.\r\n\r\nThe program runs in the notification area of the taskbar (next to the clock); the settings are opened from there."), 0);
+            _launch = Check(page, L.T("KnobFlyout jetzt starten", "Launch KnobFlyout now"), 96, true);
             return page;
         }
 
@@ -231,11 +235,11 @@ namespace ModernFlyoutSetup
             for (int i = 0; i < _pages.Count; i++) _pages[i].Visible = i == page;
             (string title, string subtitle) = page switch
             {
-                Welcome => (L.T("Willkommen", "Welcome"), L.T("Setup von ModernFlyout", "ModernFlyout setup")),
-                Folder => (L.T("Zielordner wählen", "Choose the destination folder"), L.T("Wohin soll ModernFlyout installiert werden?", "Where should ModernFlyout be installed?")),
+                Welcome => (L.T("Willkommen", "Welcome"), L.T("Setup von KnobFlyout", "KnobFlyout setup")),
+                Folder => (L.T("Zielordner wählen", "Choose the destination folder"), L.T("Wohin soll KnobFlyout installiert werden?", "Where should KnobFlyout be installed?")),
                 Options => (L.T("Zusätzliche Aufgaben", "Additional tasks"), L.T("Verknüpfungen und Autostart", "Shortcuts and autostart")),
                 Ready => (L.T("Bereit zur Installation", "Ready to install"), L.T("Bitte die Angaben prüfen", "Please check the settings")),
-                Progress => (L.T("Installation läuft", "Installing"), L.T("ModernFlyout wird installiert …", "ModernFlyout is being installed …")),
+                Progress => (L.T("Installation läuft", "Installing"), L.T("KnobFlyout wird installiert …", "KnobFlyout is being installed …")),
                 _ => (L.T("Fertig", "Completed"), L.T("Die Installation ist abgeschlossen", "Setup has finished")),
             };
             _title.Text = title;
@@ -248,6 +252,9 @@ namespace ModernFlyoutSetup
                     L.T("Desktop-Verknüpfung: ", "Desktop shortcut: ") + (_desktop.Checked ? yes : no) + "\r\n" +
                     L.T("Startmenü-Eintrag: ", "Start menu entry: ") + (_startMenu.Checked ? yes : no) + "\r\n" +
                     L.T("Mit Windows starten: ", "Start with Windows: ") + (_autostart.Checked ? yes : no);
+                if (_legacy != null)
+                    _summary.Text += "\r\n\r\n" + L.T("Alte Version „ModernFlyout“ (Einstellungen werden übernommen, danach entfernt):",
+                        "Old version “ModernFlyout” (settings are taken over, then removed):") + "\r\n      " + _legacy;
             }
 
             _back.Visible = page != Welcome && page != Progress && page != Finish;
@@ -320,7 +327,7 @@ namespace ModernFlyoutSetup
             var folders = running.Select(InstallEngine.FolderOf).ToList();
             if (running.Count > 0)
             {
-                var answer = MessageBox.Show(this, L.T("ModernFlyout läuft gerade und wird für die Installation beendet.", "ModernFlyout is running and will be closed for the installation."),
+                var answer = MessageBox.Show(this, L.T("KnobFlyout läuft gerade und wird für die Installation beendet.", "KnobFlyout is running and will be closed for the installation."),
                     Text, MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
                 if (answer != DialogResult.OK) return;
                 foreach (var p in running)

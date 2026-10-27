@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using System.Windows.Forms;
 
-namespace ModernFlyoutSetup
+namespace KnobFlyoutSetup
 {
     /// <summary>Sprache des Setups (und bei Neuinstallation auch der App).</summary>
     internal static class L

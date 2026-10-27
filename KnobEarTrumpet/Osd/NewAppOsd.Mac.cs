@@ -12,7 +12,7 @@ namespace KnobEarTrumpet.Osd
     internal sealed partial class NewAppOsd
     {
         /// <summary>
-        /// Mitteilung: ModernFlyout-Symbol · „Neue App erkannt“ + App-Name · „jetzt“; darunter ⊘-Kachel und je Profil eine
+        /// Mitteilung: KnobFlyout-Symbol · „Neue App erkannt“ + App-Name · „jetzt“; darunter ⊘-Kachel und je Profil eine
         /// App-Kachel (Profilfarbe mit weißem Logo bzw. eigenes Bild). Farben, Radius und Schrift aus DesignSpec.
         /// </summary>
         private Border BuildMac(AppConfig cfg, DesignSpec spec, double alpha, string processName)

@@ -2,7 +2,7 @@ using System.Drawing;
 using System.Globalization;
 using System.Windows.Forms;
 
-namespace ModernFlyoutSetup
+namespace KnobFlyoutSetup
 {
     /// <summary>Erster Dialog: Sprache für die Installation wählen (wie bei üblichen Installern).</summary>
     internal sealed class LanguageForm : Form
@@ -13,7 +13,7 @@ namespace ModernFlyoutSetup
 
         public LanguageForm()
         {
-            Text = "ModernFlyout Setup";
+            Text = "KnobFlyout Setup";
             Font = SystemFonts.MessageBoxFont;
             AutoScaleMode = AutoScaleMode.Font;
             FormBorderStyle = FormBorderStyle.FixedDialog;

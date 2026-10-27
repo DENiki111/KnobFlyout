@@ -95,7 +95,7 @@ namespace KnobEarTrumpet.Settings
             _spotify = spotify;
             _cfg = carry ?? ConfigManager.Load();
 
-            Title = T("ModernFlyout – Einstellungen", "ModernFlyout – Settings");
+            Title = T("KnobFlyout – Einstellungen", "KnobFlyout – Settings");
             Icon = Tray.AppIcon.Render(48); // Titelleiste + Taskleiste
             Width = 900;
             Height = 680;
@@ -2047,8 +2047,8 @@ namespace KnobEarTrumpet.Settings
             System.Windows.Documents.Run Txt(string de, string en) => new(T(de, en));
             Step(1, Txt("Öffne das ", "Open the "), Link("Spotify-Developer-Dashboard", "https://developer.spotify.com/dashboard"),
                 Txt(" und melde dich mit deinem Spotify-Konto an.", " and sign in with your Spotify account."));
-            Step(2, Txt("Klicke „Create app“. Name und Beschreibung sind egal (z. B. „ModernFlyout“).",
-                "Click “Create app”. Name and description don't matter (e.g. “ModernFlyout”)."));
+            Step(2, Txt("Klicke „Create app“. Name und Beschreibung sind egal (z. B. „KnobFlyout“).",
+                "Click “Create app”. Name and description don't matter (e.g. “KnobFlyout”)."));
             Step(3, Txt("Bei „Redirect URIs“ genau diese Adresse eintragen und „Add“ klicken:",
                 "Under “Redirect URIs” enter exactly this address and click “Add”:"));
             var uriBox = TextField(SpotifyController.RedirectUri, 300);
@@ -2160,9 +2160,9 @@ namespace KnobEarTrumpet.Settings
 
             page.Children.Add(ContentCard("\uE71B", T("Spotify-Konto", "Spotify account"), null, body));
             page.Children.Add(Hint(T("Lautstärke über die API geht nur mit Spotify Premium und wenn Spotify gerade auf einem Gerät abspielt. " +
-                "Ohne API steuert ModernFlyout Spotify wie jede andere App über den Windows-Mixer.",
+                "Ohne API steuert KnobFlyout Spotify wie jede andere App über den Windows-Mixer.",
                 "Volume via the API only works with Spotify Premium and while Spotify is playing on a device. " +
-                "Without the API, ModernFlyout controls Spotify like any other app via the Windows mixer.")));
+                "Without the API, KnobFlyout controls Spotify like any other app via the Windows mixer.")));
         }
 
         /// <summary>Klickbarer Link im Text (öffnet den Standard-Browser).</summary>
@@ -2184,8 +2184,8 @@ namespace KnobEarTrumpet.Settings
         private static void BuildInfoPage(StackPanel page)
         {
             page.Children.Add(PageTitle("Info"));
-            page.Children.Add(SectionTitle("ModernFlyout"));
-            page.Children.Add(SettingCard("\uE946", "ModernFlyout",
+            page.Children.Add(SectionTitle("KnobFlyout"));
+            page.Children.Add(SettingCard("\uE946", "KnobFlyout",
                 T("Lautstärke pro App mit OSD und Media-Flyout", "Per-app volume with OSD and media flyout"), null));
             page.Children.Add(SectionTitle(T("Dateien", "Files")));
             page.Children.Add(SettingCard("\uE713", T("Konfiguration", "Configuration"), System.IO.Path.Combine(AppContext.BaseDirectory, "config.json"), null));

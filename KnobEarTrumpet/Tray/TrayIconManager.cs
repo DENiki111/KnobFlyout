@@ -23,7 +23,7 @@ namespace KnobEarTrumpet.Tray
             _lightTaskbar = ThemeHelper.TaskbarIsLight();
             _icon = new TaskbarIcon
             {
-                ToolTipText = "ModernFlyout",
+                ToolTipText = "KnobFlyout",
                 Icon = CreateIcon(_lightTaskbar),
             };
             SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
