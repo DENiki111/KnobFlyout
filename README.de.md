@@ -20,6 +20,7 @@ Am Knopf drehen, und KnobFlyout ändert die Lautstärke genau der Apps, die du w
 - [Position](#position)
 - [Designs](#designs)
 - [Spotify (optional)](#spotify-optional)
+- [YouTube in Firefox und Chrome (optional)](#youtube-in-firefox-und-chrome-optional)
 - [Einstellungen im Überblick](#einstellungen-im-überblick)
 - [Dateien](#dateien)
 - [Aus dem Quellcode bauen](#aus-dem-quellcode-bauen)
@@ -37,6 +38,7 @@ Am Knopf drehen, und KnobFlyout ändert die Lautstärke genau der Apps, die du w
 - **8 OSD-Designs und 8 Media-Flyout-Designs** – vom ModernFlyouts- und Windows-11-Look über Dynamic Island, macOS, Material You, Gaming-HUD und Hardware-Regler bis zu frei einstellbaren Designs.
 - **Freie Platzierung** – 9 Plätze je Bildschirm, mehrere Bildschirme, Verschieben mit der Maus, gespeicherte Positionen, per Taste durchschaltbar.
 - **Spotify Web API** (optional) – steuert Spotifys eigene Lautstärke.
+- **YouTube in Firefox und Chrome** (optional) – mit einer kleinen Browser-Erweiterung ändert der Knopf die Lautstärke im YouTube-Player selbst statt die des ganzen Browsers.
 - **Deutsch und Englisch**, Farbschema hell, dunkel oder wie das System.
 - **Autostart** – mit Windows starten, umschaltbar in den Einstellungen und im Task-Manager („Autostart-Apps“).
 - Läuft im Infobereich der Taskleiste, **keine Administratorrechte** nötig.
@@ -176,6 +178,24 @@ Einrichten (Seite **Spotify**, dort Schritt für Schritt erklärt):
 
 Der Token liegt in `.spotify_cache` im Programmordner. Für Spotify gibt es eine eigene Schrittweite (Standard 4 %).
 
+## YouTube in Firefox und Chrome (optional)
+
+Normalerweise ändert der Knopf die ganze Browser-Session im Windows-Mixer. Mit der YT-Bridge ändert er stattdessen den Lautstärkeregler des **YouTube-Players** – nur das Video, nicht den restlichen Browser. Das geht ohne Fokus, mit YouTube im Hintergrund-Tab und bei minimiertem Fenster, auch während Werbung, bei Shorts und im Miniplayer.
+
+- Gilt, solange in dem Browser ein YouTube-Video **spielt** und der Browser im aktiven Profil ist. Sonst regelt der Knopf den Browser wie bisher über den Mixer.
+- Firefox, Chrome und Opera / Opera GX (nutzen die Chrome-Erweiterung) können gleichzeitig verbunden sein; jede Browser-Session im Mixer (`firefox.exe`, `chrome.exe`, `opera.exe`) regelt YouTube im jeweiligen Browser.
+- Mehrere YouTube-Tabs spielen: der zuletzt gestartete gewinnt. Stumm schaltet YouTubes eigenes Stumm. Schrittweite = normale Schrittweite.
+- Das OSD zeigt dann **YouTube** statt des Browsers.
+
+Einrichten (Seite **YouTube**, Details in der [README in `Browser`](Browser/README.md)):
+
+1. `Browser\pack.cmd` baut die Pakete zum Hochladen nach `dist\`.
+2. **Firefox:** das Firefox-Paket auf addons.mozilla.org mit „Selbst verteilen“ hochladen (nicht öffentlich) und die signierte `.xpi` installieren. Zum Ausprobieren `Browser/firefox/manifest.json` temporär über `about:debugging` laden.
+3. **Chrome, Opera, Opera GX:** `chrome://extensions` bzw. `opera://extensions` → Entwicklermodus → **Entpackte Erweiterung laden** → Ordner `Browser/chrome` (oder das Chrome-Paket im Chrome Web Store / auf addons.opera.com veröffentlichen).
+4. **Lautstärke im YouTube-Player regeln** einschalten und **Speichern**. Der Status zeigt je Browser, wann seine Erweiterung verbunden ist.
+
+Die Erweiterungen sprechen nur lokal mit KnobFlyout (`ws://127.0.0.1:8975`, angenommen werden nur Verbindungen von Browser-Erweiterungen).
+
 ## Einstellungen im Überblick
 
 Öffnen über das Symbol in der Taskleiste → Rechtsklick → **Einstellungen**. Änderungen gelten nach **Speichern** (Sprache und Farbschema sofort).
@@ -191,6 +211,7 @@ Der Token liegt in `.spotify_cache` im Programmordner. Für Spotify gibt es eine
 | Design | Alle Einstellungen zum Aussehen an einem Ort |
 | Tastenkürzel | Alle Tasten und Halte-/Doppeldruck-Zeiten an einem Ort |
 | Spotify | Anleitung, verbinden, testen, trennen |
+| YouTube | YouTube-Player in Firefox und Chrome an / aus, Verbindungsstatus je Browser, Anleitung |
 | Info | Pfade von Konfiguration und Protokoll |
 
 ## Dateien

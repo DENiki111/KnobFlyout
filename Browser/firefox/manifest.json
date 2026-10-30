@@ -1,0 +1,25 @@
+{
+  "manifest_version": 2,
+  "name": "KnobFlyout YT-Bridge",
+  "version": "1.0.1",
+  "description": "Lets KnobFlyout change the volume of the YouTube player itself instead of the whole browser.",
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "yt-bridge@knobflyout",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": { "required": ["none"] }
+    }
+  },
+  "background": { "scripts": ["background.js"], "persistent": true },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -20,6 +20,7 @@ Turn your knob and KnobFlyout changes the volume of exactly the apps you want (f
 - [Position](#position)
 - [Designs](#designs)
 - [Spotify (optional)](#spotify-optional)
+- [YouTube in Firefox and Chrome (optional)](#youtube-in-firefox-and-chrome-optional)
 - [Settings overview](#settings-overview)
 - [Files](#files)
 - [Building from source](#building-from-source)
@@ -37,6 +38,7 @@ Turn your knob and KnobFlyout changes the volume of exactly the apps you want (f
 - **8 OSD designs and 8 media flyout designs** – from the ModernFlyouts and Windows 11 look to Dynamic Island, macOS, Material You, Gaming HUD and Hardware knob, plus fully customizable designs.
 - **Free placement** – 9 places per monitor, multi-monitor support, drag with the mouse, saved positions you can cycle through by key.
 - **Spotify Web API** (optional) – controls Spotify's own volume.
+- **YouTube in Firefox and Chrome** (optional) – with a small browser extension the knob changes the YouTube player's own volume instead of the whole browser.
 - **English and German**, light, dark or system color scheme.
 - **Autostart** – start with Windows, switchable in the settings and in Task Manager (“Startup apps”).
 - Runs in the notification area, **no administrator rights** needed.
@@ -176,6 +178,24 @@ Setup (page **Spotify**, explained step by step there):
 
 The token is stored in `.spotify_cache` in the program folder. Spotify has its own step size (default 4 %).
 
+## YouTube in Firefox and Chrome (optional)
+
+Normally the knob changes the whole browser session in the Windows mixer. With the YT-Bridge it changes the volume slider of the **YouTube player** instead – only the video, not the rest of the browser. It works without focus, with YouTube in a background tab and with a minimized window, also during ads, on Shorts and in the miniplayer.
+
+- Applies while a YouTube video is **playing** in that browser and the browser is in the active profile. Otherwise the knob controls the browser through the mixer as before.
+- Firefox, Chrome and Opera / Opera GX (they use the Chrome extension) can be connected at the same time; each browser session in the mixer (`firefox.exe`, `chrome.exe`, `opera.exe`) controls YouTube in that browser.
+- Several YouTube tabs playing: the one started last wins. Mute toggles YouTube's own mute. Step size = normal step size.
+- The OSD then shows **YouTube** instead of the browser.
+
+Setup (page **YouTube**, details in the [README in `Browser`](Browser/README.md)):
+
+1. `Browser\pack.cmd` builds the upload packages in `dist\`.
+2. **Firefox:** upload the Firefox package to addons.mozilla.org as “On your own” (self-distributed, not public) and install the signed `.xpi`. To try it, load `Browser/firefox/manifest.json` temporarily via `about:debugging`.
+3. **Chrome, Opera, Opera GX:** `chrome://extensions` or `opera://extensions` → Developer mode → **Load unpacked** → folder `Browser/chrome` (or publish the Chrome package in the Chrome Web Store / on addons.opera.com).
+4. Turn on **Control volume in the YouTube player** and click **Save**. The status shows for each browser when its extension is connected.
+
+The extensions talk to KnobFlyout only locally (`ws://127.0.0.1:8975`, only connections from browser extensions are accepted).
+
 ## Settings overview
 
 Open via tray icon → right-click → **Settings**. Changes apply when you click **Save** (language and color scheme apply immediately).
@@ -191,6 +211,7 @@ Open via tray icon → right-click → **Settings**. Changes apply when you clic
 | Design | All appearance settings in one place |
 | Shortcuts | All keys and hold / double-press times in one place |
 | Spotify | Setup guide, connect, test, disconnect |
+| YouTube | YouTube player in Firefox and Chrome on/off, connection status per browser, setup guide |
 | Info | Paths of the configuration and log file |
 
 ## Files

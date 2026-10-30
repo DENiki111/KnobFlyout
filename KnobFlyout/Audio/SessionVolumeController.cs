@@ -154,10 +154,13 @@ namespace KnobFlyout.Audio
         /// Sessions, deren Name "spotify" enthält, laufen bei aktiver Spotify-API über deren
         /// eigenen Lautstärke-Regler (step_spotify statt step) statt über WASAPI – 1:1 wie im
         /// Python-Original (change_volume()).
+        /// Firefox-/Chrome-Sessions laufen bei aktiver YT-Bridge und spielendem YouTube-Video in diesem
+        /// Browser über den YouTube-Player (Schrittweite step); ein Browser kann mehrere Sessions melden → je Browser nur einmal.
         /// </summary>
-        public List<(string Name, int Value)> ChangeVolume(AppConfig cfg, int steps, SpotifyController? spotify = null)
+        public List<(string Name, int Value)> ChangeVolume(AppConfig cfg, int steps, SpotifyController? spotify = null, YouTubeBridge? youtube = null)
         {
             var results = new List<(string Name, int Value)>();
+            var youtubeDone = new HashSet<string>();
             foreach (var t in GetTargets(cfg))
             {
                 if (spotify != null && t.ProcessName.Contains("spotify", StringComparison.OrdinalIgnoreCase) && spotify.IsActive(cfg))
@@ -165,6 +168,19 @@ namespace KnobFlyout.Audio
                     var nv = spotify.ChangeVolume(steps * cfg.StepSpotify);
                     results.Add((t.ProcessName, nv ?? SafeReadPercent(t)));
                     continue;
+                }
+
+                string? browser = youtube == null ? null : YouTubeBridge.BrowserOf(t.ProcessName);
+                if (browser != null && youtube!.IsActive(cfg, browser))
+                {
+                    if (youtubeDone.Contains(browser)) continue;
+                    var yv = youtube.ChangeVolume(browser, steps * cfg.Step);
+                    if (yv.HasValue)
+                    {
+                        youtubeDone.Add(browser);
+                        results.Add(("YouTube", yv.Value));
+                        continue;
+                    }
                 }
 
                 try
@@ -189,16 +205,30 @@ namespace KnobFlyout.Audio
             catch { return 0; }
         }
 
-        /// <summary>Entspricht do_toggle_mute(): jede Ziel-Session wird einzeln umgeschaltet, Spotify-Sessions über die API.</summary>
-        public List<(string Name, bool Muted)> ToggleMute(AppConfig cfg, SpotifyController? spotify = null)
+        /// <summary>Entspricht do_toggle_mute(): jede Ziel-Session wird einzeln umgeschaltet, Spotify-Sessions über die API, Firefox/Chrome mit spielendem YouTube über den Player.</summary>
+        public List<(string Name, bool Muted)> ToggleMute(AppConfig cfg, SpotifyController? spotify = null, YouTubeBridge? youtube = null)
         {
             var results = new List<(string Name, bool Muted)>();
+            var youtubeDone = new HashSet<string>();
             foreach (var t in GetTargets(cfg))
             {
                 if (spotify != null && t.ProcessName.Contains("spotify", StringComparison.OrdinalIgnoreCase) && spotify.IsActive(cfg))
                 {
                     var m = spotify.ToggleMute();
                     if (m.HasValue) { results.Add((t.ProcessName, m.Value)); continue; }
+                }
+
+                string? browser = youtube == null ? null : YouTubeBridge.BrowserOf(t.ProcessName);
+                if (browser != null && youtube!.IsActive(cfg, browser))
+                {
+                    if (youtubeDone.Contains(browser)) continue;
+                    var m = youtube.ToggleMute(browser);
+                    if (m.HasValue)
+                    {
+                        youtubeDone.Add(browser);
+                        results.Add(("YouTube", m.Value));
+                        continue;
+                    }
                 }
 
                 try
