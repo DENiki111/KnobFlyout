@@ -34,8 +34,9 @@ Am Knopf drehen, und KnobFlyout ändert die Lautstärke genau der Apps, die du w
 - **Lautstärke pro App statt Systemlautstärke** – der Drehknopf (oder die Tasten Lauter / Leiser / Stumm) steuert nur die Apps des aktiven Profils.
 - **Profile** – bis zu 6 (Standard: Gaming, Komm., Musik, Video), jeweils mit Name, Logo und Farbe. Wechsel mit einer Taste.
 - **Neue-App-Erkennung** – spielt eine unbekannte App Ton ab, fragt ein Popup, zu welchem Profil sie gehört.
+- **Automatisch einsortieren** (optional) – Spiele, Browser, Musik- und Chat-Apps landen von selbst im passenden Profil; Unbekanntes fragt weiter das Popup.
 - **OSD** – zeigt Lautstärke und Stumm je App, Profilwechsel, Feststell-/Num-/Rollen-Taste und Positionswechsel.
-- **Media-Flyout** – Titel, Interpret, Cover, Fortschrittsleiste (klicken oder ziehen zum Springen), Zurück / Play-Pause / Weiter, ±10 Sekunden, „…“-Menü und Quellen-Leiste, wenn mehrere Apps gleichzeitig spielen.
+- **Media-Flyout** – Titel, Interpret, Cover, Fortschrittsleiste (klicken oder ziehen zum Springen), Zurück / Play-Pause / Weiter, ±10 Sekunden, „…“-Menü und Quellen-Leiste, wenn mehrere Apps gleichzeitig spielen. Bleibt auf Wunsch stehen, solange bestimmte Programme laufen, z. B. Spotify.
 - **8 OSD-Designs und 8 Media-Flyout-Designs** – vom ModernFlyouts- und Windows-11-Look über Dynamic Island, macOS, Material You, Gaming-HUD und Hardware-Regler bis zu frei einstellbaren Designs.
 - **Freie Platzierung** – 9 Plätze je Bildschirm, mehrere Bildschirme, Verschieben mit der Maus, gespeicherte Positionen, per Taste durchschaltbar.
 - **Spotify Web API** (optional) – steuert Spotifys eigene Lautstärke.
@@ -64,13 +65,17 @@ Hinweise:
 - **Windows SmartScreen** warnt eventuell, weil das Setup nicht signiert ist: „Weitere Informationen“ → „Trotzdem ausführen“.
 - Für geschützte Ordner wie `C:\Program Files` bietet das Setup an, sich als Administrator neu zu starten.
 - **Autostart** lässt sich später in den Einstellungen (Seite **Allgemein**) oder im Task-Manager unter „Autostart-Apps“ ein- und ausschalten – KnobFlyout steht dort immer in der Liste.
-- **Update:** einfach das neuere Setup ausführen – es schlägt den vorhandenen Ordner vor, die Einstellungen bleiben erhalten.
+- **Update:** einfach das neuere Setup ausführen – es erkennt die installierte Version, ein Klick auf **Aktualisieren** genügt. Ordner, Einstellungen, Spotify-Anmeldung, Autostart und Verknüpfungen bleiben, wie sie sind; KnobFlyout wird dafür kurz beendet und lässt sich am Ende wieder starten. „Ordner oder Optionen ändern …“ gibt es weiterhin, falls du etwas anderes willst.
 - **Umstieg von ModernFlyout** (dem alten Namen): Das Setup übernimmt Einstellungen und Spotify-Verbindung und entfernt die alte Version.
 - **Deinstallieren:** Windows-Einstellungen → Apps → Installierte Apps → KnobFlyout → Deinstallieren. Dabei wird der Programmordner samt Einstellungen gelöscht.
 
 ## Einführung
 
-Beim ersten Start öffnet sich eine kurze Einführung. Sie erklärt Knopf, Profile und Funktionen und richtet sie direkt mit dir ein: Knopf und Profil-Taste ausprobieren, Apps zuweisen, ein eigenes Profil anlegen, Look und Platz wählen. Was du dort änderst, gilt sofort.
+Beim ersten Start öffnet sich eine kurze Einführung. Sie erklärt Knopf, Profile und Funktionen und richtet sie direkt mit dir ein. Die Vorschauen sind live: Sie reagieren auf deinen Knopf (oder die Knöpfe − und + darunter) und zeigen, was wirklich läuft, und ihre Knöpfe wirken wirklich. Was du dort änderst, gilt sofort.
+
+Die Schritte: Drehen und drücken · Profile · Profil-Taste · eigene Profile (auch die vorgefertigten lassen sich ändern und löschen) · Apps zuweisen (oder automatisch einsortieren) · Media-Flyout · Look (mit „Eigenes“ öffnet sich direkt in der Einführung ein Design-Menü: Aufbau, Farben, Deckkraft) · Platz auf dem Bildschirm · Snap-Punkte.
+
+Am Schluss wählst du: **Zum Programm** oder **Alle Funktionen anzeigen**, eine Übersicht über alles, was KnobFlyout kann. Jede Funktion ist dort erklärt und lässt sich gleich ausprobieren und einstellen.
 
 Du kannst sie jederzeit überspringen. Sie kommt wieder, wenn du die Einstellungen öffnest, bis du **Nicht mehr anzeigen** anhakst. Später findest du sie unter **Einstellungen → Allgemein → Einführung**.
 
@@ -80,7 +85,7 @@ Du kannst sie jederzeit überspringen. Sie kommt wieder, wenn du die Einstellung
 
 | Aktion | Standard-Taste | Was passiert |
 |---|---|---|
-| Knopf nach rechts / links drehen | Lauter / Leiser | Ändert die Lautstärke der Apps im aktiven Profil (3 % pro Raste) |
+| Knopf nach rechts / links drehen | Lauter / Leiser | Ändert die Lautstärke der Apps im aktiven Profil (2 % pro Raste) |
 | Stumm-Taste drücken | Stumm | Schaltet diese Apps stumm / wieder laut |
 | Profil wechseln | **Strg + Umschalt + P** (kurz) | Nächstes Profil, Anzeige im OSD |
 | Nächste gespeicherte Position | Strg + Umschalt + P **halten** (600 ms) | Setzt OSD und Flyout auf die nächste gespeicherte Position (braucht gespeicherte Positionen und „Mit der Maus verschieben“); weiter halten = weiter durchschalten |
@@ -116,6 +121,7 @@ Gut zu wissen:
 Ein Profil ist eine Gruppe von Apps, die der Knopf gemeinsam steuert – zum Beispiel *Gaming* (Spiel), *Komm.* (Discord, Teams), *Musik* (Spotify), *Video* (Browser, VLC).
 
 - **Apps zuweisen:** Seite **Lautstärke & Apps** → App-Liste: In jeder Zeile gibt es einen Knopf je Profil und ⊘ zum Ausschließen. Oder direkt im Neue-App-Popup.
+- **Automatisch einsortieren** (Seite **Profile** oder in der Einführung): Neue Spiele (Steam, Epic, GOG, Xbox, die Spieleliste von Windows), Browser und Video-Player, Musik- und Chat-Apps landen ohne Nachfrage in dem Profil, das du für diese Art von App gewählt hast. Was KnobFlyout nicht erkennt oder auf „Nachfragen“ steht, geht wie gewohnt ins Popup. Bereits zugewiesene Apps bleiben, wo sie sind.
 - **Neue-App-Popup:** erscheint, wenn eine noch nicht zugewiesene App Ton abspielt. Profil-Knopf klicken oder dessen Zuweisen-Taste drücken; ⊘ schließt die App aus. Ohne Klick verschwindet es nach 12 Sekunden, die App wird später erneut vorgeschlagen.
 - **Profile bearbeiten** (Seite **Profile**): bis zu 6 Profile; Name, Logo (44 Windows-Symbole oder ein eigenes Bild), Farbe, löschen, hinzufügen. Die Reihenfolge ist die Wechsel-Reihenfolge. Mindestens ein Profil bleibt.
 - **Gesteuerte Apps:** „Nur Apps mit Ton“ (Standard) oder „Alle Apps im Profil“.
@@ -137,6 +143,7 @@ Das Media-Flyout erscheint bei einem Titelwechsel und wenn die Wiedergabe starte
 - **Inhalt:** App-Name und Logo, Cover, Titel und Interpret, Fortschrittsleiste mit Zeiten, Zurück / Play-Pause / Weiter, ±10-Sekunden-Knöpfe
 - **Quellen-Leiste:** spielen mehrere Apps gleichzeitig, gibt es einen Eintrag je App – Klick schaltet um
 - **„…“-Menü** (Einträge wählbar): Zufallswiedergabe, Wiederholen, Nächste Quelle, Hotkeys ±10 s an/aus, Angeheftet lassen, Position speichern, Nächste Position, Position zurücksetzen, Einstellungen öffnen, Ausblenden
+- **Dauerhaft anzeigen** (Seite **Media-Flyout** → **Dauerhaft anzeigen**): Bei Programmen aus deiner Liste, zum Beispiel Spotify, bleibt das Flyout stehen, solange sie geöffnet sind, auch wenn die Wiedergabe pausiert. Das gilt für alle Designs. Mit **Eigene Position** hat es dabei eine eigene Stelle, gewählt per Kachel oder durch Ziehen des Flyouts; es hängt dann nicht am OSD, und das OSD weicht ihm aus. Der Name ist der aus dem Flyout, Groß- und Kleinschreibung sind egal.
 - **Optionen:** an / aus, Anzeigedauer 2–30 s, Fortschrittsleiste, ±10-s-Knöpfe, Cover als unscharfer Hintergrund (Unschärfe und Abdunkelung einstellbar), Deckkraft getrennt für Hintergrund und Text/Symbole
 - **Design „Eigenes“:** Aussehen → **Eigenes Design gestalten** öffnet einen Editor mit Live-Vorschau oben:
   - **Vorlagen** als Startpunkt: Standard, Kompakt, Minimal, Großes Cover (die Farben bleiben)
@@ -204,21 +211,21 @@ Die Erweiterungen sprechen nur lokal mit KnobFlyout (`ws://127.0.0.1:8975`, ange
 
 ## Einstellungen im Überblick
 
-Öffnen über das Symbol in der Taskleiste → Rechtsklick → **Einstellungen**. Änderungen gelten nach **Speichern** (Sprache und Farbschema sofort).
+Öffnen über das Symbol in der Taskleiste → Rechtsklick → **Einstellungen**. Änderungen gelten nach **Speichern**; der Knopf ist ausgegraut, bis sich etwas geändert hat (Sprache und Farbschema gelten sofort).
 
 | Seite | Inhalt |
 |---|---|
 | Allgemein | Sprache, hell oder dunkel, mit Windows starten, Einführung, Einstellungen neu laden |
 | Lautstärke & Apps | Schrittweite, Schrittweite Spotify, App-Liste mit Profil-Zuweisung, ignorierte Apps |
-| Profile | Profil-Taste, gesteuerte Apps, leere Profile überspringen, Profile bearbeiten, Zuweisen-Tasten |
+| Profile | Profil-Taste, gesteuerte Apps, leere Profile überspringen, Profile bearbeiten, automatisch einsortieren, Zuweisen-Tasten |
 | OSD | An / aus, Anzeigedauer, per Klick ausblenden, Design, Deckkraft, Farben |
-| Media-Flyout | An / aus, Anzeigedauer, Inhalt, „…“-Menü, Design (mit Editor für „Eigenes“), Deckkraft, Cover-Hintergrund, Spul-Tasten, Gesten |
+| Media-Flyout | An / aus, Anzeigedauer, dauerhaft anzeigen, Inhalt, „…“-Menü, Design (mit Editor für „Eigenes“), Deckkraft, Cover-Hintergrund, Spul-Tasten, Gesten |
 | Position | Anordnung, Platz auf dem Bildschirm, testen, verschieben, gespeicherte Positionen, zurücksetzen |
 | Design | Alle Einstellungen zum Aussehen an einem Ort |
 | Tastenkürzel | Alle Tasten und Halte-/Doppeldruck-Zeiten an einem Ort |
 | Spotify | Anleitung, verbinden, testen, trennen |
 | YouTube | YouTube-Player in Firefox und Chrome an / aus, Verbindungsstatus je Browser, Anleitung |
-| Info | Pfade von Konfiguration und Protokoll |
+| Info | Pfade von Konfiguration und Protokoll, Klick öffnet den Ordner |
 
 ## Dateien
 

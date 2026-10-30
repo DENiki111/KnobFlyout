@@ -10,6 +10,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using KnobFlyout.Config;
+using KnobFlyout.Media;
 using KnobFlyout.Osd;
 using static KnobFlyout.Loc;
 using static KnobFlyout.Settings.UiHelpers;
@@ -19,18 +20,30 @@ namespace KnobFlyout.Settings
     /// <summary>
     /// Einführung: erscheint beim ersten Programmstart und danach bei jedem Öffnen der Einstellungen, bis das
     /// Häkchen „Nicht mehr anzeigen“ gesetzt ist (tutorial_hidden); Überspringen schließt sie nur für dieses Mal.
-    /// Links (Bühne) echte Vorschauen in den aktuellen Einstellungen, rechts kurzer Text und direkt wirksame
-    /// Bedienelemente. Änderungen werden sofort gespeichert (Update), damit z. B. eine neue Profil-Taste gleich
-    /// funktioniert. Die Seiten stehen in TutorialWindow.Pages.cs.
+    /// Links (Bühne) echte Vorschauen, die live reagieren (Knopf, Lautstärke, laufende Wiedergabe), rechts kurzer
+    /// Text und direkt wirksame Bedienelemente. Änderungen werden sofort gespeichert (Update), damit z. B. eine neue
+    /// Profil-Taste gleich funktioniert. Neben den Schritten gibt es Unterseiten (Eigenes Design, Alle Funktionen).
+    /// Die Seiten stehen in TutorialWindow.Pages.cs und TutorialWindow.Features.cs.
     /// </summary>
     public sealed partial class TutorialWindow : Window
     {
         private const double DesignW = 1000, DesignH = 620, StageW = 480;
 
-        private sealed record Page(string Hue, Func<string> Title, Func<string> Lead, Func<FrameworkElement> Stage, Action<StackPanel> Body);
+        private sealed record Page(string Hue, Func<string> Title, Func<string> Lead, Func<FrameworkElement> Stage, Action<StackPanel> Body)
+        {
+            // Nur Unterseiten: Text über dem Fortschritt, Beschriftung und Wirkung der Knöpfe unten (leer = Standard).
+            public Func<string>? Crumb { get; init; }
+            public Func<string>? NextText { get; init; }
+            public Action? Next { get; init; }
+            public Func<string>? BackText { get; init; }
+        }
 
         private readonly List<Page> _pages;
         private int _index;
+        private readonly Stack<Page> _subPages = new(); // geöffnete Unterseiten; _index bleibt dabei stehen
+        private Page Current => _subPages.Count > 0 ? _subPages.Peek() : _pages[_index];
+        private readonly MediaController _media;
+        private readonly bool _ownsMedia;
 
         private ContentControl _stageHost = null!;
         private ContentControl _bodyHost = null!;
@@ -40,9 +53,21 @@ namespace KnobFlyout.Settings
         private Border[] _segments = Array.Empty<Border>();
         private Button _skip = null!, _back = null!, _next = null!;
         private DispatcherTimer? _pageTimer;
+        private readonly DispatcherTimer _stageTimer = new() { Interval = TimeSpan.FromMilliseconds(120) };
+        private bool _stageDirty; // Einstellung geändert: Bühne neu aufbauen (gebündelt, Slider feuern dauernd)
 
         /// <summary>Etwas direkt gespeichert: App übernimmt die Config (Hotkey, Sprache, Flyouts).</summary>
         public event Action? ConfigChanged;
+
+        /// <summary>Knöpfe unter der Vorschau: wie am echten Knopf drehen (Vorzeichen = Richtung) bzw. drücken.</summary>
+        public event Action<int>? VolumeRequested;
+        public event Action? MuteRequested;
+
+        /// <summary>Profil per Klick gewechselt: das echte OSD soll es anzeigen.</summary>
+        public event Action? ProfileOsdRequested;
+
+        /// <summary>Automatik eingeschaltet oder geändert: laufende Apps gleich einsortieren.</summary>
+        public event Action? AutoAssignRequested;
 
         /// <summary>„Öffnen“ auf der letzten Seite: diese Einstellungs-Seite soll nach dem Schließen aufgehen.</summary>
         public string? RequestedSettingsPage { get; private set; }
@@ -55,36 +80,25 @@ namespace KnobFlyout.Settings
         /// <summary>Beim Öffnen der Einstellungen, bis das Häkchen gesetzt ist.</summary>
         public static bool ShowWithSettings(AppConfig cfg) => !cfg.TutorialHidden;
 
-        /// <summary>Alles, was die Einführung ändern kann (für offene Einstellungen mit ungespeichertem Stand).</summary>
-        public static void CopyEditedFields(AppConfig from, AppConfig to)
+        /// <summary>
+        /// Überträgt, was sich von before zu after geändert hat, auf to (die Einführung kann fast alles einstellen).
+        /// Für offene Einstellungen mit ungespeichertem Stand und für den Arbeitsstand der Seite „Eigenes Design“.
+        /// </summary>
+        public static void CopyChangedFields(AppConfig before, AppConfig after, AppConfig to)
         {
-            to.TutorialHidden = from.TutorialHidden;
-            to.TutorialStarted = from.TutorialStarted;
-            to.Language = from.Language;
-            to.Theme = from.Theme;
-            to.Step = from.Step;
-            to.ProfileHotkey = from.ProfileHotkey;
-            to.ActiveProfile = from.ActiveProfile;
-            to.ProfileList = from.ProfileList;
-            to.Profiles = from.Profiles;
-            to.Exclude = from.Exclude;
-            to.SeenApps = from.SeenApps;
-            to.MediaEnabled = from.MediaEnabled;
-            to.OsdDesign = from.OsdDesign;
-            to.MediaDesign = from.MediaDesign;
-            to.OsdLayout = from.OsdLayout;
-            to.MediaCombinedSide = from.MediaCombinedSide;
-            to.CombinedAnchor = from.CombinedAnchor;
-            to.OsdCornerPreset = from.OsdCornerPreset;
-            to.MediaCornerPreset = from.MediaCornerPreset;
-            to.OsdMonitor = from.OsdMonitor;
-            to.MediaMonitor = from.MediaMonitor;
-            to.SnapEnabled = from.SnapEnabled;
-            to.SnapIndependent = from.SnapIndependent;
+            foreach (var prop in typeof(AppConfig).GetProperties())
+            {
+                if (!prop.CanRead || !prop.CanWrite) continue;
+                var value = prop.GetValue(after);
+                if (System.Text.Json.JsonSerializer.Serialize(prop.GetValue(before)) != System.Text.Json.JsonSerializer.Serialize(value))
+                    prop.SetValue(to, value);
+            }
         }
 
-        public TutorialWindow()
+        public TutorialWindow(MediaController? media = null)
         {
+            _media = media ?? new MediaController();
+            _ownsMedia = media == null;
             Icon = Tray.AppIcon.Render(48);
             ResizeMode = ResizeMode.CanMinimize;
             SizeToContent = SizeToContent.WidthAndHeight;
@@ -101,10 +115,17 @@ namespace KnobFlyout.Settings
             BuildShell();
             ShowPage(0, 0);
 
+            _stageTimer.Tick += (_, _) => FlushStage();
+            _stageTimer.Start();
             Closed += (_, _) =>
             {
+                _stageTimer.Stop();
+                FlushDesign();
+                if (_stageDirty) ConfigChanged?.Invoke();
                 _pageTimer?.Stop();
+                DisposeLiveMedia();
                 _audio.Dispose();
+                if (_ownsMedia) _media.Dispose();
             };
         }
 
@@ -213,21 +234,29 @@ namespace KnobFlyout.Settings
 
             // Fuß: Häkchen und Weiter
             var foot = new DockPanel { Margin = new Thickness(40, 12, 40, 20) };
-            _next = AccentBtn("", 112);
+            _next = AccentBtn("");
+            _next.MinWidth = 112;
             _next.Margin = new Thickness(8, 0, 0, 0);
             _next.Padding = new Thickness(12, 7, 12, 7);
             _next.IsDefault = true;
             _next.Click += (_, _) =>
             {
-                if (_index >= _pages.Count - 1) Close();
+                if (Current.Next != null) Current.Next();
+                else if (_subPages.Count > 0) CloseSub();
+                else if (_index >= _pages.Count - 1) Close();
                 else ShowPage(_index + 1, 1);
             };
             DockPanel.SetDock(_next, Dock.Right);
             foot.Children.Add(_next);
-            _back = Btn(T("Zurück", "Back"), 92);
+            _back = Btn(T("Zurück", "Back"));
+            _back.MinWidth = 92;
             _back.Margin = new Thickness(0);
             _back.Padding = new Thickness(12, 7, 12, 7);
-            _back.Click += (_, _) => ShowPage(_index - 1, -1);
+            _back.Click += (_, _) =>
+            {
+                if (_subPages.Count > 0) CloseSub();
+                else ShowPage(_index - 1, -1);
+            };
             DockPanel.SetDock(_back, Dock.Right);
             foot.Children.Add(_back);
 
@@ -297,17 +326,51 @@ namespace KnobFlyout.Settings
         public void ShowPage(int index, int dir)
         {
             if (index < 0 || index >= _pages.Count) return;
+            _subPages.Clear();
             _index = index;
+            ShowCurrent(dir);
+        }
+
+        /// <summary>Unterseite öffnen (bleibt in der Einführung, Zurück führt wieder dorthin).</summary>
+        private void OpenSub(Page page)
+        {
+            _subPages.Push(page);
+            ShowCurrent(1);
+        }
+
+        private void CloseSub()
+        {
+            if (_subPages.Count == 0) return;
+            _subPages.Pop();
+            ShowCurrent(-1);
+        }
+
+        /// <summary>Oberste Unterseite durch eine andere ersetzen (nächste Funktion).</summary>
+        private void ReplaceSub(Page page)
+        {
+            if (_subPages.Count > 0) _subPages.Pop();
+            _subPages.Push(page);
+            ShowCurrent(1);
+        }
+
+        private void ShowCurrent(int dir)
+        {
+            FlushDesign();
             StopPageTimer();
             ClearLiveFields();
-            var page = _pages[index];
+            var page = Current;
+            bool sub = _subPages.Count > 0;
+            bool last = !sub && _index == _pages.Count - 1;
 
-            _counter.Text = T($"Schritt {index + 1} von {_pages.Count}", $"Step {index + 1} of {_pages.Count}");
+            _counter.Text = sub ? page.Crumb?.Invoke() ?? "" : T($"Schritt {_index + 1} von {_pages.Count}", $"Step {_index + 1} of {_pages.Count}");
             for (int i = 0; i < _segments.Length; i++)
-                _segments[i].Background = i <= index ? Accent : (Light ? FromHex("#CFCFD4") : FromHex("#404044"));
-            _skip.Visibility = index == _pages.Count - 1 ? Visibility.Hidden : Visibility.Visible;
-            _back.Visibility = index == 0 ? Visibility.Collapsed : Visibility.Visible;
-            _next.Content = index == _pages.Count - 1 ? T("Fertig", "Done") : T("Weiter", "Next");
+                _segments[i].Background = i <= _index ? Accent : (Light ? FromHex("#CFCFD4") : FromHex("#404044"));
+            _skip.Visibility = last ? Visibility.Hidden : Visibility.Visible;
+            _skip.Content = sub ? T("Schließen", "Close") : T("Überspringen", "Skip");
+            _back.Visibility = !sub && _index == 0 ? Visibility.Collapsed : Visibility.Visible;
+            _back.Content = page.BackText?.Invoke() ?? T("Zurück", "Back");
+            _next.Visibility = last ? Visibility.Collapsed : Visibility.Visible; // letzte Seite: Auswahl im Textbereich
+            _next.Content = page.NextText?.Invoke() ?? T("Weiter", "Next");
 
             _stageHost.Content = page.Stage();
             _bodyHost.Content = BuildBody(page);
@@ -322,11 +385,29 @@ namespace KnobFlyout.Settings
         private void RefreshPage()
         {
             StopPageTimer();
-            var page = _pages[_index];
+            ClearStageFields();
+            var page = Current;
             _stageHost.Content = page.Stage();
             double offset = _bodyScroll.VerticalOffset;
             _bodyHost.Content = BuildBody(page);
             _bodyScroll.ScrollToVerticalOffset(offset);
+        }
+
+        /// <summary>Nur die Bühne neu aufbauen: Bedienelemente rechts behalten Fokus und Popups.</summary>
+        private void RefreshStage()
+        {
+            ClearStageFields();
+            _stageHost.Content = Current.Stage();
+        }
+
+        /// <summary>Gebündelte Änderungen übernehmen: speichern, App benachrichtigen, Bühne zeigt den neuen Stand.</summary>
+        private void FlushStage()
+        {
+            if (!_stageDirty) return;
+            _stageDirty = false;
+            SaveDesign();
+            ConfigChanged?.Invoke();
+            RefreshStage();
         }
 
         private static StackPanel BuildBody(Page page, Action<StackPanel> body)
@@ -414,6 +495,13 @@ namespace KnobFlyout.Settings
             }
         }
 
+        /// <summary>Einstellung ändern, die die Bühne zeigt: sofort speichern, Bühne und App folgen gebündelt.</summary>
+        private void Live(Action<AppConfig> change)
+        {
+            Update(change, notify: false);
+            _stageDirty = true;
+        }
+
         private static AppConfig Clone(AppConfig c) =>
             System.Text.Json.JsonSerializer.Deserialize<AppConfig>(System.Text.Json.JsonSerializer.Serialize(c)) ?? new AppConfig();
 
@@ -424,7 +512,7 @@ namespace KnobFlyout.Settings
             BuildShell();
             foreach (var (seg, page) in _segments.Zip(_pages))
                 if (seg.Parent is FrameworkElement hit) hit.ToolTip = page.Title();
-            ShowPage(_index, 0);
+            ShowCurrent(0);
         }
 
         // ── Bausteine ───────────────────────────────────────────────────────
@@ -438,17 +526,23 @@ namespace KnobFlyout.Settings
         };
 
         /// <summary>Vorschau mittig auf der Bühne, darunter eine kleine Beschriftung.</summary>
-        private static FrameworkElement OnStage(FrameworkElement visual, string? caption = null)
+        private static FrameworkElement OnStage(FrameworkElement visual, string? caption = null) => OnStage(visual, caption, out _);
+
+        private static FrameworkElement OnStage(FrameworkElement visual, string? caption, out TextBlock? captionBlock)
         {
             var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             visual.HorizontalAlignment = HorizontalAlignment.Center;
             panel.Children.Add(visual);
+            captionBlock = null;
             if (caption != null)
-                panel.Children.Add(new TextBlock
+            {
+                captionBlock = new TextBlock
                 {
                     Text = caption, FontSize = 13, LineHeight = 19, Foreground = SubFg, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap,
                     MaxWidth = 360, Margin = new Thickness(0, 20, 0, 0), HorizontalAlignment = HorizontalAlignment.Center,
-                });
+                };
+                panel.Children.Add(captionBlock);
+            }
             return panel;
         }
 
@@ -525,9 +619,12 @@ namespace KnobFlyout.Settings
                     Margin = new Thickness(0, 0, 9, 0), Visibility = Visibility.Collapsed,
                 };
                 _text = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                var row = new Grid(); // Textspalte begrenzt, damit lange Rückmeldungen umbrechen
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 row.Children.Add(_dot);
                 row.Children.Add(_check);
+                Grid.SetColumn(_text, 1);
                 row.Children.Add(_text);
                 Child = row;
                 Waiting(waiting);

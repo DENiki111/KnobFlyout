@@ -34,8 +34,9 @@ Turn your knob and KnobFlyout changes the volume of exactly the apps you want (f
 - **Volume per app instead of system volume** – the volume knob (or the Volume Up / Down / Mute keys) controls only the apps of the active profile.
 - **Profiles** – up to 6 (default: Gaming, Comms, Music, Video), each with name, logo and color. Switch with one key.
 - **New-app detection** – when an unknown app starts playing sound, a popup asks which profile it belongs to.
+- **Automatic sorting** (optional) – games, browsers, music and chat apps go to the right profile by themselves; anything unknown still gets the popup.
 - **OSD** – shows volume and mute per app, profile switches, Caps/Num/Scroll Lock and position switches.
-- **Media flyout** – title, artist, cover, progress bar (click or drag to seek), previous / play-pause / next, ±10 seconds, a “…” menu and a source bar when several apps play at once.
+- **Media flyout** – title, artist, cover, progress bar (click or drag to seek), previous / play-pause / next, ±10 seconds, a “…” menu and a source bar when several apps play at once. Can stay on screen while chosen programs are running, e.g. Spotify.
 - **8 OSD designs and 8 media flyout designs** – from the ModernFlyouts and Windows 11 look to Dynamic Island, macOS, Material You, Gaming HUD and Hardware knob, plus fully customizable designs.
 - **Free placement** – 9 places per monitor, multi-monitor support, drag with the mouse, saved positions you can cycle through by key.
 - **Spotify Web API** (optional) – controls Spotify's own volume.
@@ -64,13 +65,17 @@ Notes:
 - **Windows SmartScreen** may warn because the setup is not signed: click “More info” → “Run anyway”.
 - For protected folders such as `C:\Program Files`, the setup offers to restart itself as administrator.
 - **Autostart** can be switched on and off later in the settings (page **General**) or in Task Manager under “Startup apps” – KnobFlyout is always listed there.
-- **Update:** simply run the newer setup – it suggests the existing folder and keeps your settings.
+- **Update:** simply run the newer setup – it detects the installed version, and one click on **Update** is enough. Folder, settings, Spotify sign-in, autostart and shortcuts stay as they are; KnobFlyout is closed for a moment and can be restarted at the end. “Change folder or options …” is still there if you want something else.
 - **Coming from ModernFlyout** (the old name): the setup takes over your settings and the Spotify connection and removes the old version.
 - **Uninstall:** Windows Settings → Apps → Installed apps → KnobFlyout → Uninstall. This removes the program folder including the settings.
 
 ## Introduction
 
-On the first start, a short introduction opens. It explains the knob, profiles and features and sets them up with you right away: try the knob and profile key, assign apps, create your own profile, pick a look and a place. Everything you change there applies immediately.
+On the first start, a short introduction opens. It explains the knob, profiles and features and sets them up with you right away. The previews are live: they react to your knob (or the − / + buttons below them) and show what's really playing, and their buttons really work. Everything you change there applies immediately.
+
+The steps: turn and press · profiles · the profile key · your own profiles (the ready-made ones can be changed and deleted too) · assign apps (or sort them automatically) · media flyout · pick a look (“Custom” opens a design menu right in the introduction: layout, colors, opacity) · place on screen · snap points.
+
+At the end you choose: **Go to the program** or **Show all features**, an overview of everything KnobFlyout can do, where each feature is explained and can be tried and set up right away.
 
 You can skip it at any time. It comes back when you open the settings until you tick **Don't show again**. To see it again: **Settings → General → Introduction**.
 
@@ -80,7 +85,7 @@ You can skip it at any time. It comes back when you open the settings until you 
 
 | Action | Default key | What happens |
 |---|---|---|
-| Turn the knob up / down | Volume Up / Volume Down | Changes the volume of the apps in the active profile (3 % per notch) |
+| Turn the knob up / down | Volume Up / Volume Down | Changes the volume of the apps in the active profile (2 % per notch) |
 | Press the mute key | Mute | Mutes / unmutes these apps |
 | Switch profile | **Ctrl + Shift + P** (tap) | Next profile, shown in the OSD |
 | Next saved position | **Hold** Ctrl + Shift + P (600 ms) | Moves OSD and flyout to the next saved position (needs saved positions and “Drag with the mouse”); keep holding to continue |
@@ -116,6 +121,7 @@ Good to know:
 A profile is a group of apps the knob controls together – for example *Gaming* (game), *Comms* (Discord, Teams), *Music* (Spotify), *Video* (browser, VLC).
 
 - **Assign apps:** page **Volume & apps** → app list: each row has one button per profile and ⊘ to exclude the app. Or directly in the new-app popup.
+- **Sort automatically** (page **Profiles**, or in the introduction): new games (Steam, Epic, GOG, Xbox, the Windows game list), browsers and video players, music apps and chat apps go to the profile you chose for that kind of app, without asking. Anything KnobFlyout doesn't recognize, or a kind set to “Ask”, goes to the popup as usual. Apps that are already assigned stay where they are.
 - **New-app popup:** appears when an app plays sound that is not assigned yet. Click a profile button or press its assign key; ⊘ excludes the app. Without a click it disappears after 12 seconds and the app is suggested again later.
 - **Edit profiles** (page **Profiles**): up to 6 profiles; name, logo (44 Windows symbols or your own image), color, delete, add. The order is the switching order. At least one profile remains.
 - **Controlled apps:** “Only apps playing sound” (default) or “All apps in the profile”.
@@ -137,6 +143,7 @@ The media flyout appears when a track changes or playback starts or pauses – f
 - **Content:** app name and logo, cover, title and artist, progress bar with times, Previous / Play-Pause / Next, ±10-second buttons
 - **Source bar:** when several apps play at the same time, one entry per app – click to switch
 - **“…” menu** (items selectable): Shuffle, Repeat, Next source, ±10 s hotkeys on/off, Keep pinned, Save position, Next position, Reset position, Open settings, Hide
+- **Keep on screen** (page **Media flyout** → **Keep on screen**): for programs you list, for example Spotify, the flyout stays on screen as long as they are open, even when playback is paused. It works for every design. With **Own position** it has its own spot, chosen by tile or by dragging the flyout; it is then not attached to the OSD, and the OSD moves out of its way. The name is the one shown in the flyout, upper or lower case doesn't matter.
 - **Options:** on / off, duration 2–30 s, progress bar, ±10 s buttons, cover as blurred background (blur and dimming adjustable), opacity separately for background and text/icons
 - **Design “Custom”:** Appearance → **Design your own** opens an editor with a live preview at the top:
   - **Templates** as a starting point: Standard, Compact, Minimal, Large album art (your colors are kept)
@@ -204,21 +211,21 @@ The extensions talk to KnobFlyout only locally (`ws://127.0.0.1:8975`, only conn
 
 ## Settings overview
 
-Open via tray icon → right-click → **Settings**. Changes apply when you click **Save** (language and color scheme apply immediately).
+Open via tray icon → right-click → **Settings**. Changes apply when you click **Save**, which stays grayed out until something has changed (language and color scheme apply immediately).
 
 | Page | Contents |
 |---|---|
 | General | Language, light or dark, start with Windows, introduction, reload settings |
 | Volume & apps | Step size, Spotify step size, app list with profile assignment, ignored apps |
-| Profiles | Switch key, controlled apps, skip empty profiles, edit profiles, assign keys |
+| Profiles | Switch key, controlled apps, skip empty profiles, edit profiles, sort automatically, assign keys |
 | OSD | On / off, duration, click to dismiss, design, opacity, colors |
-| Media flyout | On / off, duration, content, “…” menu, design (with editor for “Custom”), opacity, cover background, skip keys, gestures |
+| Media flyout | On / off, duration, keep on screen, content, “…” menu, design (with editor for “Custom”), opacity, cover background, skip keys, gestures |
 | Position | Arrangement, place on screen, test, drag, saved positions, reset |
 | Design | All appearance settings in one place |
 | Shortcuts | All keys and hold / double-press times in one place |
 | Spotify | Setup guide, connect, test, disconnect |
 | YouTube | YouTube player in Firefox and Chrome on/off, connection status per browser, setup guide |
-| Info | Paths of the configuration and log file |
+| Info | Paths of the configuration and log file, a click opens the folder |
 
 ## Files
 

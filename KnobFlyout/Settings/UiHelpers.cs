@@ -201,6 +201,19 @@ namespace KnobFlyout.Settings
             return CardShell(panel);
         }
 
+        /// <summary>Zeile im aufgeklappten Teil einer Karte: Beschriftung links, Bedienelement rechts.</summary>
+        public static Grid OptionRow(string label, UIElement control)
+        {
+            var row = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(new TextBlock { Text = label, Foreground = Fg, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 10, 0) });
+            if (control is FrameworkElement fe) fe.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(control, 1);
+            row.Children.Add(control);
+            return row;
+        }
+
         /// <summary>Ein/Aus-Schalter für die rechte Kartenseite (Beschriftung "Ein"/"Aus" links daneben).</summary>
         public static CheckBox Toggle(bool value, Action<bool> onChange)
         {
@@ -378,7 +391,7 @@ namespace KnobFlyout.Settings
         }
 
         /// <summary>Einfacher Listeneditor: TextBox + "Hinzufügen" + ListBox mit "Entfernen" je Zeile.</summary>
-        public static StackPanel ListEditor(List<string> model, string placeholder, Func<List<string>>? liveSource = null)
+        public static StackPanel ListEditor(List<string> model, string placeholder, Func<List<string>>? liveSource = null, Action? changed = null)
         {
             var outer = new StackPanel();
             var listBox = new ListBox { Height = 120, Background = FieldBg, Foreground = Fg, BorderBrush = FieldBorder, Margin = new Thickness(0, 0, 0, 6) };
@@ -396,6 +409,7 @@ namespace KnobFlyout.Settings
                 model.Add(v);
                 listBox.Items.Add(v);
                 input.Text = "";
+                changed?.Invoke();
             };
 
             var removeBtn = Btn(Loc.T("Entfernen", "Remove"));
@@ -404,6 +418,7 @@ namespace KnobFlyout.Settings
                 if (listBox.SelectedItem is not string sel) return;
                 model.Remove(sel);
                 listBox.Items.Remove(sel);
+                changed?.Invoke();
             };
 
             var row = Row(input, addBtn, removeBtn);
@@ -427,6 +442,7 @@ namespace KnobFlyout.Settings
                             if (model.Contains(app)) return;
                             model.Add(app);
                             listBox.Items.Add(app);
+                            changed?.Invoke();
                         };
                         menu.Items.Add(mi);
                     }

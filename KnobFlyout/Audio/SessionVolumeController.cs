@@ -14,10 +14,12 @@ namespace KnobFlyout.Audio
         public string ProcessName { get; }
         public AudioSessionState State { get; }
         public AudioSessionControl Control { get; }
+        public int ProcessId { get; }
 
-        public AudioSessionInfo(string processName, AudioSessionState state, AudioSessionControl control)
+        public AudioSessionInfo(string processName, AudioSessionState state, AudioSessionControl control, int processId)
         {
             ProcessName = processName;
+            ProcessId = processId;
             State = state;
             Control = control;
         }
@@ -81,7 +83,7 @@ namespace KnobFlyout.Audio
                             continue;
                         }
 
-                        result.Add(new AudioSessionInfo(name, session.State, session));
+                        result.Add(new AudioSessionInfo(name, session.State, session, pid));
                     }
                     catch
                     {
@@ -198,6 +200,10 @@ namespace KnobFlyout.Audio
             }
             return results;
         }
+
+        /// <summary>Aktuelle Lautstärke der Apps, die der Knopf gerade regeln würde (nur lesen).</summary>
+        public List<(string Name, int Value)> ReadVolumes(AppConfig cfg) =>
+            GetTargets(cfg).Select(t => (t.ProcessName, SafeReadPercent(t))).ToList();
 
         private static int SafeReadPercent(AudioSessionInfo t)
         {

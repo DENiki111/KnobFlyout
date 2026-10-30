@@ -183,6 +183,15 @@ namespace KnobFlyout.Osd
             return new Point(cfg.MediaOsdX ?? fallback.X, cfg.MediaOsdY ?? fallback.Y);
         }
 
+        /// <summary>Eigene Stelle der Daueranzeige (media_keep_*): Platz-Voreinstellung oder verschoben.</summary>
+        public static Point MediaKeepAnchor(AppConfig cfg, double width, double height)
+        {
+            var size = new Size(width, height);
+            if (IsPreset(cfg.MediaKeepPreset)) return Corner(cfg.MediaKeepPreset, size, cfg.MediaKeepMonitor);
+            var fallback = Corner("bottom_right", size, cfg.MediaKeepMonitor);
+            return new Point(cfg.MediaKeepX ?? fallback.X, cfg.MediaKeepY ?? fallback.Y);
+        }
+
         /// <summary>
         /// „Zusammen“ bei einem Design mit CenterCombined (z. B. Dynamic Island): OSD mittig über/unter dem Flyout.
         /// Liefert den Versatz der OSD-X gegenüber der Flyout-X (sonst 0 = linksbündig wie bisher).
