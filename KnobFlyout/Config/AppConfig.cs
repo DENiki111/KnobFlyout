@@ -48,6 +48,9 @@ namespace KnobFlyout.Config
         [JsonPropertyName("spotify_client_secret")] public string SpotifyClientSecret { get; set; } = "";
         [JsonPropertyName("spotify_redirect_uri")] public string SpotifyRedirectUri { get; set; } = "http://localhost:5000/callback";
 
+        /// <summary>YT-Bridge: spielt in Firefox/Chrome ein YouTube-Video, regelt der Knopf den YouTube-Player statt der Browser-Session (braucht die Erweiterung aus Browser/firefox bzw. Browser/chrome).</summary>
+        [JsonPropertyName("youtube_bridge")] public bool YoutubeBridge { get; set; } = false;
+
         [JsonPropertyName("active_profile")] public string ActiveProfile { get; set; } = "music";
         [JsonPropertyName("profile_hotkey")] public string ProfileHotkey { get; set; } = "ctrl+shift+p";
 

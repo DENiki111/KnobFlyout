@@ -22,6 +22,7 @@ namespace KnobFlyout
 
         private readonly SessionVolumeController _audio = new();
         private readonly SpotifyController _spotify = new();
+        private readonly YouTubeBridge _youtube = new();
         private readonly Media.MediaController _media = new();
         private Osd.MediaOsd? _mediaOsd;
         private readonly AudioWorker _worker = new();
@@ -45,6 +46,7 @@ namespace KnobFlyout
             var startCfg = ConfigManager.Load();
             Loc.Apply(startCfg);
             _osdFollowsMedia = startCfg.OsdFollowsMedia();
+            _youtube.Apply(startCfg);
 
             _osd = new OsdManager();
             _osd.StackChanged += () =>
@@ -286,7 +288,7 @@ namespace KnobFlyout
         private void ApplyVolume(int steps)
         {
             var cfg = ConfigManager.Load();
-            var results = _audio.ChangeVolume(cfg, steps, _spotify);
+            var results = _audio.ChangeVolume(cfg, steps, _spotify, _youtube);
             if (results.Count > 0) _osd?.Show(results, false);
         }
 
@@ -294,7 +296,7 @@ namespace KnobFlyout
         private void ApplyMute()
         {
             var cfg = ConfigManager.Load();
-            var r = _audio.ToggleMute(cfg, _spotify);
+            var r = _audio.ToggleMute(cfg, _spotify, _youtube);
             if (r.Count == 0) return;
             _osd?.Show(r.Select(x => (x.Name, 0)).ToList(), r[0].Muted);
         }
@@ -502,7 +504,7 @@ namespace KnobFlyout
                 return;
             }
 
-            var window = new Settings.SettingsWindow(_spotify);
+            var window = new Settings.SettingsWindow(_spotify, _youtube);
             AttachSettings(window);
             window.Show();
             window.Activate();
@@ -533,6 +535,7 @@ namespace KnobFlyout
             _hook?.ReloadConfig();
             _osdFollowsMedia = cfg.OsdFollowsMedia();
             _audio.InvalidateCache();
+            _youtube.Apply(cfg);
             if (_mediaOsd != null && _mediaOsd.IsVisible)
                 _mediaOsd.ApplyPosition(cfg, _osd!);
             _osd?.Reposition();
@@ -549,6 +552,7 @@ namespace KnobFlyout
             _worker.Dispose();
             _audio.Dispose();
             _spotify.Dispose();
+            _youtube.Dispose();
             _media.Dispose();
             _mediaOsd?.Close();
             _singleInstanceMutex?.Dispose();

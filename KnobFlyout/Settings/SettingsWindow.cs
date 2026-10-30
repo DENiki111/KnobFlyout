@@ -33,6 +33,7 @@ namespace KnobFlyout.Settings
         private readonly AppConfig _cfg;
         private readonly SessionVolumeController _liveAudio = new();
         private readonly SpotifyController _spotify;
+        private readonly YouTubeBridge _youtube;
 
         private StackPanel? _activeListHost;
         private StackPanel? _appListHost;
@@ -56,6 +57,7 @@ namespace KnobFlyout.Settings
             new("design", "\uE790", "Design"),
             new("hotkeys", "\uE765", T("Tastenkürzel", "Shortcuts")),
             new("spotify", "\uE753", "Spotify"),
+            new("youtube", "\uE714", "YouTube"),
         };
 
         private static NavEntry InfoNav() => new("info", "\uE946", "Info");
@@ -91,9 +93,10 @@ namespace KnobFlyout.Settings
         private string _currentPage = "general";
 
         /// <param name="carry">Bei einem Farbschema-/Sprachwechsel: die bisherige (evtl. ungespeicherte) Konfiguration übernehmen.</param>
-        public SettingsWindow(SpotifyController spotify, AppConfig? carry = null, string startPage = "general")
+        public SettingsWindow(SpotifyController spotify, YouTubeBridge youtube, AppConfig? carry = null, string startPage = "general")
         {
             _spotify = spotify;
+            _youtube = youtube;
             _cfg = carry ?? ConfigManager.Load();
 
             Title = T("KnobFlyout – Einstellungen", "KnobFlyout – Settings");
@@ -138,7 +141,7 @@ namespace KnobFlyout.Settings
 
             SelectPage(_navItems.ContainsKey(startPage) ? startPage : "general");
 
-            Closed += (_, _) => { CloseEyePopup(); _customPreviewTimer?.Stop(); _liveAudio.Dispose(); };
+            Closed += (_, _) => { CloseEyePopup(); _customPreviewTimer?.Stop(); _youtubeTimer?.Stop(); _liveAudio.Dispose(); };
             // Live-Vorschau steht neben dem Fenster: beim Verschieben/Minimieren schließen statt zu verwaisen.
             LocationChanged += (_, _) => CloseEyePopup();
             StateChanged += (_, _) => CloseEyePopup();
@@ -208,7 +211,7 @@ namespace KnobFlyout.Settings
         /// <summary>Fenster mit derselben Position, Größe und Seite neu aufbauen (carry null = frisch von der Platte).</summary>
         private SettingsWindow ReopenWith(AppConfig? carry)
         {
-            var next = new SettingsWindow(_spotify, carry, _currentPage)
+            var next = new SettingsWindow(_spotify, _youtube, carry, _currentPage)
             {
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = Left,
@@ -380,6 +383,7 @@ namespace KnobFlyout.Settings
                 case "design": BuildDesignPage(page); break;
                 case "hotkeys": BuildHotkeysPage(page); break;
                 case "spotify": BuildSpotifyPage(page); break;
+                case "youtube": BuildYoutubePage(page); break;
                 case "info": BuildInfoPage(page); break;
             }
             return page;
@@ -2498,6 +2502,78 @@ namespace KnobFlyout.Settings
                 "Ohne API steuert KnobFlyout Spotify wie jede andere App über den Windows-Mixer.",
                 "Volume via the API only works with Spotify Premium and while Spotify is playing on a device. " +
                 "Without the API, KnobFlyout controls Spotify like any other app via the Windows mixer.")));
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  YouTube (YT-Bridge, nur Firefox)
+        // ══════════════════════════════════════════════════════════════════
+        private System.Windows.Threading.DispatcherTimer? _youtubeTimer;
+
+        private void BuildYoutubePage(StackPanel page)
+        {
+            page.Children.Add(PageTitle("YouTube"));
+
+            page.Children.Add(SectionTitle(T("Steuerung", "Control")));
+            page.Children.Add(SettingCard("\uE714", T("Lautstärke im YouTube-Player regeln", "Control volume in the YouTube player"),
+                T("Firefox, Chrome und Opera · statt der ganzen Browser-Session im Windows-Mixer", "Firefox, Chrome and Opera · instead of the whole browser session in the Windows mixer"),
+                Toggle(_cfg.YoutubeBridge, v => _cfg.YoutubeBridge = v)));
+
+            // Status live (1 s), damit man beim Installieren der Erweiterung sieht, wann sie sich verbindet
+            var status = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13, Margin = new Thickness(0, 2, 0, 2) };
+            void Refresh()
+            {
+                status.Inlines.Clear();
+                if (!_youtube.IsListening)
+                {
+                    status.Inlines.Add(new System.Windows.Documents.Run(T("Aus – nach dem Einschalten „Speichern“ klicken", "Off – click “Save” after switching on")) { Foreground = Fg });
+                    return;
+                }
+                foreach (var browser in YouTubeBridge.Browsers)
+                {
+                    var s = _youtube.Status(browser);
+                    string name = YouTubeBridge.DisplayName(browser);
+                    string text = !s.Connected
+                        ? T($"❌ {name}: nicht verbunden", $"❌ {name}: not connected")
+                          + (browser != YouTubeBridge.Firefox ? T($" ({name} verbindet sich erst, wenn ein YouTube-Tab offen ist)", $" ({name} only connects while a YouTube tab is open)") : "")
+                        : T($"✅ {name}: verbunden · {s.Tabs} YouTube-Tab{(s.Tabs == 1 ? "" : "s")}", $"✅ {name}: connected · {s.Tabs} YouTube tab{(s.Tabs == 1 ? "" : "s")}")
+                          + (s.PlayingTitle != null ? T($" · Knopf regelt: {s.PlayingTitle}", $" · knob controls: {s.PlayingTitle}")
+                                                    : T($" · gerade spielt kein Video (Knopf regelt {name})", $" · no video playing (knob controls {name})"));
+                    if (status.Inlines.Count > 0) status.Inlines.Add(new System.Windows.Documents.LineBreak());
+                    status.Inlines.Add(new System.Windows.Documents.Run(text) { Foreground = s.Connected ? FromHex("#4ade80") : Fg });
+                }
+            }
+            Refresh();
+            _youtubeTimer?.Stop();
+            _youtubeTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _youtubeTimer.Tick += (_, _) => Refresh();
+            _youtubeTimer.Start();
+            page.Children.Add(ContentCard("\uE71B", T("Browser-Erweiterungen", "Browser extensions"), null, status));
+
+            page.Children.Add(SectionTitle(T("Einrichten (einmalig)", "Setup (once)")));
+            var steps = new StackPanel();
+            void Step(int n, params System.Windows.Documents.Inline[] parts)
+            {
+                var line = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Fg, FontSize = 13, Margin = new Thickness(0, 0, 0, 8) };
+                line.Inlines.Add(new System.Windows.Documents.Run($"{n}.  ") { FontWeight = FontWeights.SemiBold });
+                foreach (var p in parts) line.Inlines.Add(p);
+                steps.Children.Add(line);
+            }
+            System.Windows.Documents.Run Txt(string de, string en) => new(T(de, en));
+            Step(1, Txt("Die Erweiterungen liegen im KnobFlyout-Ordner Browser (firefox und chrome, Anleitung in der README dort). Browser\\pack.cmd baut daraus die Pakete zum Hochladen.",
+                "The extensions are in the KnobFlyout folder Browser (firefox and chrome, instructions in the README there). Browser\\pack.cmd builds the packages for uploading."));
+            Step(2, Txt("Firefox: das Firefox-Paket auf ", "Firefox: upload the Firefox package to "), Link("addons.mozilla.org", "https://addons.mozilla.org/developers/addon/submit/distribution"),
+                Txt(" mit „Selbst verteilen“ hochladen (nicht öffentlich), die signierte .xpi herunterladen und auf Firefox ziehen. Zum Ausprobieren: about:debugging → „Dieser Firefox“ → „Temporäres Add-on laden…“ → Browser\\firefox\\manifest.json (bis Firefox neu startet).",
+                    " with “On your own” (not public), download the signed .xpi and drag it onto Firefox. To try it: about:debugging → “This Firefox” → “Load Temporary Add-on…” → Browser\\firefox\\manifest.json (until Firefox restarts)."));
+            Step(3, Txt("Chrome und Opera: chrome://extensions bzw. opera://extensions öffnen → „Entwicklermodus“ an → „Entpackte Erweiterung laden“ → Ordner Browser\\chrome (oder aus dem Chrome Web Store). Danach offene YouTube-Tabs neu laden.",
+                "Chrome and Opera: open chrome://extensions or opera://extensions → turn on “Developer mode” → “Load unpacked” → folder Browser\\chrome (or from the Chrome Web Store). Then reload open YouTube tabs."));
+            Step(4, Txt("Oben einschalten und „Speichern“ – die Erweiterung verbindet sich nach ein paar Sekunden.",
+                "Switch it on above and click “Save” – the extension connects within a few seconds."));
+            page.Children.Add(ContentCard("\uE946", T("So geht's", "How to"), null, steps));
+
+            page.Children.Add(Hint(T("Spielt im Browser gerade kein YouTube-Video, regelt der Knopf ihn wie bisher über den Windows-Mixer. " +
+                "Der Browser muss im aktiven Profil sein; Schrittweite wie unter „Lautstärke & Apps“.",
+                "When no YouTube video is playing in the browser, the knob controls it through the Windows mixer as before. " +
+                "The browser has to be in the active profile; step size as on “Volume & apps”.")));
         }
 
         /// <summary>Klickbarer Link im Text (öffnet den Standard-Browser).</summary>
