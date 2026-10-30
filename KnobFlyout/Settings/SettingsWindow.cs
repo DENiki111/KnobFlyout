@@ -2559,14 +2559,12 @@ namespace KnobFlyout.Settings
                 steps.Children.Add(line);
             }
             System.Windows.Documents.Run Txt(string de, string en) => new(T(de, en));
-            Step(1, Txt("Die Erweiterungen liegen im KnobFlyout-Ordner Browser (firefox und chrome, Anleitung in der README dort). Browser\\pack.cmd baut daraus die Pakete zum Hochladen.",
-                "The extensions are in the KnobFlyout folder Browser (firefox and chrome, instructions in the README there). Browser\\pack.cmd builds the packages for uploading."));
-            Step(2, Txt("Firefox: das Firefox-Paket auf ", "Firefox: upload the Firefox package to "), Link("addons.mozilla.org", "https://addons.mozilla.org/developers/addon/submit/distribution"),
-                Txt(" mit „Selbst verteilen“ hochladen (nicht öffentlich), die signierte .xpi herunterladen und auf Firefox ziehen. Zum Ausprobieren: about:debugging → „Dieser Firefox“ → „Temporäres Add-on laden…“ → Browser\\firefox\\manifest.json (bis Firefox neu startet).",
-                    " with “On your own” (not public), download the signed .xpi and drag it onto Firefox. To try it: about:debugging → “This Firefox” → “Load Temporary Add-on…” → Browser\\firefox\\manifest.json (until Firefox restarts)."));
-            Step(3, Txt("Chrome und Opera: chrome://extensions bzw. opera://extensions öffnen → „Entwicklermodus“ an → „Entpackte Erweiterung laden“ → Ordner Browser\\chrome (oder aus dem Chrome Web Store). Danach offene YouTube-Tabs neu laden.",
-                "Chrome and Opera: open chrome://extensions or opera://extensions → turn on “Developer mode” → “Load unpacked” → folder Browser\\chrome (or from the Chrome Web Store). Then reload open YouTube tabs."));
-            Step(4, Txt("Oben einschalten und „Speichern“ – die Erweiterung verbindet sich nach ein paar Sekunden.",
+            Step(1, Txt("Firefox: auf der ", "Firefox: on the "), Link(T("Release-Seite", "releases page"), "https://github.com/DENiki111/KnobFlyout/releases/latest"),
+                Txt(" die .xpi anklicken und die Installation bestätigen.", " click the .xpi and confirm the installation."));
+            Step(2, Txt("Chrome und Opera: den Ordner ", "Chrome and Opera: get the folder "), Link("Browser/chrome", "https://github.com/DENiki111/KnobFlyout/tree/main/Browser/chrome"),
+                Txt(" aus dem GitHub-Repo herunterladen, chrome://extensions bzw. opera://extensions öffnen → „Entwicklermodus“ an → „Entpackte Erweiterung laden“ → diesen Ordner wählen. Danach offene YouTube-Tabs neu laden.",
+                    " from the GitHub repo, open chrome://extensions or opera://extensions → turn on “Developer mode” → “Load unpacked” → pick that folder. Then reload open YouTube tabs."));
+            Step(3, Txt("Oben einschalten und „Speichern“ – die Erweiterung verbindet sich nach ein paar Sekunden.",
                 "Switch it on above and click “Save” – the extension connects within a few seconds."));
             page.Children.Add(ContentCard("\uE946", T("So geht's", "How to"), null, steps));
 

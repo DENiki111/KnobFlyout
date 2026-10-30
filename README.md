@@ -189,10 +189,9 @@ Normally the knob changes the whole browser session in the Windows mixer. With t
 
 Setup (page **YouTube**, details in the [README in `Browser`](Browser/README.md)):
 
-1. `Browser\pack.cmd` builds the upload packages in `dist\`.
-2. **Firefox:** upload the Firefox package to addons.mozilla.org as “On your own” (self-distributed, not public) and install the signed `.xpi`. To try it, load `Browser/firefox/manifest.json` temporarily via `about:debugging`.
-3. **Chrome, Opera, Opera GX:** `chrome://extensions` or `opera://extensions` → Developer mode → **Load unpacked** → folder `Browser/chrome` (or publish the Chrome package in the Chrome Web Store / on addons.opera.com).
-4. Turn on **Control volume in the YouTube player** and click **Save**. The status shows for each browser when its extension is connected.
+1. **Firefox:** on the [Releases](../../releases) page, click the signed `.xpi` and confirm the installation.
+2. **Chrome, Opera, Opera GX:** get the folder `Browser/chrome` from this repo, then `chrome://extensions` or `opera://extensions` → Developer mode → **Load unpacked** → pick that folder. Reload open YouTube tabs afterwards.
+3. Turn on **Control volume in the YouTube player** and click **Save**. The status shows for each browser when its extension is connected.
 
 The extensions talk to KnobFlyout only locally (`ws://127.0.0.1:8975`, only connections from browser extensions are accepted).
 
