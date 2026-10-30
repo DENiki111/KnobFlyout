@@ -51,6 +51,11 @@ namespace KnobFlyout.Config
         /// <summary>YT-Bridge: spielt in Firefox/Chrome ein YouTube-Video, regelt der Knopf den YouTube-Player statt der Browser-Session (braucht die Erweiterung aus Browser/firefox bzw. Browser/chrome).</summary>
         [JsonPropertyName("youtube_bridge")] public bool YoutubeBridge { get; set; } = false;
 
+        /// <summary>Einführung: Häkchen „Nicht mehr anzeigen“ – ohne es erscheint sie bei jedem Öffnen der Einstellungen.</summary>
+        [JsonPropertyName("tutorial_hidden")] public bool TutorialHidden { get; set; } = false;
+        /// <summary>Einführung wurde schon einmal gezeigt (sonst erscheint sie beim Programmstart).</summary>
+        [JsonPropertyName("tutorial_started")] public bool TutorialStarted { get; set; } = false;
+
         [JsonPropertyName("active_profile")] public string ActiveProfile { get; set; } = "music";
         [JsonPropertyName("profile_hotkey")] public string ProfileHotkey { get; set; } = "ctrl+shift+p";
 

@@ -27,7 +27,7 @@ namespace KnobFlyout.Settings
             "bottom_left", "bottom_center", "bottom_right",
         };
 
-        private const double MaxScreenHeight = 150; // Hochkant-Bildschirme nicht riesig werden lassen
+        private readonly double _maxScreenHeight; // Hochkant-Bildschirme nicht riesig werden lassen
 
         private readonly List<MonitorArea> _monitors;
         private readonly ComboBox _monitorCombo;
@@ -49,8 +49,9 @@ namespace KnobFlyout.Settings
         public event Action? Changed;
 
         /// <param name="allowCustom">Knopf „Eigene Position“ anbieten (nicht beim Anlegen von Snap-Punkten).</param>
-        public ScreenTilePicker(List<MonitorArea> monitors, string? device, string? preset, bool allowCustom = true, double width = 224)
+        public ScreenTilePicker(List<MonitorArea> monitors, string? device, string? preset, bool allowCustom = true, double width = 224, double maxScreenHeight = 150)
         {
+            _maxScreenHeight = maxScreenHeight;
             _monitors = monitors;
             _width = width;
             Device = device ?? "";
@@ -170,9 +171,9 @@ namespace KnobFlyout.Settings
                 ? (double)mon.PixelHeight / mon.PixelWidth
                 : 9.0 / 16.0;
             double w = _width, h = w * ratio;
-            if (h > MaxScreenHeight)
+            if (h > _maxScreenHeight)
             {
-                h = MaxScreenHeight;
+                h = _maxScreenHeight;
                 w = h / ratio;
             }
             _screen.Width = w;

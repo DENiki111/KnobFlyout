@@ -441,6 +441,184 @@ namespace KnobFlyout.Settings
             return outer;
         }
 
+        /// <summary>
+        /// Lädt Settings/Theme.xaml (eigene Stile für Scrollbar, Dropdown, Aufklapp-Pfeile, Tabs,
+        /// Slider, Buttons, Listen, Kontextmenü) und stellt die Theme-Farben als Ressourcen bereit.
+        /// Schlägt das Laden fehl, bleibt es still beim Windows-Standardlook. Erneut aufrufen = nur Farben neu.
+        /// </summary>
+        public static void ApplyControlTheme(Window w)
+        {
+            w.Resources["ThemeFg"] = Fg;
+            w.Resources["ThemeField"] = FieldBg;
+            w.Resources["ThemeBorder"] = FieldBorder;
+            w.Resources["ThemeHover"] = HoverBg;
+            w.Resources["ThemePressed"] = PressedBg;
+            w.Resources["ThemeAccent"] = Accent;
+            w.Resources["ThemeThumb"] = ThumbBg;
+            w.Resources["ThemeThumbHover"] = ThumbHoverBg;
+            w.Resources["ThemeTrack"] = TrackBg;
+            if (w.Resources.MergedDictionaries.Count > 0) return;
+
+            try
+            {
+                w.Resources.MergedDictionaries.Add(new ResourceDictionary
+                {
+                    Source = new Uri("/KnobFlyout;component/Settings/Theme.xaml", UriKind.Relative),
+                });
+            }
+            catch (Exception ex)
+            {
+                KnobFlyout.Logger.Error($"Theme.xaml: {ex.Message}");
+            }
+        }
+
+        public static void ApplyDarkTitleBar(Window w)
+        {
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                int on = Light ? 0 : 1;
+                DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, ref on, sizeof(int));
+            }
+            catch
+            {
+                // Rein kosmetisch - ohne dunkle Titelleiste funktioniert alles genauso.
+            }
+        }
+
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+        // ── Hotkey-Feld (Aufnahme per Tastendruck, optional ✕ zum Entfernen) ──
+
+        /// <summary>
+        /// Klick ins Feld, dann Tastenkombination drücken (Esc bricht ab). Mit allowClear entfernt
+        /// "✕" den Hotkey (leer = deaktiviert). onChanged bekommt z.B. "ctrl+alt+right" bzw. "".
+        /// Ein Statustext erscheint nur während der Aufnahme oder bei einem Problem.
+        /// </summary>
+        /// <param name="emptyText">Anzeige, wenn kein Hotkey gesetzt ist (z.B. "Play/Pause-Taste" als Vorgabe).</param>
+        /// <param name="format">Anzeige eines gesetzten Hotkeys (z.B. "Strg + P"), sonst der gespeicherte Text.</param>
+        public static UIElement HotkeyCapture(string current, Action<string> onChanged, bool allowClear = true, string? emptyText = null,
+            Func<string, string>? format = null, double width = 180)
+        {
+            string saved = current ?? "";
+            string Shown(string v) => string.IsNullOrWhiteSpace(v) ? emptyText ?? Loc.T("Nicht festgelegt", "Not set") : format?.Invoke(v) ?? v;
+
+            var box = TextField(Shown(saved), width);
+            box.IsReadOnly = true;
+            box.Cursor = System.Windows.Input.Cursors.Hand;
+            box.Margin = new Thickness(0);
+
+            var status = new TextBlock { Foreground = SubFg, FontSize = 11, Margin = new Thickness(0, 2, 0, 0), HorizontalAlignment = HorizontalAlignment.Right };
+            void SetStatus(string text)
+            {
+                status.Text = text;
+                status.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+            }
+            void ShowValidity()
+            {
+                // Nur ein ungültiger gespeicherter Wert wird angezeigt (z.B. von Hand in der Config eingetragen).
+                bool invalid = saved.Length > 0 && Input.HotkeyParser.Parse(saved).Item2 == 0;
+                SetStatus(invalid ? Loc.T("Ungültig – wird ignoriert", "Invalid – ignored") : "");
+            }
+            ShowValidity();
+
+            bool capturing = false;
+
+            box.GotFocus += (_, _) =>
+            {
+                capturing = true;
+                box.Text = Loc.T("Taste(n) drücken …", "Press key(s) …");
+                SetStatus(Loc.T("Esc = abbrechen", "Esc = cancel"));
+            };
+
+            box.LostFocus += (_, _) =>
+            {
+                if (!capturing) return;
+                capturing = false;
+                box.Text = Shown(saved);
+                ShowValidity();
+            };
+
+            box.PreviewKeyDown += (_, e) =>
+            {
+                if (!capturing) return;
+                e.Handled = true;
+
+                var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
+
+                if (key == System.Windows.Input.Key.Escape)
+                {
+                    capturing = false;
+                    box.Text = Shown(saved);
+                    ShowValidity();
+                    System.Windows.Input.Keyboard.ClearFocus();
+                    return;
+                }
+
+                bool pureModifier = key is System.Windows.Input.Key.LeftCtrl or System.Windows.Input.Key.RightCtrl
+                    or System.Windows.Input.Key.LeftShift or System.Windows.Input.Key.RightShift
+                    or System.Windows.Input.Key.LeftAlt or System.Windows.Input.Key.RightAlt
+                    or System.Windows.Input.Key.LWin or System.Windows.Input.Key.RWin;
+
+                var mods = new List<string>();
+                var held = System.Windows.Input.Keyboard.Modifiers;
+                if ((held & System.Windows.Input.ModifierKeys.Control) != 0) mods.Add("ctrl");
+                if ((held & System.Windows.Input.ModifierKeys.Alt) != 0) mods.Add("alt");
+                if ((held & System.Windows.Input.ModifierKeys.Shift) != 0) mods.Add("shift");
+                if (System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LWin) || System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RWin)) mods.Add("win");
+
+                if (pureModifier)
+                {
+                    // Nur Vorschau anzeigen, noch nicht übernehmen – wartet auf die Haupttaste.
+                    box.Text = mods.Count > 0 ? string.Join("+", mods) + "+…" : Loc.T("Taste(n) drücken …", "Press key(s) …");
+                    return;
+                }
+
+                int vk = System.Windows.Input.KeyInterop.VirtualKeyFromKey(key);
+                string? name = Input.HotkeyParser.NameForVk(vk);
+                if (name == null)
+                {
+                    SetStatus(Loc.T("Taste nicht unterstützt", "Key not supported"));
+                    return;
+                }
+
+                mods.Remove(name); // falls Haupttaste selbst ein Modifier-Name wäre (sollte nicht vorkommen)
+                string combo = mods.Count > 0 ? string.Join("+", mods) + "+" + name : name;
+
+                saved = combo;
+                capturing = false;
+                box.Text = Shown(combo);
+                SetStatus("");
+                onChanged(combo);
+                System.Windows.Input.Keyboard.ClearFocus();
+            };
+
+            var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            row.Children.Add(box);
+
+            if (allowClear)
+            {
+                var clear = Btn("✕");
+                clear.ToolTip = Loc.T("Hotkey entfernen", "Remove hotkey");
+                clear.Margin = new Thickness(6, 0, 0, 0);
+                clear.Click += (_, _) =>
+                {
+                    saved = "";
+                    capturing = false;
+                    box.Text = Shown(saved);
+                    SetStatus("");
+                    onChanged("");
+                };
+                row.Children.Add(clear);
+            }
+
+            var panel = new StackPanel();
+            panel.Children.Add(row);
+            panel.Children.Add(status);
+            return panel;
+        }
+
         public static Brush FromHex(string hex, string fallback = "#2a2a3a")
         {
             try { return new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)); }

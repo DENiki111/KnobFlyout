@@ -13,6 +13,7 @@ Am Knopf drehen, und KnobFlyout ändert die Lautstärke genau der Apps, die du w
 - [Funktionen](#funktionen)
 - [Voraussetzungen](#voraussetzungen)
 - [Installation](#installation)
+- [Einführung](#einführung)
 - [Bedienung](#bedienung)
 - [Profile](#profile)
 - [OSD (Lautstärke-Anzeige)](#osd-lautstärke-anzeige)
@@ -66,6 +67,12 @@ Hinweise:
 - **Update:** einfach das neuere Setup ausführen – es schlägt den vorhandenen Ordner vor, die Einstellungen bleiben erhalten.
 - **Umstieg von ModernFlyout** (dem alten Namen): Das Setup übernimmt Einstellungen und Spotify-Verbindung und entfernt die alte Version.
 - **Deinstallieren:** Windows-Einstellungen → Apps → Installierte Apps → KnobFlyout → Deinstallieren. Dabei wird der Programmordner samt Einstellungen gelöscht.
+
+## Einführung
+
+Beim ersten Start öffnet sich eine kurze Einführung. Sie erklärt Knopf, Profile und Funktionen und richtet sie direkt mit dir ein: Knopf und Profil-Taste ausprobieren, Apps zuweisen, ein eigenes Profil anlegen, Look und Platz wählen. Was du dort änderst, gilt sofort.
+
+Du kannst sie jederzeit überspringen. Sie kommt wieder, wenn du die Einstellungen öffnest, bis du **Nicht mehr anzeigen** anhakst. Später findest du sie unter **Einstellungen → Allgemein → Einführung**.
 
 ## Bedienung
 
@@ -201,7 +208,7 @@ Die Erweiterungen sprechen nur lokal mit KnobFlyout (`ws://127.0.0.1:8975`, ange
 
 | Seite | Inhalt |
 |---|---|
-| Allgemein | Sprache, hell oder dunkel, mit Windows starten, Einstellungen neu laden |
+| Allgemein | Sprache, hell oder dunkel, mit Windows starten, Einführung, Einstellungen neu laden |
 | Lautstärke & Apps | Schrittweite, Schrittweite Spotify, App-Liste mit Profil-Zuweisung, ignorierte Apps |
 | Profile | Profil-Taste, gesteuerte Apps, leere Profile überspringen, Profile bearbeiten, Zuweisen-Tasten |
 | OSD | An / aus, Anzeigedauer, per Klick ausblenden, Design, Deckkraft, Farben |

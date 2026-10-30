@@ -13,6 +13,7 @@ Turn your knob and KnobFlyout changes the volume of exactly the apps you want (f
 - [Features](#features)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Introduction](#introduction)
 - [Controls](#controls)
 - [Profiles](#profiles)
 - [OSD (volume display)](#osd-volume-display)
@@ -66,6 +67,12 @@ Notes:
 - **Update:** simply run the newer setup – it suggests the existing folder and keeps your settings.
 - **Coming from ModernFlyout** (the old name): the setup takes over your settings and the Spotify connection and removes the old version.
 - **Uninstall:** Windows Settings → Apps → Installed apps → KnobFlyout → Uninstall. This removes the program folder including the settings.
+
+## Introduction
+
+On the first start, a short introduction opens. It explains the knob, profiles and features and sets them up with you right away: try the knob and profile key, assign apps, create your own profile, pick a look and a place. Everything you change there applies immediately.
+
+You can skip it at any time. It comes back when you open the settings until you tick **Don't show again**. To see it again: **Settings → General → Introduction**.
 
 ## Controls
 
@@ -201,7 +208,7 @@ Open via tray icon → right-click → **Settings**. Changes apply when you clic
 
 | Page | Contents |
 |---|---|
-| General | Language, light or dark, start with Windows, reload settings |
+| General | Language, light or dark, start with Windows, introduction, reload settings |
 | Volume & apps | Step size, Spotify step size, app list with profile assignment, ignored apps |
 | Profiles | Switch key, controlled apps, skip empty profiles, edit profiles, assign keys |
 | OSD | On / off, duration, click to dismiss, design, opacity, colors |
