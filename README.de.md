@@ -189,10 +189,9 @@ Normalerweise ändert der Knopf die ganze Browser-Session im Windows-Mixer. Mit 
 
 Einrichten (Seite **YouTube**, Details in der [README in `Browser`](Browser/README.md)):
 
-1. `Browser\pack.cmd` baut die Pakete zum Hochladen nach `dist\`.
-2. **Firefox:** das Firefox-Paket auf addons.mozilla.org mit „Selbst verteilen“ hochladen (nicht öffentlich) und die signierte `.xpi` installieren. Zum Ausprobieren `Browser/firefox/manifest.json` temporär über `about:debugging` laden.
-3. **Chrome, Opera, Opera GX:** `chrome://extensions` bzw. `opera://extensions` → Entwicklermodus → **Entpackte Erweiterung laden** → Ordner `Browser/chrome` (oder das Chrome-Paket im Chrome Web Store / auf addons.opera.com veröffentlichen).
-4. **Lautstärke im YouTube-Player regeln** einschalten und **Speichern**. Der Status zeigt je Browser, wann seine Erweiterung verbunden ist.
+1. **Firefox:** auf der Seite [Releases](../../releases) die signierte `.xpi` anklicken und die Installation bestätigen.
+2. **Chrome, Opera, Opera GX:** den Ordner `Browser/chrome` aus diesem Repo holen, dann `chrome://extensions` bzw. `opera://extensions` → Entwicklermodus → **Entpackte Erweiterung laden** → diesen Ordner wählen. Danach offene YouTube-Tabs neu laden.
+3. **Lautstärke im YouTube-Player regeln** einschalten und **Speichern**. Der Status zeigt je Browser, wann seine Erweiterung verbunden ist.
 
 Die Erweiterungen sprechen nur lokal mit KnobFlyout (`ws://127.0.0.1:8975`, angenommen werden nur Verbindungen von Browser-Erweiterungen).
 
