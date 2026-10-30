@@ -40,6 +40,8 @@ namespace KnobFlyout.Config
         [JsonPropertyName("step_spotify")] public int StepSpotify { get; set; } = 4;
         [JsonPropertyName("osd")] public bool Osd { get; set; } = true;
         [JsonPropertyName("osd_duration")] public int OsdDuration { get; set; } = 2500;
+        /// <summary>OSD für Feststell-, Num- und Rollen-Taste anzeigen.</summary>
+        [JsonPropertyName("lock_keys_osd")] public bool LockKeysOsd { get; set; } = true;
         [JsonPropertyName("osd_x")] public int? OsdX { get; set; }
         [JsonPropertyName("osd_y")] public int? OsdY { get; set; }
 
@@ -71,7 +73,7 @@ namespace KnobFlyout.Config
         [JsonPropertyName("seen_apps")] public List<string> SeenApps { get; set; } = new();
 
         /// <summary>Neue Apps ohne Rückfrage einsortieren (Profiles/AppClassifier.cs); nicht Erkanntes fragt weiter das Popup.</summary>
-        [JsonPropertyName("auto_assign")] public bool AutoAssign { get; set; } = false;
+        [JsonPropertyName("auto_assign")] public bool AutoAssign { get; set; } = true;
 
         /// <summary>Art der App (games, browsers, music, comms) → Profil; "" = nachfragen, fehlt = Standard-Profil der Art.</summary>
         [JsonPropertyName("auto_assign_map")] public Dictionary<string, string> AutoAssignMap { get; set; } = new();
@@ -126,31 +128,38 @@ namespace KnobFlyout.Config
         /// <summary>Design des Media-Flyouts, unabhängig vom OSD: "modernflyouts" | "win11" | "custom" (eigenes, media_custom_*).</summary>
         [JsonPropertyName("media_design")] public string MediaDesign { get; set; } = "modernflyouts";
 
-        /// <summary>
-        /// Eigenes Media-Design (media_design "custom"): Reihenfolge der Bereiche von oben nach unten
-        /// ("app" = App-Zeile, "info" = Titel/Interpret + Cover, "progress" = Fortschritt, "sources" =
-        /// Quellen-Leiste, "controls" = Knöpfe), Cover "right" | "left" | "top" | "none" mit Größe in px,
-        /// Knöpfe "round" | "flat", Ausrichtung "center" | "left" | "right", Größe in %, „…“-Knopf
-        /// "controls" (bei den Knöpfen) | "top" (rechts in der App-Zeile), Titelgröße und eigene Farben.
-        /// </summary>
-        [JsonPropertyName("media_custom_order")] public List<string> MediaCustomOrder { get; set; } = new() { "app", "info", "progress", "sources", "controls" };
-        [JsonPropertyName("media_custom_show_app")] public bool MediaCustomShowApp { get; set; } = true;
-        [JsonPropertyName("media_custom_show_times")] public bool MediaCustomShowTimes { get; set; } = true;
-        [JsonPropertyName("media_custom_cover")] public string MediaCustomCover { get; set; } = "right";
-        [JsonPropertyName("media_custom_cover_size")] public int MediaCustomCoverSize { get; set; } = 64;
-        [JsonPropertyName("media_custom_buttons")] public string MediaCustomButtons { get; set; } = "round";
-        [JsonPropertyName("media_custom_buttons_align")] public string MediaCustomButtonsAlign { get; set; } = "center";
-        [JsonPropertyName("media_custom_button_size")] public int MediaCustomButtonSize { get; set; } = 100;
-        [JsonPropertyName("media_custom_more_pos")] public string MediaCustomMorePos { get; set; } = "controls";
-        [JsonPropertyName("media_custom_title_size")] public int MediaCustomTitleSize { get; set; } = 14;
-        // Einzelne Elemente ein/aus (Fortschrittsleiste, ±10 s und „…“ gelten für alle Designs: media_show_progress,
-        // media_skip_buttons, media_show_more).
-        [JsonPropertyName("media_custom_show_title")] public bool MediaCustomShowTitle { get; set; } = true;
-        [JsonPropertyName("media_custom_show_artist")] public bool MediaCustomShowArtist { get; set; } = true;
-        [JsonPropertyName("media_custom_show_sources")] public bool MediaCustomShowSources { get; set; } = true;
-        [JsonPropertyName("media_custom_show_prev")] public bool MediaCustomShowPrev { get; set; } = true;
-        [JsonPropertyName("media_custom_show_play")] public bool MediaCustomShowPlay { get; set; } = true;
-        [JsonPropertyName("media_custom_show_next")] public bool MediaCustomShowNext { get; set; } = true;
+        /// <summary>Aufbau des Flyouts je Design (Reihenfolge, was zu sehen ist, Cover, Knöpfe), siehe MediaLayout.</summary>
+        [JsonPropertyName("media_layouts")] public Dictionary<string, MediaLayout> MediaLayouts { get; set; } = new();
+
+        /// <summary>Unter einem Namen gespeicherte Flyout-Designs.</summary>
+        [JsonPropertyName("media_saved_designs")] public List<SavedMediaDesign> MediaSavedDesigns { get; set; } = new();
+
+        /// <summary>Name des gerade gewählten gespeicherten Designs ("" = keins).</summary>
+        [JsonPropertyName("media_saved_active")] public string MediaSavedActive { get; set; } = "";
+
+        // Bis 1.3 gab es den Aufbau nur für „Eigenes“, Zeitleiste/±10 s/„…“ galten für alle Designs: werden beim Laden in
+        // media_layouts übernommen (EnsureLayouts) und danach nicht mehr geschrieben.
+        [JsonPropertyName("media_custom_order"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<string>? OldCustomOrder { get; set; }
+        [JsonPropertyName("media_custom_show_app"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? OldCustomShowApp { get; set; }
+        [JsonPropertyName("media_custom_show_times"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? OldCustomShowTimes { get; set; }
+        [JsonPropertyName("media_custom_cover"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? OldCustomCover { get; set; }
+        [JsonPropertyName("media_custom_cover_size"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? OldCustomCoverSize { get; set; }
+        [JsonPropertyName("media_custom_buttons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? OldCustomButtons { get; set; }
+        [JsonPropertyName("media_custom_buttons_align"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? OldCustomButtonsAlign { get; set; }
+        [JsonPropertyName("media_custom_button_size"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? OldCustomButtonSize { get; set; }
+        [JsonPropertyName("media_custom_more_pos"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? OldCustomMorePos { get; set; }
+        [JsonPropertyName("media_custom_title_size"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? OldCustomTitleSize { get; set; }
+        [JsonPropertyName("media_custom_show_title"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? OldCustomShowTitle { get; set; }
+        [JsonPropertyName("media_custom_show_artist"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? OldCustomShowArtist { get; set; }
+        [JsonPropertyName("media_custom_show_sources"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? OldCustomShowSources { get; set; }
+        [JsonPropertyName("media_custom_show_prev"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? OldCustomShowPrev { get; set; }
+        [JsonPropertyName("media_custom_show_play"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? OldCustomShowPlay { get; set; }
+        [JsonPropertyName("media_custom_show_next"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? OldCustomShowNext { get; set; }
+        [JsonPropertyName("media_skip_buttons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? OldSkipButtons { get; set; }
+        [JsonPropertyName("media_show_progress"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? OldShowProgress { get; set; }
+        [JsonPropertyName("media_show_more"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? OldShowMore { get; set; }
+
+        /// <summary>Eigene Farben des Designs „Eigenes“.</summary>
         [JsonPropertyName("media_custom_bg")] public string MediaCustomBg { get; set; } = "#222222";
         [JsonPropertyName("media_custom_fg")] public string MediaCustomFg { get; set; } = "#ffffff";
         [JsonPropertyName("media_custom_sub")] public string MediaCustomSub { get; set; } = "#a0a0a6";
@@ -238,6 +247,9 @@ namespace KnobFlyout.Config
         /// </summary>
         [JsonPropertyName("media_keep_apps")] public List<string> MediaKeepApps { get; set; } = new();
 
+        /// <summary>Wann die Daueranzeige steht: "playing" = nur während das Programm abspielt, "open" = solange es geöffnet ist (auch pausiert).</summary>
+        [JsonPropertyName("media_keep_mode")] public string MediaKeepMode { get; set; } = "playing";
+
         /// <summary>Daueranzeige an eigener Stelle statt an der normalen Flyout-Position: Platz wie media_corner_preset ("custom" = media_keep_x/y), Bildschirm wie media_monitor.</summary>
         [JsonPropertyName("media_keep_own_position")] public bool MediaKeepOwnPosition { get; set; } = false;
         [JsonPropertyName("media_keep_preset")] public string MediaKeepPreset { get; set; } = "bottom_right";
@@ -245,18 +257,27 @@ namespace KnobFlyout.Config
         [JsonPropertyName("media_keep_x")] public int? MediaKeepX { get; set; }
         [JsonPropertyName("media_keep_y")] public int? MediaKeepY { get; set; }
 
-        /// <summary>±10-Sekunden-Knöpfe direkt neben Play/Pause im Media-Flyout anzeigen.</summary>
-        [JsonPropertyName("media_skip_buttons")] public bool MediaSkipButtons { get; set; } = true;
+        /// <summary>±10-Sekunden-Knöpfe im gewählten Design (Teil des Aufbaus).</summary>
+        [JsonIgnore] public bool MediaSkipButtons { get => Layout().Shows(MediaLayout.Skip); set => Layout().Set(MediaLayout.Skip, value); }
 
         /// <summary>Globale Hotkeys für 10 Sekunden vor / zurück (leer = deaktiviert), z.B. "ctrl+alt+right".</summary>
         [JsonPropertyName("media_skip_forward_hotkey")] public string MediaSkipForwardHotkey { get; set; } = "";
         [JsonPropertyName("media_skip_back_hotkey")] public string MediaSkipBackHotkey { get; set; } = "";
 
-        /// <summary>Fortschrittsleiste (mit Zeiten) im Media-Flyout anzeigen.</summary>
-        [JsonPropertyName("media_show_progress")] public bool MediaShowProgress { get; set; } = true;
+        /// <summary>Fortschrittsleiste im gewählten Design (Teil des Aufbaus).</summary>
+        [JsonIgnore] public bool MediaShowProgress { get => Layout().Shows(MediaLayout.Progress); set => Layout().Set(MediaLayout.Progress, value); }
 
-        /// <summary>"…"-Knopf (Zufallswiedergabe/Wiederholen) im Media-Flyout anzeigen.</summary>
-        [JsonPropertyName("media_show_more")] public bool MediaShowMore { get; set; } = true;
+        /// <summary>"…"-Knopf im gewählten Design (Teil des Aufbaus).</summary>
+        [JsonIgnore] public bool MediaShowMore { get => Layout().Shows(MediaLayout.More); set => Layout().Set(MediaLayout.More, value); }
+
+        /// <summary>„Design anpassen“: Vorschau als echtes Flyout mit dem, was gerade läuft, statt mit dem Beispiel.</summary>
+        [JsonPropertyName("media_preview_live")] public bool MediaPreviewLive { get; set; } = false;
+
+        /// <summary>Quellen-Leiste im gewählten Design (Teil des Aufbaus).</summary>
+        [JsonIgnore] public bool MediaShowSources { get => Layout().Shows(MediaLayout.Sources); set => Layout().Set(MediaLayout.Sources, value); }
+
+        /// <summary>Pause-Zeichen neben spielenden Quellen im gewählten Design (Teil des Aufbaus).</summary>
+        [JsonIgnore] public bool MediaShowSourcePause { get => Layout().Shows(MediaLayout.SourcePause); set => Layout().Set(MediaLayout.SourcePause, value); }
 
         /// <summary>Medien-Wiedergabe-/Pause-Taste lange gedrückt halten wechselt die Medienquelle (statt nur Play/Pause).</summary>
         [JsonPropertyName("media_switch_enabled")] public bool MediaSwitchEnabled { get; set; } = false;
@@ -288,6 +309,51 @@ namespace KnobFlyout.Config
 
         /// <summary>Lautstärke-Stapel hängt am Media-Flyout (über oder unter ihm).</summary>
         public bool OsdFollowsMedia() => CombinedModern() && CombinedAnchor == "media";
+
+        /// <summary>Aufbau des Flyouts für dieses Design (null = das gewählte).</summary>
+        public MediaLayout Layout(string? design = null)
+        {
+            string key = design ?? MediaDesign;
+            if (!MediaLayouts.TryGetValue(key, out var layout)) MediaLayouts[key] = layout = new MediaLayout();
+            return layout;
+        }
+
+        /// <summary>Beim Laden: je Design ein Aufbau; Werte aus älteren Versionen übernehmen.</summary>
+        public void EnsureLayouts()
+        {
+            var designs = new[] { "modernflyouts", "win11", "custom" }.Concat(global::KnobFlyout.Osd.Designs.All.Select(d => d.Key)).ToList();
+            foreach (var key in designs) Layout(key);
+
+            var custom = Layout("custom");
+            if (OldCustomOrder != null && !OldCustomOrder.SequenceEqual(new[] { "app", "info", "progress", "sources", "controls" })) custom.Order = OldCustomOrder;
+            if (OldCustomShowApp == false) custom.Set(MediaLayout.App, false);
+            if (OldCustomShowTimes == false) custom.Set(MediaLayout.Times, false);
+            if (OldCustomShowTitle == false) custom.Set(MediaLayout.Title, false);
+            if (OldCustomShowArtist == false) custom.Set(MediaLayout.Artist, false);
+            if (OldCustomShowSources == false) custom.Set(MediaLayout.Sources, false);
+            if (OldCustomShowPrev == false) custom.Set(MediaLayout.Prev, false);
+            if (OldCustomShowPlay == false) custom.Set(MediaLayout.Play, false);
+            if (OldCustomShowNext == false) custom.Set(MediaLayout.Next, false);
+            if (OldCustomCover != null && OldCustomCover != "right") custom.Cover = OldCustomCover;
+            if (OldCustomCoverSize is { } coverSize && coverSize != 64) custom.CoverSize = coverSize;
+            if (OldCustomButtons == "flat") custom.Buttons = "flat";
+            if (OldCustomButtonsAlign != null && OldCustomButtonsAlign != "center") custom.ButtonsAlign = OldCustomButtonsAlign;
+            if (OldCustomButtonSize is { } buttonSize && buttonSize != 100) custom.ButtonSize = buttonSize;
+            if (OldCustomMorePos == "top") custom.MorePos = "top";
+            if (OldCustomTitleSize is { } titleSize && titleSize != 14) custom.TitleSize = titleSize;
+            foreach (var key in designs)
+            {
+                var layout = Layout(key);
+                if (OldShowProgress == false) layout.Set(MediaLayout.Progress, false);
+                if (OldSkipButtons == false) layout.Set(MediaLayout.Skip, false);
+                if (OldShowMore == false) layout.Set(MediaLayout.More, false);
+            }
+            OldCustomOrder = null;
+            OldCustomShowApp = OldCustomShowTimes = OldCustomShowTitle = OldCustomShowArtist = OldCustomShowSources = OldCustomShowPrev = OldCustomShowPlay = OldCustomShowNext = null;
+            OldCustomCover = OldCustomButtons = OldCustomButtonsAlign = OldCustomMorePos = null;
+            OldCustomCoverSize = OldCustomButtonSize = OldCustomTitleSize = null;
+            OldShowProgress = OldSkipButtons = OldShowMore = null;
+        }
 
         /// <summary>Entspricht cfg.get(f"profile_color_{key}", color) – jetzt aus profile_list.</summary>
         public string GetProfileColor(string key, string fallback) =>

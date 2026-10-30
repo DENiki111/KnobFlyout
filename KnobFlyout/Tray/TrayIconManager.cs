@@ -11,8 +11,8 @@ namespace KnobFlyout.Tray
     public class TrayIconManager : IDisposable
     {
         private readonly TaskbarIcon _icon;
-        private readonly MenuItem _settingsItem;
-        private readonly MenuItem _exitItem;
+        private readonly ContextMenu _menu;
+        private readonly MenuItem _host;
         private bool _lightTaskbar;
 
         public event Action? SettingsRequested;
@@ -28,31 +28,32 @@ namespace KnobFlyout.Tray
             };
             SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
 
-            var menu = new ContextMenu();
-
-            _settingsItem = new MenuItem();
-            _settingsItem.Click += (_, _) => SettingsRequested?.Invoke();
-            menu.Items.Add(_settingsItem);
-
-            menu.Items.Add(new Separator());
-
-            _exitItem = new MenuItem();
-            _exitItem.Click += (_, _) => ExitRequested?.Invoke();
-            menu.Items.Add(_exitItem);
-
-            _icon.ContextMenu = menu;
-            UpdateTexts();
+            // Menü im Stil des „…“-Menüs: ContextMenu nur als Hülle (Maus und Esc wie gewohnt), Inhalt bei jedem Öffnen frisch nach Design.
+            _menu = new ContextMenu
+            {
+                HasDropShadow = false, Background = System.Windows.Media.Brushes.Transparent, BorderThickness = new System.Windows.Thickness(0), Padding = new System.Windows.Thickness(0),
+                Template = Template("ContextMenu", "<ItemsPresenter/>"),
+            };
+            _host = new MenuItem { Template = Template("MenuItem", "<ContentPresenter ContentSource=\"Header\"/>"), StaysOpenOnClick = true };
+            _menu.Items.Add(_host);
+            _icon.ContextMenu = _menu;
+            _icon.PreviewTrayContextMenuOpen += (_, _) => _host.Header = BuildMenu();
         }
 
-        /// <summary>Menütexte in der aktuellen Sprache (nach Sprachwechsel erneut aufrufen).</summary>
-        public void UpdateTexts()
+        private static ControlTemplate Template(string type, string content) => (ControlTemplate)System.Windows.Markup.XamlReader.Parse(
+            $"<ControlTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" TargetType=\"{type}\">{content}</ControlTemplate>");
+
+        private System.Windows.UIElement BuildMenu()
         {
-            _settingsItem.Header = "⚙️ " + Loc.T("Einstellungen", "Settings");
-            _exitItem.Header = Loc.T("Beenden", "Exit");
+            var menu = new Osd.FlyoutMenu(Osd.MediaOsd.MenuLookFor(ConfigManager.Load()), () => _menu.IsOpen = false);
+            menu.Row(Loc.T("Einstellungen", "Settings"), "\uE713", false, true, () => SettingsRequested?.Invoke());
+            menu.Group();
+            menu.Row(Loc.T("Beenden", "Exit"), "\uE7E8", false, true, () => ExitRequested?.Invoke());
+            return menu.Build();
         }
 
-        /// <summary>Lautsprecher ohne Hintergrund (siehe AppIcon.RenderTray), in 32 px – Windows skaliert für 16/20/24 px herunter.</summary>
-        private static Icon CreateIcon(bool lightTaskbar) => AppIcon.CreateTrayIcon(32, lightTaskbar);
+        /// <summary>Knopf ohne Hintergrund (siehe AppIcon.RenderTray) in der echten Größe des Infobereichs.</summary>
+        private static Icon CreateIcon(bool lightTaskbar) => AppIcon.CreateTrayIcon(AppIcon.TraySize, lightTaskbar);
 
         /// <summary>Taskleiste hell/dunkel umgestellt → Symbolfarbe anpassen.</summary>
         private void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)

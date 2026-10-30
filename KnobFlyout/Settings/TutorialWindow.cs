@@ -27,7 +27,7 @@ namespace KnobFlyout.Settings
     /// </summary>
     public sealed partial class TutorialWindow : Window
     {
-        private const double DesignW = 1000, DesignH = 620, StageW = 480;
+        private const double DesignW = 1000, DesignH = 680, StageW = 480;
 
         private sealed record Page(string Hue, Func<string> Title, Func<string> Lead, Func<FrameworkElement> Stage, Action<StackPanel> Body)
         {
@@ -89,6 +89,7 @@ namespace KnobFlyout.Settings
             foreach (var prop in typeof(AppConfig).GetProperties())
             {
                 if (!prop.CanRead || !prop.CanWrite) continue;
+                if (prop.GetCustomAttributes(typeof(System.Text.Json.Serialization.JsonIgnoreAttribute), false).Length > 0) continue; // berechnet oder nur noch zum Übernehmen
                 var value = prop.GetValue(after);
                 if (System.Text.Json.JsonSerializer.Serialize(prop.GetValue(before)) != System.Text.Json.JsonSerializer.Serialize(value))
                     prop.SetValue(to, value);

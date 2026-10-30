@@ -98,6 +98,7 @@ namespace KnobFlyout.Config
         {
             var cfg = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions) ?? new AppConfig();
             ProfileDefinitions.EnsureList(cfg); // Profil-Liste anlegen + je Profil eine App-Liste
+            cfg.EnsureLayouts(); // je Design ein Aufbau, Werte älterer Versionen übernehmen
             return cfg;
         }
 
@@ -109,7 +110,9 @@ namespace KnobFlyout.Config
                 try { return Parse(_lastGoodJson); }
                 catch { /* fällt auf Default zurück */ }
             }
-            return new AppConfig();
+            var fresh = new AppConfig();
+            fresh.EnsureLayouts();
+            return fresh;
         }
 
         private static AppConfig Fail(string message)

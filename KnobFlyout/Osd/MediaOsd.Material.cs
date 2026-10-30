@@ -118,6 +118,10 @@ namespace KnobFlyout.Osd
             Grid.SetColumn(text, 1);
             mid.Children.Add(text);
             stack.Children.Add(mid);
+            _artBlock = _art;
+            _textBlock = text;
+            _infoRow = mid;
+            _moreHost = _moreBtn;
 
             // ── Wellige Leiste: Welle bis kurz vor den Griff, danach flache Spur (die Maus bedient weiter _seekHost) ──
             _seekHost.Height = 24;
@@ -189,6 +193,7 @@ namespace KnobFlyout.Osd
             MacSkipIcon(_skipBackBtn, "\uE777"); // Kreispfeil + „10“ (wie replay_10/forward_10)
             MacSkipIcon(_skipFwdBtn, "\uE72C");
             stack.Children.Add(_m3GroupGrid);
+            _buttonsPanel = _m3GroupGrid;
             UpdateMaterialGroup();
 
             // ── Quellen als Filter-Chips (RenderChips) ──
@@ -223,9 +228,9 @@ namespace KnobFlyout.Osd
             if (cover == null || !ReferenceEquals(cover, _m3LastCover) || _m3Seed == null)
             {
                 _m3LastCover = cover;
-                _m3Seed = cover != null ? CoverAccent(cover) : Config.ThemeHelper.AccentColor();
+                _m3Seed = Own(Config.MediaLayout.ColorSeed) is { } seed ? Hex(seed).Color : cover != null ? CoverAccent(cover) : Config.ThemeHelper.AccentColor();
             }
-            ApplyMaterialColors(MaterialColors.Scheme(_m3Seed.Value, _light), useBackground);
+            ApplyMaterialColors(MaterialColors.Scheme(_m3Seed.Value, _light).WithColors(_layout), useBackground);
             _art.Visibility = useBackground ? Visibility.Collapsed : Visibility.Visible;
         }
 
@@ -294,11 +299,11 @@ namespace KnobFlyout.Osd
         {
             if (_m3Chips == null) return;
             _m3Chips.Children.Clear();
-            _m3Chips.Visibility = sources.Count < 2 ? Visibility.Collapsed : Visibility.Visible;
-            if (sources.Count < 2) return;
+            _m3Chips.Visibility = sources.Count < MinSources ? Visibility.Collapsed : Visibility.Visible;
+            if (sources.Count < MinSources) return;
 
             var pal = _pal!;
-            string? activeAppId = _media.CurrentAppId;
+            string? activeAppId = ActiveSourceId;
             foreach (var src in sources)
             {
                 bool active = src.AppId == activeAppId;
@@ -317,7 +322,7 @@ namespace KnobFlyout.Osd
                     Text = src.Label, FontFamily = _spec!.Font, FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = fg,
                     VerticalAlignment = VerticalAlignment.Center,
                 });
-                if (src.IsPlaying)
+                if (src.IsPlaying && _showSourcePause)
                 {
                     var pauseDot = new TextBlock
                     {
