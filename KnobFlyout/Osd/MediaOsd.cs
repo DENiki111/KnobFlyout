@@ -46,6 +46,21 @@ namespace KnobFlyout.Osd
         /// <summary>Wird gerade per Maus gezogen (dann nicht automatisch verschieben).</summary>
         public bool IsDragging => _dragging;
 
+        /// <summary>Daueranzeige: Ein Programm aus media_keep_apps läuft, nicht automatisch ausblenden (setzt die App).</summary>
+        public bool KeepVisible { get; private set; }
+
+        /// <summary>Daueranzeige an eigener Stelle (media_keep_*): hängt dann weder am OSD, noch hängt das OSD daran.</summary>
+        public bool KeepOwnPosition { get; private set; }
+
+        /// <summary>Liefert true, wenn das Flyout dadurch an eine andere Stelle gehört (ApplyPosition nötig).</summary>
+        public bool SetKeep(bool keep, bool ownPosition)
+        {
+            bool moved = ownPosition != KeepOwnPosition;
+            KeepVisible = keep;
+            KeepOwnPosition = ownPosition;
+            return moved;
+        }
+
         /// <summary>Ziehen beendet (neue Position gespeichert) – App prüft danach auf Überlappung.</summary>
         public event Action? DragFinished;
         private static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
@@ -77,6 +92,7 @@ namespace KnobFlyout.Osd
         private readonly Grid _host;
         private readonly Grid _content; // alles außer dem Hintergrund (Deckkraft: media_content_opacity)
         private readonly AppConfig? _previewCfg; // gesetzt = Vorschau in den Einstellungen
+        private bool _live;                      // Vorschau mit echter Wiedergabe (CreateLive): läuft ohne sichtbares Fenster
         private double _radius;
         private bool _pressed;        // Maus auf freier Fläche gedrückt (für "Klick blendet aus")
         private bool _clickDismiss;
@@ -404,7 +420,7 @@ namespace KnobFlyout.Osd
             _hideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
             _hideTimer.Tick += (_, _) =>
             {
-                if (_seeking || _menuOpen || _pinned) return; // nicht mitten im Springen/Menü bzw. angeheftet ausblenden
+                if (_seeking || _menuOpen || _pinned || KeepVisible) return; // nicht mitten im Springen/Menü, angeheftet oder als Daueranzeige ausblenden
                 _hideTimer.Stop();
                 if (_spec != null) FadeOutThenHide(); // Design-System: weich ausblenden (HideMs; macOS langsam)
                 else Hide();
@@ -808,7 +824,7 @@ namespace KnobFlyout.Osd
             UpdateHudStatus(playing);    // Gaming-HUD: „LÄUFT“/„PAUSE“
             UpdateHwStatus(playing);     // Hardware: Symbol im Display, LED auf der Play-Taste
             if (_waveBars.Count == 0) return;
-            bool run = playing && IsVisible;
+            bool run = playing && (IsVisible || _live);
             double[] still = { 0.5, 0.9, 0.65, 1.0, 0.45 };
             for (int i = 0; i < _waveBars.Count; i++)
             {
@@ -1020,6 +1036,50 @@ namespace KnobFlyout.Osd
             w.Content = null;
             content.Width = W;
             w.Close();
+            return content;
+        }
+
+        /// <summary>
+        /// Echtes Flyout auf der Bühne der Einführung: zeigt, was gerade läuft, und seine Knöpfe, Leiste und Quellen
+        /// wirken wirklich (ohne Wiedergabe das Beispiel). Das Fenster bleibt unsichtbar; dispose beendet alles.
+        /// hasMedia meldet, ob gerade echte Wiedergabe angezeigt wird.
+        /// </summary>
+        public static FrameworkElement CreateLive(AppConfig cfg, MediaController media, Action<bool>? hasMedia, out Action dispose)
+        {
+            var w = new MediaOsd(media, cfg) { _live = true };
+            w.UpdateFrom(SampleInfo());
+            bool closed = false;
+
+            async void Refresh()
+            {
+                try
+                {
+                    var info = media.HasSession ? await media.GetInfoAsync() : null;
+                    if (closed) return;
+                    if (info != null) w.UpdateFrom(info);
+                    hasMedia?.Invoke(info != null);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Flyout-Vorschau: {ex.Message}");
+                }
+            }
+            Action changed = () => w.Dispatcher.BeginInvoke(new Action(Refresh));
+            media.Changed += changed;
+            Refresh();
+            w._tickTimer.Start();
+
+            dispose = () =>
+            {
+                if (closed) return;
+                closed = true;
+                media.Changed -= changed;
+                w._tickTimer.Stop();
+                try { w.Close(); } catch { }
+            };
+            var content = (FrameworkElement)w.Content;
+            w.Content = null;
+            content.Width = W;
             return content;
         }
 
@@ -1466,10 +1526,20 @@ namespace KnobFlyout.Osd
         /// </summary>
         public void ApplyPosition(AppConfig cfg, OsdManager osd)
         {
-            if (cfg.MediaFollowsOsd())
+            if (_dragging) return;
+            if (cfg.MediaFollowsOsd() && !KeepOwnPosition)
             {
                 var p = osd.GetCombinedMediaPosition(cfg, ActualHeight);
-                if (p == null) return; // Stapel gerade leer -> Position unverändert lassen
+                if (p == null)
+                {
+                    if (!KeepVisible) return; // Stapel gerade leer -> Position unverändert lassen
+                    // Daueranzeige ohne sichtbares OSD: dort, wo sie am OSD stehen wird.
+                    var spot = Placement.Layout(cfg, ActualHeight > 0 ? ActualHeight : EstimatedHeight).Media;
+                    _keepBottom = false;
+                    Left = spot.X;
+                    Top = spot.Y;
+                    return;
+                }
                 // "Oberhalb": die Unterkante hängt am Stapel, Höhenänderungen wachsen nach oben (siehe SizeChanged).
                 _keepBottom = p.Value.Above;
                 Left = p.Value.Pos.X;
@@ -1478,9 +1548,10 @@ namespace KnobFlyout.Osd
             else
             {
                 // Unten verankerte Ecken wachsen ebenfalls nach oben, damit die Unterkante am Rand bleibt.
-                _keepBottom = Placement.IsPreset(cfg.MediaCornerPreset) && cfg.MediaCornerPreset.StartsWith("bottom");
+                string preset = KeepOwnPosition ? cfg.MediaKeepPreset : cfg.MediaCornerPreset;
+                _keepBottom = Placement.IsPreset(preset) && preset.StartsWith("bottom");
                 double h = _keepBottom ? ActualHeight : (ActualHeight > 0 ? ActualHeight : EstimatedHeight);
-                var anchor = Placement.MediaAnchor(cfg, W, h);
+                var anchor = KeepOwnPosition ? Placement.MediaKeepAnchor(cfg, W, h) : Placement.MediaAnchor(cfg, W, h);
                 var c = Placement.Clamp(new Rect(anchor, new Size(W, Math.Max(1, h))));
                 Left = c.X;
                 Top = c.Y;
@@ -1507,7 +1578,7 @@ namespace KnobFlyout.Osd
             // nicht separat ziehbar. Sonst ("separate" oder Stapel hängt am Flyout) ist Ziehen IMMER
             // erlaubt, unabhängig vom "OSD verschiebbar"-Haken (der regelt nur die Klick-
             // Durchlässigkeit der Lautstärke-Karten, nicht dieses ohnehin immer klickbare Fenster).
-            if (cfg.MediaFollowsOsd()) return;
+            if (cfg.MediaFollowsOsd() && !KeepOwnPosition) return;
             _dragging = true;
             _dragStart = e.GetPosition(this);
             CaptureMouse();
@@ -1548,7 +1619,7 @@ namespace KnobFlyout.Osd
             var cfg = ConfigManager.Load();
             double x = Left, y = Top;
             const double snapThreshold = 40.0;
-            foreach (var sp in cfg.SnapPositions)
+            foreach (var sp in KeepOwnPosition ? new List<SnapPosition>() : cfg.SnapPositions) // eigene Stelle der Daueranzeige rastet nicht ein
             {
                 // Erst die zum Punkt gehörende Media-Position prüfen, sonst dessen Lautstärke-Position als Fallback.
                 double px = sp.MediaX ?? sp.X;
@@ -1563,9 +1634,19 @@ namespace KnobFlyout.Osd
             var c = Placement.Clamp(new Rect(x, y, ActualWidth, ActualHeight));
             Left = c.X;
             Top = c.Y;
-            cfg.MediaOsdX = (int)Math.Round(c.X);
-            cfg.MediaOsdY = (int)Math.Round(c.Y);
-            cfg.MediaCornerPreset = "custom"; // selbst verschoben → keine Ecken-Voreinstellung mehr
+            if (KeepOwnPosition)
+            {
+                cfg.MediaKeepX = (int)Math.Round(c.X);
+                cfg.MediaKeepY = (int)Math.Round(c.Y);
+                cfg.MediaKeepPreset = "custom";
+                _keepBottom = false;
+            }
+            else
+            {
+                cfg.MediaOsdX = (int)Math.Round(c.X);
+                cfg.MediaOsdY = (int)Math.Round(c.Y);
+                cfg.MediaCornerPreset = "custom"; // selbst verschoben → keine Ecken-Voreinstellung mehr
+            }
             ConfigManager.Save(cfg);
             DragFinished?.Invoke();
         }
@@ -1589,6 +1670,7 @@ namespace KnobFlyout.Osd
 
         private void ResetHideTimer()
         {
+            if (_previewCfg != null) return; // Vorschau blendet sich nie aus
             _hideTimer.Stop();
             _hideTimer.Start();
         }

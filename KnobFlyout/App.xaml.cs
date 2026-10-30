@@ -62,13 +62,17 @@ namespace KnobFlyout
                     ResolveOverlap(); // unabhängige Positionen: Flyout darf den Stapel nicht überdecken
             };
             // Für "Stapel hängt am Media-Flyout": aktuelle Lage des Flyouts und Verschieben per Stapel-Drag.
-            _osd.MediaBounds = () => _mediaOsd != null && _mediaOsd.IsVisible
+            // (Eine Daueranzeige an eigener Stelle zählt nicht: das OSD bleibt dann, wo es ohne sie stünde.)
+            _osd.MediaBounds = () => _mediaOsd != null && _mediaOsd.IsVisible && !_mediaOsd.KeepOwnPosition
+                ? new Rect(_mediaOsd.Left, _mediaOsd.Top, _mediaOsd.ActualWidth, _mediaOsd.ActualHeight)
+                : null;
+            _osd.FixedMediaBounds = () => _mediaOsd != null && _mediaOsd.IsVisible && _mediaOsd.KeepVisible && (_mediaOsd.KeepOwnPosition || !IsCombinedLayout())
                 ? new Rect(_mediaOsd.Left, _mediaOsd.Top, _mediaOsd.ActualWidth, _mediaOsd.ActualHeight)
                 : null;
             // "Klick blendet aus": bei "Zusammen" verschwinden OSD und Media-Flyout gemeinsam.
             _osd.Dismissed += () =>
             {
-                if (_mediaOsd != null && _mediaOsd.IsVisible && IsCombinedLayout()) _mediaOsd.HideNow();
+                if (_mediaOsd != null && _mediaOsd.IsVisible && !_mediaOsd.KeepVisible && IsCombinedLayout()) _mediaOsd.HideNow();
             };
             _osd.MediaAnchorChanged += () =>
             {
@@ -81,18 +85,21 @@ namespace KnobFlyout
 
             // Hook-Handler reihen nur ein (Hook-Callback muss sofort zurückkehren).
             _hook = new LowLevelKeyboardHook();
-            _hook.VolumeUp += (_, _) => { _worker.EnqueueVolume(+1, ApplyVolume); ToTutorial(t => t.OnVolumeKey(+1)); };
-            _hook.VolumeDown += (_, _) => { _worker.EnqueueVolume(-1, ApplyVolume); ToTutorial(t => t.OnVolumeKey(-1)); };
-            _hook.MutePressed += (_, _) => { _worker.Enqueue(ApplyMute); ToTutorial(t => t.OnMuteKey()); };
+            _hook.VolumeUp += (_, _) => { ToTutorial(t => t.OnKnobKey()); _worker.EnqueueVolume(+1, ApplyVolume); };
+            _hook.VolumeDown += (_, _) => { ToTutorial(t => t.OnKnobKey()); _worker.EnqueueVolume(-1, ApplyVolume); };
+            _hook.MutePressed += (_, _) => { ToTutorial(t => t.OnKnobKey()); _worker.Enqueue(ApplyMute); };
             _hook.ProfileHotkeyPressed += (_, _) => Task.Run(() => { CycleProfile(); ToTutorial(t => t.OnProfileHotkey()); });
             // Zuweisen-Taste im offenen Neue-App-Popup: angezeigte App diesem Profil zuweisen.
             _hook.ProfileAssignRequested += key => Dispatcher.BeginInvoke(new Action(() => _newAppOsd?.AssignTo(key)));
-            _hook.LockKeyToggled += (name, on) => Dispatcher.BeginInvoke(new Action(() => _osd?.ShowLockKey(name, on)));
-            _hook.SnapCycleRequested += (_, _) => Dispatcher.BeginInvoke(new Action(CycleSnapPosition));
-            _hook.MediaSourceSwitchRequested += (_, _) => Dispatcher.BeginInvoke(new Action(() => _media.CycleSource()));
-            _hook.MediaNextRequested += (_, _) => Dispatcher.BeginInvoke(new Action(() => _media.Next()));
+            _hook.LockKeyToggled += (name, on) => Dispatcher.BeginInvoke(new Action(() => { _osd?.ShowLockKey(name, on); _tutorial?.OnLockKey(name, on); }));
+            _hook.SnapCycleRequested += (_, _) => Dispatcher.BeginInvoke(new Action(() => { CycleSnapPosition(); _tutorial?.OnSnapCycle(); }));
+            _hook.MediaSourceSwitchRequested += (_, _) => Dispatcher.BeginInvoke(new Action(() => { _media.CycleSource(); _tutorial?.OnMediaGesture("source"); }));
+            _hook.MediaNextRequested += (_, _) => Dispatcher.BeginInvoke(new Action(() => { _media.Next(); _tutorial?.OnMediaGesture("next"); }));
             _hook.MediaSkipRequested += dir => Dispatcher.BeginInvoke(new Action(() =>
-                _media.SkipBy(TimeSpan.FromSeconds(Media.MediaController.SkipSeconds * dir))));
+            {
+                _media.SkipBy(TimeSpan.FromSeconds(Media.MediaController.SkipSeconds * dir));
+                _tutorial?.OnSkipKey(dir);
+            }));
             _hook.Install();
 
             StartNewAppDetection();
@@ -133,6 +140,7 @@ namespace KnobFlyout
                     }
                     (cfg.OsdX, cfg.OsdY) = Map(cfg.OsdX, cfg.OsdY);
                     (cfg.MediaOsdX, cfg.MediaOsdY) = Map(cfg.MediaOsdX, cfg.MediaOsdY);
+                    (cfg.MediaKeepX, cfg.MediaKeepY) = Map(cfg.MediaKeepX, cfg.MediaKeepY);
                     foreach (var sp in cfg.SnapPositions)
                     {
                         var (x, y) = Map(sp.X, sp.Y);
@@ -164,6 +172,7 @@ namespace KnobFlyout
         private void ResolveOverlap()
         {
             if (_osd == null || _mediaOsd == null || !_mediaOsd.IsVisible || _mediaOsd.IsDragging) return;
+            if (_mediaOsd.KeepVisible) return; // Daueranzeige bleibt stehen, der Stapel weicht aus (OsdManager.FixedMediaBounds)
             var stack = _osd.StackBounds;
             if (stack == null) return;
             var cfg = ConfigManager.Load();
@@ -183,34 +192,68 @@ namespace KnobFlyout
                 await _media.InitializeAsync();
                 _media.Changed += () => Dispatcher.BeginInvoke(new Action(async () =>
                 {
-                    if (!ConfigManager.Load().MediaEnabled) { _mediaOsd?.Hide(); return; }
-                    if (!_media.HasSession) { _mediaOsd?.Hide(); return; }
-                    var info = await _media.GetInfoAsync();
-                    if (info == null) return;
-
-                    // Position NUR beim allerersten Erscheinen setzen - nicht bei jeder
-                    // Metadaten-Aktualisierung (Titelwechsel, Play/Pause, ...), sonst würde ein
-                    // laufendes Ziehen des Fensters durch diese Zeile wieder zurückgerissen.
-                    if (_mediaOsd != null && _mediaOsd.StyleChanged)
-                    {
-                        // Farbschema oder Media-Design wurde geändert: Fenster neu aufbauen.
-                        _mediaOsd.Close();
-                        _mediaOsd = null;
-                    }
-
-                    // Beim ersten UND bei jedem erneuten Erscheinen (war ausgeblendet) an die aktuelle
-                    // Position setzen - sonst käme es nach einem Snap-Punkt-Wechsel an der alten Stelle
-                    // zurück. Solange es sichtbar ist, nicht (laufendes Ziehen bleibt unberührt).
-                    bool appearing = _mediaOsd == null || !_mediaOsd.IsVisible;
-                    _mediaOsd ??= CreateMediaOsd();
-                    if (appearing) _mediaOsd.ApplyPosition(ConfigManager.Load(), _osd!);
-                    _mediaOsd.UpdateFrom(info);
+                    try { await ShowMediaAsync(); }
+                    catch (Exception ex) { Logger.Error($"Media: {ex.Message}"); }
                 }));
+                _media.SourcesChanged += () => Dispatcher.BeginInvoke(new Action(RefreshKeep));
+                _ = Dispatcher.BeginInvoke(new Action(RefreshKeep)); // Programm läuft vielleicht schon beim Start
             }
             catch (Exception ex)
             {
                 Logger.Error($"Media init: {ex.Message}");
             }
+        }
+
+        private bool _keepActive; // Daueranzeige: ein Programm aus media_keep_apps läuft
+
+        /// <summary>Programm aus media_keep_apps gestartet oder beendet bzw. Liste geändert: Flyout anzeigen oder normal auslaufen lassen.</summary>
+        private async void RefreshKeep()
+        {
+            try
+            {
+                var cfg = ConfigManager.Load();
+                if (_keepActive || (cfg.MediaEnabled && _media.FindListed(cfg.MediaKeepApps) != null)) await ShowMediaAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Daueranzeige: {ex.Message}");
+            }
+        }
+
+        /// <summary>Flyout mit der aktuellen Quelle anzeigen bzw. aktualisieren.</summary>
+        private async Task ShowMediaAsync()
+        {
+            var cfg = ConfigManager.Load();
+            bool wasKeep = _keepActive;
+            var keep = cfg.MediaEnabled ? _media.FindListed(cfg.MediaKeepApps) : null;
+            _keepActive = keep != null;
+            // Programm der Liste kommt dazu: das Flyout zeigt dieses, nicht die Quelle, die zufällig gerade aktuell ist.
+            if (keep != null && !wasKeep && keep.AppId != _media.CurrentAppId) _media.ShowSource(keep.Session);
+
+            if (!cfg.MediaEnabled) { _mediaOsd?.Hide(); return; }
+            if (!_media.HasSession) { _mediaOsd?.Hide(); return; }
+            var info = await _media.GetInfoAsync();
+            if (info == null) return;
+
+            // Position NUR beim allerersten Erscheinen setzen - nicht bei jeder
+            // Metadaten-Aktualisierung (Titelwechsel, Play/Pause, ...), sonst würde ein
+            // laufendes Ziehen des Fensters durch diese Zeile wieder zurückgerissen.
+            if (_mediaOsd != null && _mediaOsd.StyleChanged)
+            {
+                // Farbschema oder Media-Design wurde geändert: Fenster neu aufbauen.
+                _mediaOsd.Close();
+                _mediaOsd = null;
+            }
+
+            // Beim ersten UND bei jedem erneuten Erscheinen (war ausgeblendet) an die aktuelle
+            // Position setzen - sonst käme es nach einem Snap-Punkt-Wechsel an der alten Stelle
+            // zurück. Solange es sichtbar ist, nicht (laufendes Ziehen bleibt unberührt).
+            bool appearing = _mediaOsd == null || !_mediaOsd.IsVisible;
+            _mediaOsd ??= CreateMediaOsd();
+            bool moved = _mediaOsd.SetKeep(_keepActive, _keepActive && cfg.MediaKeepOwnPosition);
+            if (appearing || moved) _mediaOsd.ApplyPosition(ConfigManager.Load(), _osd!);
+            _mediaOsd.UpdateFrom(info);
+            if (moved) _osd?.Reposition();
         }
 
         private bool _osdFollowsMedia;
@@ -238,7 +281,7 @@ namespace KnobFlyout
             m.SettingsRequested += OpenSettings;
             m.ConfigChanged += () => _hook?.ReloadConfig();
             m.MenuActionRequested += OnMediaMenuAction;
-            m.DismissRequested += () => { if (IsCombinedLayout()) _osd?.HideNow(); };
+            m.DismissRequested += () => { if (!m.KeepOwnPosition && IsCombinedLayout()) _osd?.HideNow(); };
             return m;
         }
 
@@ -292,6 +335,7 @@ namespace KnobFlyout
             var cfg = ConfigManager.Load();
             var results = _audio.ChangeVolume(cfg, steps, _spotify, _youtube);
             if (results.Count > 0) _osd?.Show(results, false);
+            ToTutorial(t => t.OnVolumeResult(results, steps));
         }
 
         /// <summary>Entspricht _exec() in _do_mute().</summary>
@@ -299,6 +343,7 @@ namespace KnobFlyout
         {
             var cfg = ConfigManager.Load();
             var r = _audio.ToggleMute(cfg, _spotify, _youtube);
+            ToTutorial(t => t.OnMuteResult(r));
             if (r.Count == 0) return;
             _osd?.Show(r.Select(x => (x.Name, 0)).ToList(), r[0].Muted);
         }
@@ -393,6 +438,7 @@ namespace KnobFlyout
                 var seen = cfg.SeenApps.Select(a => a.ToLowerInvariant()).ToHashSet();
                 var excluded = cfg.Exclude.Select(a => a.ToLowerInvariant()).ToHashSet();
                 var assigned = cfg.Profiles.Values.SelectMany(v => v).Select(a => a.ToLowerInvariant()).ToHashSet();
+                var autoAssigned = new System.Collections.Generic.List<(string Process, string Profile)>();
 
                 foreach (var s in _audio.GetSessions())
                 {
@@ -402,10 +448,30 @@ namespace KnobFlyout
                     // Gerade angezeigt oder schon eingereiht: nicht erneut einreihen (sonst kommt das
                     // Popup derselben App nach dem Zuweisen gleich noch einmal).
                     if (string.Equals(_newAppShown, s.ProcessName, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    // Erkannte Art von App (Spiel, Browser, Musik, Kommunikation): ohne Popup ins passende Profil
+                    var target = cfg.AutoAssign ? AppClassifier.TargetProfile(cfg, s.ProcessName, AppClassifier.ExePath(s.ProcessId)) : null;
+                    if (target != null)
+                    {
+                        Settings.AppRow.Assign(cfg, s.ProcessName, target);
+                        autoAssigned.Add((s.ProcessName, target));
+                        assigned.Add(key);
+                        seen.Add(key);
+                        continue;
+                    }
+
                     if (_newAppQueue.Any(q => string.Equals(q, s.ProcessName, StringComparison.OrdinalIgnoreCase))) continue;
 
                     _newAppQueue.Enqueue(s.ProcessName);
                     seen.Add(key); // im selben Durchlauf nicht zweimal einreihen
+                }
+
+                if (autoAssigned.Count > 0)
+                {
+                    ConfigManager.Save(cfg);
+                    _audio.InvalidateCache();
+                    foreach (var (process, profile) in autoAssigned) Logger.Info($"Automatisch einsortiert: {process} → {profile}");
+                    ToTutorial(t => t.OnAppsAutoAssigned(autoAssigned));
                 }
 
                 ShowNextNewAppPopup();
@@ -550,8 +616,13 @@ namespace KnobFlyout
 
         private Settings.TutorialWindow NewTutorial()
         {
-            var t = new Settings.TutorialWindow();
+            var t = new Settings.TutorialWindow(_media);
             t.ConfigChanged += OnSettingsConfigApplied; // Taste, Sprache usw. wirken sofort
+            // Knöpfe unter der Vorschau wirken wie der echte Knopf
+            t.VolumeRequested += sign => _worker.EnqueueVolume(sign, ApplyVolume);
+            t.MuteRequested += () => _worker.Enqueue(ApplyMute);
+            t.ProfileOsdRequested += () => _osd?.ShowProfileSwitch();
+            t.AutoAssignRequested += CheckForNewApps; // Automatik eingeschaltet: laufende Apps gleich einsortieren
             return t;
         }
 
@@ -564,7 +635,7 @@ namespace KnobFlyout
 
         private void OpenSettingsWindow(string page)
         {
-            var window = new Settings.SettingsWindow(_spotify, _youtube, null, page);
+            var window = new Settings.SettingsWindow(_spotify, _youtube, null, page, _media);
             AttachSettings(window);
             window.Show();
             window.Activate();
@@ -600,6 +671,7 @@ namespace KnobFlyout
             if (_mediaOsd != null && _mediaOsd.IsVisible)
                 _mediaOsd.ApplyPosition(cfg, _osd!);
             _osd?.Reposition();
+            RefreshKeep();
         }
 
         protected override void OnExit(ExitEventArgs e)

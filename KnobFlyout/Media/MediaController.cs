@@ -70,6 +70,9 @@ namespace KnobFlyout.Media
         /// <summary>Feuert bei Titel-/Wiedergabe-Wechsel. Läuft auf einem WinRT-Callback-Thread, Aufrufer muss ggf. auf den UI-Thread wechseln.</summary>
         public event Action? Changed;
 
+        /// <summary>Ein Programm mit Media-Session kam dazu oder ging (Daueranzeige). Läuft ebenfalls auf einem WinRT-Callback-Thread.</summary>
+        public event Action? SourcesChanged;
+
         public async Task InitializeAsync()
         {
             try
@@ -84,6 +87,11 @@ namespace KnobFlyout.Media
                     // warum Umschalten in der Quellen-Leiste vorher sofort wieder rückgängig
                     // gemacht wurde.
                     if (_session == null || !IsStillValid(_session)) Rehook();
+                };
+                _manager.SessionsChanged += (_, _) =>
+                {
+                    if (_session == null || !IsStillValid(_session)) Rehook();
+                    SourcesChanged?.Invoke();
                 };
                 Rehook();
             }
@@ -187,6 +195,22 @@ namespace KnobFlyout.Media
             return result;
         }
 
+        /// <summary>Gehört die Quelle zu einem Programm der Liste? Name wie in der Quellen-Leiste, Groß-/Kleinschreibung und „.exe“ egal, Teilname reicht.</summary>
+        public static bool IsListed(MediaSource source, IEnumerable<string> names) => names.Any(n =>
+        {
+            string name = n.Trim();
+            if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) name = name[..^4];
+            return name.Length > 0 && (source.Label.Contains(name, StringComparison.OrdinalIgnoreCase) || source.AppId.Contains(name, StringComparison.OrdinalIgnoreCase));
+        });
+
+        /// <summary>Quelle eines Programms aus der Liste (die gerade gezeigte zuerst, dann eine spielende), sonst null.</summary>
+        public MediaSource? FindListed(IReadOnlyCollection<string> names)
+        {
+            if (names.Count == 0) return null;
+            var listed = GetSources().Where(s => IsListed(s, names)).ToList();
+            return listed.FirstOrDefault(s => s.AppId == CurrentAppId) ?? listed.FirstOrDefault(s => s.IsPlaying) ?? listed.FirstOrDefault();
+        }
+
         /// <summary>
         /// Ermittelt einen lesbaren App-Namen zur AppUserModelId. Reihenfolge:
         /// 1. Windows' eigene Namensauflösung (AppInfo) - funktioniert für die meisten paketierten
@@ -279,6 +303,20 @@ namespace KnobFlyout.Media
             _session.PlaybackInfoChanged += OnPlaybackChanged;
             _ = SafeCall(() => session.TryPlayAsync().AsTask());
             Changed?.Invoke();
+        }
+
+        /// <summary>Zeigt und steuert ab jetzt diese Session, ohne etwas zu pausieren oder zu starten (anders als SwitchTo).</summary>
+        public void ShowSource(GlobalSystemMediaTransportControlsSession session)
+        {
+            if (ReferenceEquals(session, _session)) return;
+            if (_session != null)
+            {
+                _session.MediaPropertiesChanged -= OnPropsChanged;
+                _session.PlaybackInfoChanged -= OnPlaybackChanged;
+            }
+            _session = session;
+            _session.MediaPropertiesChanged += OnPropsChanged;
+            _session.PlaybackInfoChanged += OnPlaybackChanged;
         }
 
         private static bool LooksLikeHash(string appId)

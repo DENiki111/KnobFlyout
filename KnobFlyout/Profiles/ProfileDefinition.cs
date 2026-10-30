@@ -47,7 +47,7 @@ namespace KnobFlyout.Profiles
         private static readonly (string Key, string Emoji, string Glyph, string De, string En)[] Builtin =
         {
             ("gaming",        "🎮", "\uE7FC", "Gaming", "Gaming"), // Game
-            ("communication", "💬", "\uE8BD", "Komm.",  "Comms"),  // Message
+            ("communication", "🎙", "\uE720", "Komm.",  "Comms"),  // Microphone
             ("music",         "🎵", "\uE8D6", "Musik",  "Music"),  // Audio
             ("video",         "📺", "\uE714", "Video",  "Video"),  // Video
         };
@@ -104,6 +104,13 @@ namespace KnobFlyout.Profiles
         public static void EnsureList(AppConfig cfg)
         {
             if (cfg.ProfileList.Count == 0) cfg.ProfileList = DefaultEntries(cfg);
+            // Früheres Standard-Logo von „Komm.“ (Sprechblase): unveränderte Profile bekommen das Mikrofon. Das Emoji
+            // verrät „unverändert“ (ein selbst gewähltes Logo löscht es), eine spätere eigene Wahl bleibt also erhalten.
+            foreach (var e in cfg.ProfileList.Where(e => e.Key == "communication" && e.Emoji == "💬"))
+            {
+                e.Emoji = "🎙";
+                e.Glyph = "\uE720";
+            }
             // Entspricht: for k in PROFILE_KEYS: b["profiles"].setdefault(k, [])
             foreach (var key in Keys(cfg))
                 if (!cfg.Profiles.ContainsKey(key))

@@ -28,6 +28,7 @@ namespace KnobFlyout.Osd
         /// <param name="previewCfg">Nur für die Vorschau in den Einstellungen: diese (ungespeicherte) Config, kein Auto-Hide.</param>
         private readonly string _processName;
         private readonly bool _preview;
+        private Action<string?>? _previewAction; // Einführung: Klick auf einen Knopf des Popups
         private readonly double _contentAlpha; // Deckkraft von Text und Knöpfen (osd_content_opacity), Hintergrund: win_alpha
 
         public NewAppOsd(string processName, AppConfig? previewCfg = null)
@@ -150,7 +151,11 @@ namespace KnobFlyout.Osd
         /// <summary>Angezeigte App ignorieren (Exclude), speichern und schließen.</summary>
         private void Exclude()
         {
-            if (_preview) return;
+            if (_preview)
+            {
+                _previewAction?.Invoke(null);
+                return;
+            }
             var fresh = ConfigManager.Load();
             AppRow.ToggleExclude(fresh, _processName);
             MarkSeenAndClose(fresh, _processName);
@@ -190,12 +195,7 @@ namespace KnobFlyout.Osd
 
             // Beim Klick frisch von der Platte laden: das Popup ist bis zu 12 s offen, in der Zeit
             // gespeicherte Änderungen (z. B. vorheriges Popup) sonst mit altem Stand überschrieben.
-            Action exclude = () =>
-            {
-                var fresh = ConfigManager.Load();
-                AppRow.ToggleExclude(fresh, processName);
-                MarkSeenAndClose(fresh, processName);
-            };
+            Action exclude = Exclude;
             // Windows 11: schwarz/weiß – neutrale Flächen mit einfarbigen Fluent-Symbolen.
             // ModernFlyouts: gleiche flache Knöpfe, Symbole in der jeweiligen Profilfarbe.
             string flatBg = win11 ? (light ? "#D6D6DA" : "#3A3A3A") : (light ? "#DADADA" : "#3a3a3a");
@@ -228,7 +228,11 @@ namespace KnobFlyout.Osd
         /// </summary>
         public void AssignTo(string profileKey)
         {
-            if (_preview) return;
+            if (_preview)
+            {
+                _previewAction?.Invoke(profileKey);
+                return;
+            }
             var fresh = ConfigManager.Load();
             if (!ProfileDefinitions.Keys(fresh).Contains(profileKey)) return; // Profil inzwischen gelöscht
             AppRow.Assign(fresh, _processName, profileKey);
@@ -239,6 +243,18 @@ namespace KnobFlyout.Osd
         public static FrameworkElement CreatePreview(AppConfig cfg)
         {
             var w = new NewAppOsd("Discord.exe", cfg);
+            var content = (FrameworkElement)w.Content;
+            w.Content = null;
+            content.Width = w.Width;
+            content.Height = w.Height;
+            w.Close();
+            return content;
+        }
+
+        /// <summary>Popup-Inhalt mit klickbaren Knöpfen für die Einführung: Klick meldet das Profil (null = ⊘), der Aufrufer entscheidet.</summary>
+        public static FrameworkElement CreateLivePreview(AppConfig cfg, string processName, Action<string?> onAction)
+        {
+            var w = new NewAppOsd(processName, cfg) { _previewAction = onAction };
             var content = (FrameworkElement)w.Content;
             w.Content = null;
             content.Width = w.Width;

@@ -264,7 +264,7 @@ namespace KnobFlyout.Osd
             if (_m3WaveShift == null || _m3WavePath == null || _m3FlatPath == null) return;
             _m3WavePath.Visibility = playing ? Visibility.Visible : Visibility.Collapsed;
             _m3FlatPath.Visibility = playing ? Visibility.Collapsed : Visibility.Visible;
-            bool run = playing && IsVisible;
+            bool run = playing && (IsVisible || _live);
             if (run && !_m3WaveRunning)
                 _m3WaveShift.BeginAnimation(TranslateTransform.XProperty,
                     new DoubleAnimation(0, M3WaveLen, TimeSpan.FromMilliseconds(1000)) { RepeatBehavior = RepeatBehavior.Forever });

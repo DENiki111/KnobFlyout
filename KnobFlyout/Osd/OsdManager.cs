@@ -285,6 +285,12 @@ namespace KnobFlyout.Osd
             }
             // Immer vollständig im Bildschirm halten.
             var c = Placement.Clamp(new Rect(origin, new Size(w, stackH)));
+            // Eine feststehende Daueranzeige nicht überdecken: sie bleibt stehen, der Stapel weicht aus.
+            if (FixedMediaBounds?.Invoke() is Rect fixedMedia)
+            {
+                var stack = new Rect(c, new Size(w, stackH));
+                if (Placement.Overlaps(stack, fixedMedia)) c = Placement.AvoidOverlap(stack, fixedMedia);
+            }
             return (c.X, c.Y);
         }
 
@@ -343,6 +349,9 @@ namespace KnobFlyout.Osd
 
         /// <summary>Fenster-Rechteck des Media-Flyouts, falls sichtbar (von App.xaml.cs gesetzt).</summary>
         public Func<Rect?>? MediaBounds { get; set; }
+
+        /// <summary>Fenster-Rechteck der Daueranzeige, wenn sie fest steht und nicht am Stapel hängt (von App.xaml.cs gesetzt).</summary>
+        public Func<Rect?>? FixedMediaBounds { get; set; }
 
         /// <summary>Ein gezogener Stapel hat den Media-Anker verschoben (nur bei cfg.OsdFollowsMedia).</summary>
         public event Action? MediaAnchorChanged;

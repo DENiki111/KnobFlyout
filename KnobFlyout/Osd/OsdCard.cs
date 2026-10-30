@@ -274,6 +274,19 @@ namespace KnobFlyout.Osd
             timer.Start();
         }
 
+        /// <summary>Feststelltasten-Karte mit echtem Namen und Zustand für die Einführung.</summary>
+        public static FrameworkElement CreateLockPreview(AppConfig cfg, string name, bool on)
+        {
+            var card = CreateLockKey(cfg, name, on);
+            var content = (FrameworkElement)card.Content;
+            card.Content = null;
+            content.Width = card.Width;
+            content.Height = card.Height;
+            content.Opacity = 1;
+            card.Close();
+            return content;
+        }
+
         /// <summary>
         /// Karteninhalt für die Live-Vorschau in den Einstellungen ("volume", "profile", "lockkey",
         /// "snap"): Karte mit cfg (auch ungespeichert) bauen, Inhalt herauslösen, Fenster verwerfen.
@@ -298,11 +311,11 @@ namespace KnobFlyout.Osd
         }
 
         /// <summary>Wie CreatePreview("volume"), aber die Karte lässt sich weiter ändern (Einführung: reagiert auf den echten Knopf).</summary>
-        public static FrameworkElement CreateLiveVolumePreview(AppConfig cfg, string name, int pct, bool muted, out Action<int, bool> update)
+        public static FrameworkElement CreateLiveVolumePreview(AppConfig cfg, string name, int pct, bool muted, out Action<string, int, bool> update)
         {
             var card = CreateVolume(cfg, name);
             card.UpdateVolume(name, pct, muted);
-            update = (p, m) => card.UpdateVolume(name, p, m);
+            update = card.UpdateVolume;
             var content = (FrameworkElement)card.Content;
             card.Content = null;
             content.Width = card.Width;

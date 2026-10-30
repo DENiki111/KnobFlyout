@@ -36,7 +36,7 @@ namespace KnobFlyout.Config
         [JsonPropertyName("apps")] public List<string> Apps { get; set; } = new();
         [JsonPropertyName("exclude")] public List<string> Exclude { get; set; } = new();
         [JsonPropertyName("mode")] public string Mode { get; set; } = "active";
-        [JsonPropertyName("step")] public int Step { get; set; } = 3;
+        [JsonPropertyName("step")] public int Step { get; set; } = 2;
         [JsonPropertyName("step_spotify")] public int StepSpotify { get; set; } = 4;
         [JsonPropertyName("osd")] public bool Osd { get; set; } = true;
         [JsonPropertyName("osd_duration")] public int OsdDuration { get; set; } = 2500;
@@ -69,6 +69,12 @@ namespace KnobFlyout.Config
         };
 
         [JsonPropertyName("seen_apps")] public List<string> SeenApps { get; set; } = new();
+
+        /// <summary>Neue Apps ohne Rückfrage einsortieren (Profiles/AppClassifier.cs); nicht Erkanntes fragt weiter das Popup.</summary>
+        [JsonPropertyName("auto_assign")] public bool AutoAssign { get; set; } = false;
+
+        /// <summary>Art der App (games, browsers, music, comms) → Profil; "" = nachfragen, fehlt = Standard-Profil der Art.</summary>
+        [JsonPropertyName("auto_assign_map")] public Dictionary<string, string> AutoAssignMap { get; set; } = new();
 
         /// <summary>"active" = nur spielende Apps | "assigned" = alle zugewiesenen Apps des Profils.</summary>
         [JsonPropertyName("profile_mode")] public string ProfileMode { get; set; } = "active";
@@ -225,6 +231,19 @@ namespace KnobFlyout.Config
 
         /// <summary>Wie lange das Media-Flyout sichtbar bleibt (ms), gerechnet ab der letzten Aktualisierung/Bedienung.</summary>
         [JsonPropertyName("media_duration_ms")] public int MediaDurationMs { get; set; } = 6000;
+
+        /// <summary>
+        /// Daueranzeige: Solange eines dieser Programme eine Media-Session hat (Name wie in der Quellen-Leiste, z. B. "Spotify"),
+        /// bleibt das Flyout stehen, statt nach media_duration_ms auszublenden.
+        /// </summary>
+        [JsonPropertyName("media_keep_apps")] public List<string> MediaKeepApps { get; set; } = new();
+
+        /// <summary>Daueranzeige an eigener Stelle statt an der normalen Flyout-Position: Platz wie media_corner_preset ("custom" = media_keep_x/y), Bildschirm wie media_monitor.</summary>
+        [JsonPropertyName("media_keep_own_position")] public bool MediaKeepOwnPosition { get; set; } = false;
+        [JsonPropertyName("media_keep_preset")] public string MediaKeepPreset { get; set; } = "bottom_right";
+        [JsonPropertyName("media_keep_monitor")] public string MediaKeepMonitor { get; set; } = "";
+        [JsonPropertyName("media_keep_x")] public int? MediaKeepX { get; set; }
+        [JsonPropertyName("media_keep_y")] public int? MediaKeepY { get; set; }
 
         /// <summary>±10-Sekunden-Knöpfe direkt neben Play/Pause im Media-Flyout anzeigen.</summary>
         [JsonPropertyName("media_skip_buttons")] public bool MediaSkipButtons { get; set; } = true;
