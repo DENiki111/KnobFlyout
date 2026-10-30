@@ -24,7 +24,9 @@ namespace KnobFlyoutSetup
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            // Bei einem Update steht die Sprache schon in der vorhandenen Installation, dann nicht noch einmal fragen.
             var restart = SetupArgs.Parse(args);
+            restart.Lang = restart.Lang ?? InstallEngine.InstalledLanguage();
             if (restart.Lang == null)
             {
                 using (var language = new LanguageForm())

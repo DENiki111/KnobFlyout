@@ -11,14 +11,15 @@ namespace KnobFlyoutSetup
 {
     /// <summary>
     /// Installations-Assistent wie bei üblichen Programmen: Willkommen → Zielordner (der Ordner „KnobFlyout“ wird
-    /// automatisch angelegt) → Optionen → Bereit → Installation → Fertig. Kopfzeile mit Titel und App-Symbol, unten
-    /// „Zurück“ / „Weiter“ / „Abbrechen“.
+    /// automatisch angelegt) → Optionen → Bereit → Installation → Fertig. Ist schon eine Version installiert, startet er
+    /// stattdessen auf der Seite „Aktualisieren“: ein Klick genügt, Ordner, Optionen und Einstellungen bleiben.
+    /// Kopfzeile mit Titel und App-Symbol, unten „Zurück“ / „Weiter“ / „Abbrechen“.
     /// </summary>
     internal sealed class WizardForm : Form
     {
         public static readonly Icon AppIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 
-        private const int Welcome = 0, Folder = 1, Options = 2, Ready = 3, Progress = 4, Finish = 5;
+        private const int Welcome = 0, Folder = 1, Options = 2, Ready = 3, Progress = 4, Finish = 5, UpdatePage = 6;
 
         private readonly Label _title = new Label();
         private readonly Label _subtitle = new Label();
@@ -28,6 +29,8 @@ namespace KnobFlyoutSetup
         private readonly string _existing = InstallEngine.ExistingInstall();
         private readonly string _legacy = InstallEngine.LegacyInstall();
         private readonly long _size = InstallEngine.PayloadSize();
+        private readonly int _compare; // vorhandene Installation gegen dieses Setup: < 0 älter, 0 gleich, > 0 neuer
+        private bool Updating => _existing != null || _legacy != null;
         private int _page;
         private bool _installing, _finished, _restarting;
 
@@ -38,6 +41,7 @@ namespace KnobFlyoutSetup
 
         public WizardForm(SetupArgs args)
         {
+            _compare = _existing != null ? InstallEngine.CompareInstalled(InstallEngine.ExistingVersion()) : -1;
             Text = L.T("KnobFlyout Setup", "KnobFlyout Setup");
             Font = SystemFonts.MessageBoxFont;
             AutoScaleMode = AutoScaleMode.Font;
@@ -57,6 +61,7 @@ namespace KnobFlyoutSetup
             _pages.Add(BuildReady());
             _pages.Add(BuildProgress());
             _pages.Add(BuildFinish());
+            _pages.Add(BuildUpdate());
             foreach (var p in _pages)
             {
                 p.Dock = DockStyle.Fill;
@@ -66,7 +71,7 @@ namespace KnobFlyoutSetup
 
             FormClosing += OnClosing;
             // Nach dem Neustart als Administrator direkt zur Zusammenfassung.
-            ShowPage(args.Dir != null ? Ready : Welcome);
+            ShowPage(args.Dir != null ? Ready : Updating ? UpdatePage : Welcome);
         }
 
         // ── Aufbau ──────────────────────────────────────────────────────────
@@ -103,12 +108,13 @@ namespace KnobFlyoutSetup
                 b.Top = 14;
                 bar.Controls.Add(b);
             }
+            _next.Width = 116; // „Neu installieren“ passt sonst nicht
             _cancel.Left = ClientSize.Width - 12 - _cancel.Width;
             _next.Left = _cancel.Left - 12 - _next.Width;
             _back.Left = _next.Left - 6 - _back.Width;
             _back.Text = L.T("< Zurück", "< Back");
             _cancel.Text = L.T("Abbrechen", "Cancel");
-            _back.Click += (_, __) => ShowPage(_page == Ready ? Options : _page - 1);
+            _back.Click += (_, __) => ShowPage(_page == Ready ? Options : _page == Folder && Updating ? UpdatePage : _page - 1);
             _next.Click += (_, __) => Next();
             _cancel.Click += (_, __) => Close();
             AcceptButton = _next;
@@ -130,17 +136,48 @@ namespace KnobFlyoutSetup
             var page = Page();
             string text = L.T(
                 $"Dieser Assistent installiert KnobFlyout {InstallEngine.Version} – Lautstärke pro App mit OSD, Media-Flyout und Profilen.\r\n\r\n" +
-                "Administratorrechte sind nicht nötig, solange der Zielordner in Ihrem Benutzerprofil liegt.\r\n\r\n",
+                "Administratorrechte sind nicht nötig, solange der Zielordner in Ihrem Benutzerprofil liegt.\r\n\r\n" +
+                "Klicken Sie auf „Weiter“, um fortzufahren.",
                 $"This wizard installs KnobFlyout {InstallEngine.Version} – per-app volume with OSD, media flyout and profiles.\r\n\r\n" +
-                "No administrator rights are needed as long as the target folder is inside your user profile.\r\n\r\n");
-            if (_existing != null)
-                text += L.T("Eine vorhandene Installation wird aktualisiert – Ihre Einstellungen bleiben erhalten.\r\n\r\n",
-                    "An existing installation will be updated – your settings are kept.\r\n\r\n");
-            else if (_legacy != null)
-                text += L.T("Die vorhandene Installation unter dem alten Namen „ModernFlyout“ wird übernommen: Ihre Einstellungen bleiben erhalten, die alte Version wird danach entfernt.\r\n\r\n",
-                    "The existing installation under the old name “ModernFlyout” is taken over: your settings are kept and the old version is removed afterwards.\r\n\r\n");
-            text += L.T("Klicken Sie auf „Weiter“, um fortzufahren.", "Click “Next” to continue.");
+                "No administrator rights are needed as long as the target folder is inside your user profile.\r\n\r\n" +
+                "Click “Next” to continue.");
             AddText(page, text, 0);
+            return page;
+        }
+
+        /// <summary>Vorhandene Installation gefunden: was installiert ist, was neu kommt; „Aktualisieren“ erledigt den Rest.</summary>
+        private Panel BuildUpdate()
+        {
+            var page = Page();
+            string unknown = L.T("unbekannt", "unknown");
+            string text;
+            if (_existing == null)
+            {
+                text = L.T($"Die ältere Version „ModernFlyout“ ({InstallEngine.LegacyVersion() ?? unknown}) wurde gefunden und wird durch KnobFlyout {InstallEngine.Version} ersetzt.\r\n\r\n",
+                    $"The older version “ModernFlyout” ({InstallEngine.LegacyVersion() ?? unknown}) was found and will be replaced by KnobFlyout {InstallEngine.Version}.\r\n\r\n");
+                text += L.T("Ihre Einstellungen werden übernommen, die alte Version wird danach entfernt.", "Your settings are taken over and the old version is removed afterwards.");
+            }
+            else
+            {
+                string versions = L.T($"Installiert: Version {InstallEngine.ExistingVersion() ?? unknown}\r\nDieses Setup: Version {InstallEngine.Version}\r\nOrdner: {_existing}\r\n\r\n",
+                    $"Installed: version {InstallEngine.ExistingVersion() ?? unknown}\r\nThis setup: version {InstallEngine.Version}\r\nFolder: {_existing}\r\n\r\n");
+                text = _compare < 0
+                    ? L.T("KnobFlyout ist bereits installiert und kann jetzt aktualisiert werden.\r\n\r\n", "KnobFlyout is already installed and can be updated now.\r\n\r\n")
+                    : _compare == 0
+                        ? L.T("Diese Version von KnobFlyout ist bereits installiert. Sie können sie neu installieren, falls etwas nicht funktioniert.\r\n\r\n",
+                            "This version of KnobFlyout is already installed. You can reinstall it if something isn't working.\r\n\r\n")
+                        : L.T("Installiert ist eine neuere Version. Wenn Sie fortfahren, wird sie durch die ältere Version aus diesem Setup ersetzt.\r\n\r\n",
+                            "A newer version is installed. If you continue, it will be replaced by the older version from this setup.\r\n\r\n");
+                text += versions + L.T("Einstellungen, Profile, Spotify-Anmeldung, Autostart und Verknüpfungen bleiben, wie sie sind.",
+                    "Settings, profiles, Spotify sign-in, autostart and shortcuts stay as they are.");
+            }
+            if (InstallEngine.RunningApps().Count > 0)
+                text += L.T(" KnobFlyout läuft gerade und wird dafür kurz beendet.", " KnobFlyout is running and will be closed for a moment.");
+            AddText(page, text, 0);
+
+            var change = new LinkLabel { Text = L.T("Ordner oder Optionen ändern …", "Change folder or options …"), Dock = DockStyle.Bottom, Height = 24, TabStop = true };
+            change.LinkClicked += (_, __) => ShowPage(Folder);
+            page.Controls.Add(change);
             return page;
         }
 
@@ -188,8 +225,9 @@ namespace KnobFlyoutSetup
         {
             var page = Page();
             AddText(page, L.T("Welche zusätzlichen Aufgaben sollen ausgeführt werden?", "Which additional tasks should be performed?"), 0);
-            _desktop = Check(page, L.T("Verknüpfung auf dem Desktop", "Desktop shortcut"), 36, args.Desktop ?? true);
-            _startMenu = Check(page, L.T("Eintrag im Startmenü (damit die Windows-Suche KnobFlyout findet)", "Start menu entry (so Windows search finds KnobFlyout)"), 64, args.StartMenu ?? true);
+            // Bei einem Update bleiben Verknüpfungen so, wie sie sind (selbst gelöschte kommen nicht wieder).
+            _desktop = Check(page, L.T("Verknüpfung auf dem Desktop", "Desktop shortcut"), 36, args.Desktop ?? (_existing == null || File.Exists(InstallEngine.DesktopShortcut)));
+            _startMenu = Check(page, L.T("Eintrag im Startmenü (damit die Windows-Suche KnobFlyout findet)", "Start menu entry (so Windows search finds KnobFlyout)"), 64, args.StartMenu ?? (_existing == null || File.Exists(InstallEngine.StartMenuShortcut)));
             // Bei einem Update den aktuellen Stand übernehmen (z. B. im Task-Manager abgeschaltet), sonst an.
             _autostart = Check(page, L.T("Mit Windows starten (Autostart)", "Start with Windows (autostart)"), 92,
                 args.Autostart ?? (_existing == null || InstallEngine.AutostartEnabled()));
@@ -225,8 +263,13 @@ namespace KnobFlyoutSetup
         private Panel BuildFinish()
         {
             var page = Page();
-            AddText(page, L.T("KnobFlyout wurde erfolgreich installiert.\r\n\r\nDas Programm läuft im Infobereich der Taskleiste (neben der Uhr); dort öffnen Sie auch die Einstellungen.",
-                "KnobFlyout has been installed successfully.\r\n\r\nThe program runs in the notification area of the taskbar (next to the clock); the settings are opened from there."), 0);
+            string done = !Updating || _compare > 0
+                ? L.T("KnobFlyout wurde erfolgreich installiert.", "KnobFlyout has been installed successfully.")
+                : _compare == 0
+                    ? L.T($"KnobFlyout {InstallEngine.Version} wurde neu installiert.", $"KnobFlyout {InstallEngine.Version} has been reinstalled.")
+                    : L.T($"KnobFlyout wurde auf Version {InstallEngine.Version} aktualisiert.", $"KnobFlyout has been updated to version {InstallEngine.Version}.");
+            AddText(page, done + L.T("\r\n\r\nDas Programm läuft im Infobereich der Taskleiste (neben der Uhr); dort öffnen Sie auch die Einstellungen.",
+                "\r\n\r\nThe program runs in the notification area of the taskbar (next to the clock); the settings are opened from there."), 0);
             _launch = Check(page, L.T("KnobFlyout jetzt starten", "Launch KnobFlyout now"), 96, true);
             return page;
         }
@@ -240,6 +283,8 @@ namespace KnobFlyoutSetup
             (string title, string subtitle) = page switch
             {
                 Welcome => (L.T("Willkommen", "Welcome"), L.T("Setup von KnobFlyout", "KnobFlyout setup")),
+                UpdatePage => (_compare == 0 ? L.T("KnobFlyout neu installieren", "Reinstall KnobFlyout") : L.T("KnobFlyout aktualisieren", "Update KnobFlyout"),
+                    L.T("Eine vorhandene Installation wurde gefunden", "An existing installation was found")),
                 Folder => (L.T("Zielordner wählen", "Choose the destination folder"), L.T("Wohin soll KnobFlyout installiert werden?", "Where should KnobFlyout be installed?")),
                 Options => (L.T("Zusätzliche Aufgaben", "Additional tasks"), L.T("Verknüpfungen und Autostart", "Shortcuts and autostart")),
                 Ready => (L.T("Bereit zur Installation", "Ready to install"), L.T("Bitte die Angaben prüfen", "Please check the settings")),
@@ -261,11 +306,13 @@ namespace KnobFlyoutSetup
                         "Old version “ModernFlyout” (settings are taken over, then removed):") + "\r\n      " + _legacy;
             }
 
-            _back.Visible = page != Welcome && page != Progress && page != Finish;
+            _back.Visible = page != Welcome && page != UpdatePage && page != Progress && page != Finish;
             _cancel.Visible = page != Finish;
             _cancel.Enabled = page != Progress;
             _next.Enabled = page != Progress;
-            _next.Text = page == Ready ? L.T("Installieren", "Install") : page == Finish ? L.T("Fertigstellen", "Finish") : L.T("Weiter >", "Next >");
+            _next.Text = page == Ready ? L.T("Installieren", "Install")
+                : page == UpdatePage ? (_compare < 0 ? L.T("Aktualisieren", "Update") : _compare == 0 ? L.T("Neu installieren", "Reinstall") : L.T("Ersetzen", "Replace"))
+                : page == Finish ? L.T("Fertigstellen", "Finish") : L.T("Weiter >", "Next >");
         }
 
         private void Next()
@@ -282,6 +329,7 @@ namespace KnobFlyoutSetup
                     ShowPage(Options);
                     break;
                 case Ready:
+                case UpdatePage:
                     StartInstall();
                     break;
                 case Finish:
@@ -327,13 +375,18 @@ namespace KnobFlyoutSetup
             }
 
             // Laufende Version beenden (Datei sonst gesperrt); ihren Ordner merken, um die Einstellungen zu übernehmen.
+            // Auf der Update-Seite steht das schon im Text, dort nicht noch einmal nachfragen.
+            int from = _page;
             var running = InstallEngine.RunningApps();
             var folders = running.Select(InstallEngine.FolderOf).ToList();
             if (running.Count > 0)
             {
-                var answer = MessageBox.Show(this, L.T("KnobFlyout läuft gerade und wird für die Installation beendet.", "KnobFlyout is running and will be closed for the installation."),
-                    Text, MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
-                if (answer != DialogResult.OK) return;
+                if (from != UpdatePage)
+                {
+                    var answer = MessageBox.Show(this, L.T("KnobFlyout läuft gerade und wird für die Installation beendet.", "KnobFlyout is running and will be closed for the installation."),
+                        Text, MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
+                    if (answer != DialogResult.OK) return;
+                }
                 foreach (var p in running)
                 {
                     try { p.Kill(); p.WaitForExit(5000); } catch { /* schon beendet */ }
@@ -363,7 +416,7 @@ namespace KnobFlyoutSetup
             {
                 _installing = false;
                 MessageBox.Show(this, L.T("Die Installation ist fehlgeschlagen:\r\n\r\n", "Installation failed:\r\n\r\n") + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
-                ShowPage(Ready);
+                ShowPage(from);
             }
         }
 
