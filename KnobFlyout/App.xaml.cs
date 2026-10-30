@@ -81,10 +81,10 @@ namespace KnobFlyout
 
             // Hook-Handler reihen nur ein (Hook-Callback muss sofort zurückkehren).
             _hook = new LowLevelKeyboardHook();
-            _hook.VolumeUp += (_, _) => _worker.EnqueueVolume(+1, ApplyVolume);
-            _hook.VolumeDown += (_, _) => _worker.EnqueueVolume(-1, ApplyVolume);
-            _hook.MutePressed += (_, _) => _worker.Enqueue(ApplyMute);
-            _hook.ProfileHotkeyPressed += (_, _) => Task.Run(CycleProfile);
+            _hook.VolumeUp += (_, _) => { _worker.EnqueueVolume(+1, ApplyVolume); ToTutorial(t => t.OnVolumeKey(+1)); };
+            _hook.VolumeDown += (_, _) => { _worker.EnqueueVolume(-1, ApplyVolume); ToTutorial(t => t.OnVolumeKey(-1)); };
+            _hook.MutePressed += (_, _) => { _worker.Enqueue(ApplyMute); ToTutorial(t => t.OnMuteKey()); };
+            _hook.ProfileHotkeyPressed += (_, _) => Task.Run(() => { CycleProfile(); ToTutorial(t => t.OnProfileHotkey()); });
             // Zuweisen-Taste im offenen Neue-App-Popup: angezeigte App diesem Profil zuweisen.
             _hook.ProfileAssignRequested += key => Dispatcher.BeginInvoke(new Action(() => _newAppOsd?.AssignTo(key)));
             _hook.LockKeyToggled += (name, on) => Dispatcher.BeginInvoke(new Action(() => _osd?.ShowLockKey(name, on)));
@@ -101,6 +101,8 @@ namespace KnobFlyout
             // Auflösung/Monitore: beim Start mit dem gespeicherten Aufbau vergleichen, danach live verfolgen.
             OnDisplayChanged();
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+
+            if (Settings.TutorialWindow.ShowOnStart(ConfigManager.Load())) ShowTutorial(false);
         }
 
         private void OnDisplaySettingsChanged(object? sender, EventArgs e) =>
@@ -498,13 +500,71 @@ namespace KnobFlyout
 
         private void OpenSettings()
         {
+            if (_tutorial != null)
+            {
+                if (_settingsWindow == null) _settingsAfterTutorial = true;
+                _tutorial.Activate();
+                return;
+            }
             if (_settingsWindow != null)
             {
                 _settingsWindow.Activate();
                 return;
             }
 
-            var window = new Settings.SettingsWindow(_spotify, _youtube);
+            // Einführung kommt beim Öffnen der Einstellungen, bis sie per Häkchen abgestellt ist.
+            if (Settings.TutorialWindow.ShowWithSettings(ConfigManager.Load())) ShowTutorial(true);
+            else OpenSettingsWindow("general");
+        }
+
+        private Settings.TutorialWindow? _tutorial;
+        private bool _settingsAfterTutorial; // Einführung schließen → Einstellungen öffnen
+
+        /// <summary>Einführung ohne Besitzer (Programmstart oder vor den Einstellungen).</summary>
+        private void ShowTutorial(bool thenSettings)
+        {
+            _settingsAfterTutorial = thenSettings;
+            var t = NewTutorial();
+            t.Closed += (_, _) =>
+            {
+                _tutorial = null;
+                bool open = _settingsAfterTutorial || t.RequestedSettingsPage != null;
+                _settingsAfterTutorial = false;
+                if (open) OpenSettingsWindow(t.RequestedSettingsPage ?? "general");
+            };
+            _tutorial = t;
+            t.Show();
+            t.Activate();
+        }
+
+        /// <summary>Einführung aus den Einstellungen heraus (Allgemein → Einführung): Dialog über dem Fenster.</summary>
+        private string? ShowTutorialDialog(Window owner)
+        {
+            var t = NewTutorial();
+            t.Owner = owner;
+            _tutorial = t;
+            t.ShowDialog();
+            _tutorial = null;
+            return t.RequestedSettingsPage;
+        }
+
+        private Settings.TutorialWindow NewTutorial()
+        {
+            var t = new Settings.TutorialWindow();
+            t.ConfigChanged += OnSettingsConfigApplied; // Taste, Sprache usw. wirken sofort
+            return t;
+        }
+
+        /// <summary>Tasten-Ereignis (Hook-Thread) an die offene Einführung weiterreichen, damit „Probier es aus“ reagiert.</summary>
+        private void ToTutorial(Action<Settings.TutorialWindow> action)
+        {
+            if (_tutorial == null) return;
+            Dispatcher.BeginInvoke(new Action(() => { if (_tutorial != null) action(_tutorial); }));
+        }
+
+        private void OpenSettingsWindow(string page)
+        {
+            var window = new Settings.SettingsWindow(_spotify, _youtube, null, page);
             AttachSettings(window);
             window.Show();
             window.Activate();
@@ -524,6 +584,7 @@ namespace KnobFlyout
             };
             window.Replaced += AttachSettings;
             window.ConfigApplied += OnSettingsConfigApplied;
+            window.TutorialRequested += ShowTutorialDialog;
         }
 
         /// <summary>Settings hat gespeichert, Positionen zurückgesetzt oder die Config neu geladen: Sprache übernehmen, Flyouts neu ausrichten.</summary>
@@ -546,6 +607,8 @@ namespace KnobFlyout
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             _newAppTimer?.Stop();
             _newAppOsd?.Close();
+            _settingsAfterTutorial = false;
+            _tutorial?.Close();
             _settingsWindow?.Close();
             _hook?.Dispose();
             _tray?.Dispose();

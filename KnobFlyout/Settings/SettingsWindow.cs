@@ -73,6 +73,9 @@ namespace KnobFlyout.Settings
         /// <summary>Wird ausgelöst, wenn sich das Fenster (Farbschema, Sprache, Neu laden) durch ein neues ersetzt.</summary>
         public event Action<SettingsWindow>? Replaced;
 
+        /// <summary>„Einführung anzeigen“: App zeigt sie als Dialog; Ergebnis = gewünschte Einstellungs-Seite (oder null).</summary>
+        public event Func<Window, string?>? TutorialRequested;
+
         /// <summary>Gespeichert, Positionen zurückgesetzt, Sprache gewechselt oder neu geladen: App übernimmt die Config.</summary>
         public event Action? ConfigApplied;
 
@@ -152,30 +155,7 @@ namespace KnobFlyout.Settings
         /// Slider, Buttons, Listen, Kontextmenü) und stellt die Theme-Farben als Ressourcen bereit.
         /// Schlägt das Laden fehl, bleibt es still beim Windows-Standardlook.
         /// </summary>
-        private void ApplyControlTheme()
-        {
-            Resources["ThemeFg"] = Fg;
-            Resources["ThemeField"] = FieldBg;
-            Resources["ThemeBorder"] = FieldBorder;
-            Resources["ThemeHover"] = HoverBg;
-            Resources["ThemePressed"] = PressedBg;
-            Resources["ThemeAccent"] = Accent;
-            Resources["ThemeThumb"] = ThumbBg;
-            Resources["ThemeThumbHover"] = ThumbHoverBg;
-            Resources["ThemeTrack"] = TrackBg;
-
-            try
-            {
-                Resources.MergedDictionaries.Add(new ResourceDictionary
-                {
-                    Source = new Uri("/KnobFlyout;component/Settings/Theme.xaml", UriKind.Relative),
-                });
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Theme.xaml: {ex.Message}");
-            }
-        }
+        private void ApplyControlTheme() => UiHelpers.ApplyControlTheme(this);
 
         /// <summary>
         /// Farbschema gewechselt: nur den Theme-Wert sofort speichern (übrige, noch ungespeicherte
@@ -208,6 +188,17 @@ namespace KnobFlyout.Settings
             ReopenWith(_cfg);
         }
 
+        /// <summary>Einführung als Dialog; was sie direkt gespeichert hat, danach übernehmen (ungespeicherte Änderungen hier bleiben).</summary>
+        private void OpenTutorial()
+        {
+            string? page = TutorialRequested?.Invoke(this);
+            TutorialWindow.CopyEditedFields(ConfigManager.Load(), _cfg);
+            Loc.Apply(_cfg);
+            SetTheme(ThemeHelper.IsLight(_cfg));
+            if (page != null) _currentPage = page;
+            ReopenWith(_cfg);
+        }
+
         /// <summary>Fenster mit derselben Position, Größe und Seite neu aufbauen (carry null = frisch von der Platte).</summary>
         private SettingsWindow ReopenWith(AppConfig? carry)
         {
@@ -226,22 +217,7 @@ namespace KnobFlyout.Settings
             return next;
         }
 
-        private void ApplyDarkTitleBar()
-        {
-            try
-            {
-                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-                int on = Light ? 0 : 1;
-                DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, ref on, sizeof(int));
-            }
-            catch
-            {
-                // Rein kosmetisch - ohne dunkle Titelleiste funktioniert alles genauso.
-            }
-        }
-
-        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+        private void ApplyDarkTitleBar() => UiHelpers.ApplyDarkTitleBar(this);
 
         // ── Navigation ──────────────────────────────────────────────────────
         private DockPanel BuildNav()
@@ -418,6 +394,8 @@ namespace KnobFlyout.Settings
                 if (profileKeys.Length > 0 && !profileKeys.Contains(_cfg.ActiveProfile)) _cfg.ActiveProfile = profileKeys[0];
                 _cfg.SeenApps = onDisk.SeenApps;
                 _cfg.ScreenLayout = onDisk.ScreenLayout; // vom Bildschirmwechsel-Abgleich der App gepflegt
+                _cfg.TutorialHidden = onDisk.TutorialHidden; // Häkchen in der Einführung
+                _cfg.TutorialStarted = onDisk.TutorialStarted;
                 // Vom Snap-Zyklus gesetzt; wurden hier Anordnung/Ecke geändert, endet es.
                 _cfg.SnapIndependent = !_layoutTouched && onDisk.SnapIndependent;
 
@@ -464,6 +442,13 @@ namespace KnobFlyout.Settings
                     try { Autostart.SetEnabled(v); }
                     catch (Exception ex) { Logger.Error($"Autostart: {ex.Message}"); }
                 })));
+
+            page.Children.Add(SectionTitle(T("Hilfe", "Help")));
+            var tutorial = Btn(T("Anzeigen", "Show"), 110);
+            tutorial.Margin = new Thickness(0);
+            tutorial.Click += (_, _) => OpenTutorial();
+            page.Children.Add(SettingCard("\uE897", T("Einführung", "Introduction"),
+                T("Erklärt Knopf, Profile und Funktionen und richtet sie in rund 2 Minuten mit dir ein", "Explains the knob, profiles and features and sets them up with you in about 2 minutes"), tutorial));
 
             page.Children.Add(SectionTitle(T("Problembehebung", "Troubleshooting")));
             page.Children.Add(BuildReloadCard());
@@ -2061,18 +2046,18 @@ namespace KnobFlyout.Settings
 
         // Anordnung: getrennt oder zusammen (media_combined_side = Lage des Media-Flyouts relativ zum OSD).
         // Welches Element bei „zusammen“ am gewählten Platz sitzt (combined_anchor), ergibt sich aus dem Platz.
-        private static readonly (string Layout, string Side)[] Arrangements =
+        internal static readonly (string Layout, string Side)[] Arrangements =
         {
             ("separate", ""),
             ("combined", "above"), // Media-Flyout über dem OSD
             ("combined", "below"), // Media-Flyout unter dem OSD
         };
 
-        private static int ArrangementIndex(AppConfig c) =>
+        internal static int ArrangementIndex(AppConfig c) =>
             c.OsdLayout == "separate" ? 0 : c.MediaCombinedSide == "above" ? 1 : 2;
 
         /// <summary>Platz und Bildschirm des zusammen angezeigten Blocks = die des Ankers (combined_anchor).</summary>
-        private static (string Preset, string Device) CombinedPosition(AppConfig c) =>
+        internal static (string Preset, string Device) CombinedPosition(AppConfig c) =>
             c.CombinedAnchor == "media" ? (c.MediaCornerPreset, c.MediaMonitor) : (c.OsdCornerPreset, c.OsdMonitor);
 
         /// <summary>
@@ -2082,10 +2067,15 @@ namespace KnobFlyout.Settings
         /// </summary>
         private void SetCombinedPosition(string preset, string device)
         {
-            if (Placement.IsPreset(preset)) _cfg.CombinedAnchor = Placement.CombinedAnchorFor(_cfg.MediaCombinedSide, preset);
-            _cfg.OsdCornerPreset = _cfg.MediaCornerPreset = preset;
-            _cfg.OsdMonitor = _cfg.MediaMonitor = device;
+            ApplyCombinedPosition(_cfg, preset, device);
             LayoutTouched();
+        }
+
+        internal static void ApplyCombinedPosition(AppConfig c, string preset, string device)
+        {
+            if (Placement.IsPreset(preset)) c.CombinedAnchor = Placement.CombinedAnchorFor(c.MediaCombinedSide, preset);
+            c.OsdCornerPreset = c.MediaCornerPreset = preset;
+            c.OsdMonitor = c.MediaMonitor = device;
         }
 
         /// <summary>Platz-Auswahl je nach Anordnung: zusammen eine für beide, getrennt je eine für OSD und Media-Flyout.</summary>
@@ -2609,126 +2599,8 @@ namespace KnobFlyout.Settings
         /// Ein Statustext erscheint nur während der Aufnahme oder bei einem Problem.
         /// </summary>
         /// <param name="emptyText">Anzeige, wenn kein Hotkey gesetzt ist (z.B. "Play/Pause-Taste" als Vorgabe).</param>
-        private UIElement BuildHotkeyCapture(string current, Action<string> onChanged, bool allowClear = true, string? emptyText = null)
-        {
-            onChanged = Shared(onChanged); // jeder Hotkey steht auch auf der Seite „Hotkeys“
-            string saved = current ?? "";
-            string Shown(string v) => string.IsNullOrWhiteSpace(v) ? emptyText ?? T("Nicht festgelegt", "Not set") : v;
-
-            var box = TextField(Shown(saved), 180);
-            box.IsReadOnly = true;
-            box.Cursor = System.Windows.Input.Cursors.Hand;
-            box.Margin = new Thickness(0);
-
-            var status = new TextBlock { Foreground = SubFg, FontSize = 11, Margin = new Thickness(0, 2, 0, 0), HorizontalAlignment = HorizontalAlignment.Right };
-            void SetStatus(string text)
-            {
-                status.Text = text;
-                status.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-            }
-            void ShowValidity()
-            {
-                // Nur ein ungültiger gespeicherter Wert wird angezeigt (z.B. von Hand in der Config eingetragen).
-                bool invalid = saved.Length > 0 && HotkeyParser.Parse(saved).Item2 == 0;
-                SetStatus(invalid ? T("Ungültig – wird ignoriert", "Invalid – ignored") : "");
-            }
-            ShowValidity();
-
-            bool capturing = false;
-
-            box.GotFocus += (_, _) =>
-            {
-                capturing = true;
-                box.Text = T("Taste(n) drücken …", "Press key(s) …");
-                SetStatus(T("Esc = abbrechen", "Esc = cancel"));
-            };
-
-            box.LostFocus += (_, _) =>
-            {
-                if (!capturing) return;
-                capturing = false;
-                box.Text = Shown(saved);
-                ShowValidity();
-            };
-
-            box.PreviewKeyDown += (_, e) =>
-            {
-                if (!capturing) return;
-                e.Handled = true;
-
-                var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
-
-                if (key == System.Windows.Input.Key.Escape)
-                {
-                    capturing = false;
-                    box.Text = Shown(saved);
-                    ShowValidity();
-                    System.Windows.Input.Keyboard.ClearFocus();
-                    return;
-                }
-
-                bool pureModifier = key is System.Windows.Input.Key.LeftCtrl or System.Windows.Input.Key.RightCtrl
-                    or System.Windows.Input.Key.LeftShift or System.Windows.Input.Key.RightShift
-                    or System.Windows.Input.Key.LeftAlt or System.Windows.Input.Key.RightAlt
-                    or System.Windows.Input.Key.LWin or System.Windows.Input.Key.RWin;
-
-                var mods = new List<string>();
-                var held = System.Windows.Input.Keyboard.Modifiers;
-                if ((held & System.Windows.Input.ModifierKeys.Control) != 0) mods.Add("ctrl");
-                if ((held & System.Windows.Input.ModifierKeys.Alt) != 0) mods.Add("alt");
-                if ((held & System.Windows.Input.ModifierKeys.Shift) != 0) mods.Add("shift");
-                if (System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LWin) || System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RWin)) mods.Add("win");
-
-                if (pureModifier)
-                {
-                    // Nur Vorschau anzeigen, noch nicht übernehmen – wartet auf die Haupttaste.
-                    box.Text = mods.Count > 0 ? string.Join("+", mods) + "+…" : T("Taste(n) drücken …", "Press key(s) …");
-                    return;
-                }
-
-                int vk = System.Windows.Input.KeyInterop.VirtualKeyFromKey(key);
-                string? name = HotkeyParser.NameForVk(vk);
-                if (name == null)
-                {
-                    SetStatus(T("Taste nicht unterstützt", "Key not supported"));
-                    return;
-                }
-
-                mods.Remove(name); // falls Haupttaste selbst ein Modifier-Name wäre (sollte nicht vorkommen)
-                string combo = mods.Count > 0 ? string.Join("+", mods) + "+" + name : name;
-
-                saved = combo;
-                capturing = false;
-                box.Text = combo;
-                SetStatus("");
-                onChanged(combo);
-                System.Windows.Input.Keyboard.ClearFocus();
-            };
-
-            var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-            row.Children.Add(box);
-
-            if (allowClear)
-            {
-                var clear = Btn("✕");
-                clear.ToolTip = T("Hotkey entfernen", "Remove hotkey");
-                clear.Margin = new Thickness(6, 0, 0, 0);
-                clear.Click += (_, _) =>
-                {
-                    saved = "";
-                    capturing = false;
-                    box.Text = Shown(saved);
-                    SetStatus("");
-                    onChanged("");
-                };
-                row.Children.Add(clear);
-            }
-
-            var panel = new StackPanel();
-            panel.Children.Add(row);
-            panel.Children.Add(status);
-            return panel;
-        }
+        private UIElement BuildHotkeyCapture(string current, Action<string> onChanged, bool allowClear = true, string? emptyText = null) =>
+            HotkeyCapture(current, Shared(onChanged), allowClear, emptyText); // jeder Hotkey steht auch auf der Seite „Hotkeys“
 
         // ── Hilfen ────────────────────────────────────────────────────────────
 

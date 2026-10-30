@@ -29,7 +29,7 @@ namespace KnobFlyout.Settings
 
         private const string ExcludeGlyph = "\uE733"; // Blocked
 
-        private static string Label(string proc)
+        internal static string Label(string proc)
         {
             var key = proc.ToLowerInvariant();
             if (KnownLabels.TryGetValue(key, out var l)) return l;

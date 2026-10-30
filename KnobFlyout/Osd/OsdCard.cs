@@ -297,6 +297,21 @@ namespace KnobFlyout.Osd
             return content;
         }
 
+        /// <summary>Wie CreatePreview("volume"), aber die Karte lässt sich weiter ändern (Einführung: reagiert auf den echten Knopf).</summary>
+        public static FrameworkElement CreateLiveVolumePreview(AppConfig cfg, string name, int pct, bool muted, out Action<int, bool> update)
+        {
+            var card = CreateVolume(cfg, name);
+            card.UpdateVolume(name, pct, muted);
+            update = (p, m) => card.UpdateVolume(name, p, m);
+            var content = (FrameworkElement)card.Content;
+            card.Content = null;
+            content.Width = card.Width;
+            content.Height = card.Height;
+            content.Opacity = 1;
+            card.Close();
+            return content;
+        }
+
         // ── Animation (ModernFlyouts: 83 ms halten, dann 166 ms linear) ───────
         public void FadeIn()
         {
