@@ -213,7 +213,7 @@ namespace KnobFlyoutSetup
             // Autostart: Run-Eintrag immer anlegen, an/aus wie der Task-Manager über StartupApproved – so steht KnobFlyout
             // immer unter „Autostart-Apps“ im Task-Manager und lässt sich dort oder in den Einstellungen umschalten.
             using (var run = Registry.CurrentUser.CreateSubKey(RunKey))
-                run.SetValue(AppName, "\"" + exe + "\"");
+                run.SetValue(AppName, "\"" + exe + "\" --autostart"); // mit Windows gestartet: nur im Hintergrund, von Hand: Einstellungen
             SetStartupApproved(AppName, o.Autostart);
 
             string uninstall = Path.Combine(dir, "uninstall.cmd");
@@ -242,8 +242,14 @@ namespace KnobFlyoutSetup
                 progress(98, L.T("Alter Programmordner wird entfernt …", "Removing the old program folder …"));
                 RemoveOldFolder(existing, dir, AppName, ExeName);
             }
+            SHChangeNotify(SHCNE_ASSOCCHANGED, 0, IntPtr.Zero, IntPtr.Zero); // sonst zeigt ein offener Explorer weiter das alte Symbol der exe
             progress(100, L.T("Fertig.", "Done."));
         }
+
+        private const int SHCNE_ASSOCCHANGED = 0x08000000;
+
+        [System.Runtime.InteropServices.DllImport("shell32.dll")]
+        private static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
 
         /// <summary>Autostart gerade an? (Run-Eintrag vorhanden und nicht im Task-Manager deaktiviert)</summary>
         public static bool AutostartEnabled()

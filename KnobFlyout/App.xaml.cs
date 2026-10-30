@@ -34,11 +34,13 @@ namespace KnobFlyout
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+            bool autostart = e.Args.Any(a => string.Equals(a, Autostart.Argument, StringComparison.OrdinalIgnoreCase));
 
             // Name bewusst vom alten Projektnamen: so laufen auch ältere Versionen nie gleichzeitig mit dieser.
             _singleInstanceMutex = new Mutex(true, "KnobEarTrumpet_SingleInstance", out bool createdNew);
             if (!createdNew)
             {
+                if (!autostart) SignalRunningInstance();
                 Shutdown();
                 return;
             }
@@ -109,8 +111,42 @@ namespace KnobFlyout
             OnDisplayChanged();
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
-            if (Settings.TutorialWindow.ShowOnStart(ConfigManager.Load())) ShowTutorial(false);
+            Autostart.EnsureArgument();
+            ListenForOpenSettings();
+
+            // Von Hand gestartet: gleich in die Einstellungen (davor die Einführung, solange sie nicht abgestellt ist). Mit Windows: nur im Hintergrund.
+            if (!autostart) OpenSettings();
+            else if (Settings.TutorialWindow.ShowOnStart(ConfigManager.Load())) ShowTutorial(false);
         }
+
+        private const string OpenSettingsSignalName = "KnobFlyout_OpenSettings";
+        private EventWaitHandle? _openSettingsSignal;
+        private RegisteredWaitHandle? _openSettingsWait;
+
+        /// <summary>Wird die exe noch einmal gestartet, meldet sie sich hier und beendet sich; diese Instanz öffnet dann die Einstellungen.</summary>
+        private void ListenForOpenSettings()
+        {
+            _openSettingsSignal = new EventWaitHandle(false, EventResetMode.AutoReset, OpenSettingsSignalName);
+            _openSettingsWait = ThreadPool.RegisterWaitForSingleObject(_openSettingsSignal,
+                (_, _) => Dispatcher.BeginInvoke(new Action(OpenSettings)), null, Timeout.Infinite, false);
+        }
+
+        private static void SignalRunningInstance()
+        {
+            try
+            {
+                AllowSetForegroundWindow(-1); // die laufende Instanz darf ihr Fenster nach vorn holen
+                using var signal = EventWaitHandle.OpenExisting(OpenSettingsSignalName);
+                signal.Set();
+            }
+            catch
+            {
+                // Läuft eine ältere Version ohne dieses Signal: nur beenden wie bisher.
+            }
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool AllowSetForegroundWindow(int processId);
 
         private void OnDisplaySettingsChanged(object? sender, EventArgs e) =>
             Dispatcher.BeginInvoke(new Action(OnDisplayChanged));
@@ -196,6 +232,11 @@ namespace KnobFlyout
                     catch (Exception ex) { Logger.Error($"Media: {ex.Message}"); }
                 }));
                 _media.SourcesChanged += () => Dispatcher.BeginInvoke(new Action(RefreshKeep));
+                _keepRecheck.Tick += (_, _) =>
+                {
+                    _keepRecheck.Stop();
+                    RefreshKeep();
+                };
                 _ = Dispatcher.BeginInvoke(new Action(RefreshKeep)); // Programm läuft vielleicht schon beim Start
             }
             catch (Exception ex)
@@ -204,15 +245,27 @@ namespace KnobFlyout
             }
         }
 
-        private bool _keepActive; // Daueranzeige: ein Programm aus media_keep_apps läuft
+        private int _mediaRequest;
 
-        /// <summary>Programm aus media_keep_apps gestartet oder beendet bzw. Liste geändert: Flyout anzeigen oder normal auslaufen lassen.</summary>
+        // Daueranzeige (media_keep_*)
+        private bool _keepActive;     // Flyout bleibt gerade stehen
+        private bool _keepSuspended;  // ein anderes Programm spielt: Daueranzeige ruht, bis es fertig ist
+        private bool _keepSeen;       // Startzustand schon erfasst
+        private HashSet<string> _playingApps = new();
+        private readonly Dictionary<string, DateTime> _stoppedAt = new();
+        private readonly System.Windows.Threading.DispatcherTimer _keepRecheck = new() { Interval = TimeSpan.FromSeconds(2.1) };
+        private const double KeepFlipSeconds = 2; // kürzere Pausen (nächster Titel, Werbung) zählen nicht als Stopp
+
+        /// <summary>Programm aus media_keep_apps spielt, pausiert, startet oder endet bzw. Liste geändert: Flyout anzeigen oder normal auslaufen lassen.</summary>
         private async void RefreshKeep()
         {
             try
             {
                 var cfg = ConfigManager.Load();
-                if (_keepActive || (cfg.MediaEnabled && _media.FindListed(cfg.MediaKeepApps) != null)) await ShowMediaAsync();
+                if (cfg.MediaKeepApps.Count == 0 && !_keepActive) return;
+                bool wasActive = _keepActive;
+                bool otherStarted = EvaluateKeep(cfg);
+                if (_keepActive || wasActive || otherStarted) await ShowMediaAsync();
             }
             catch (Exception ex)
             {
@@ -220,20 +273,67 @@ namespace KnobFlyout
             }
         }
 
+        /// <summary>
+        /// Neu bewerten, ob das Flyout stehen bleibt. Spielt ein Programm außerhalb der Liste los, zeigt das Flyout einmal
+        /// dieses und läuft dann normal aus; die Daueranzeige ruht, bis es nicht mehr spielt oder ein Programm der Liste
+        /// neu losspielt. Liefert true, wenn gerade so ein anderes Programm losgespielt hat.
+        /// </summary>
+        private bool EvaluateKeep(AppConfig cfg)
+        {
+            var names = cfg.MediaKeepApps;
+            if (!cfg.MediaEnabled || names.Count == 0)
+            {
+                _keepActive = _keepSuspended = _keepSeen = false;
+                _playingApps.Clear();
+                return false;
+            }
+
+            bool Listed(Media.MediaSource s) => Media.MediaController.IsListed(s, names);
+            var now = DateTime.UtcNow;
+            var sources = _media.GetSources();
+            var playing = sources.Where(s => s.IsPlaying).ToList();
+            var started = playing.Where(s => !_playingApps.Contains(s.AppId)
+                && (!_stoppedAt.TryGetValue(s.AppId, out var at) || (now - at).TotalSeconds > KeepFlipSeconds)).ToList();
+            foreach (var id in _playingApps)
+                if (!playing.Any(s => s.AppId == id)) _stoppedAt[id] = now;
+            _playingApps = playing.Select(s => s.AppId).ToHashSet();
+
+            var otherStarted = _keepSeen ? started.FirstOrDefault(s => !Listed(s)) : null;
+            bool otherPlaying = playing.Any(s => !Listed(s));
+            if (!_keepSeen) _keepSuspended = otherPlaying && !playing.Any(Listed);
+            else if (otherStarted != null) _keepSuspended = true;
+            else if (started.Any(Listed)) _keepSuspended = false;
+            else if (_keepSuspended && !otherPlaying)
+            {
+                bool justStopped = sources.Any(s => !Listed(s) && _stoppedAt.TryGetValue(s.AppId, out var at) && (now - at).TotalSeconds <= KeepFlipSeconds);
+                if (justStopped) _keepRecheck.Start();
+                else _keepSuspended = false;
+            }
+            _keepSeen = true;
+
+            var listed = sources.Where(s => Listed(s) && (cfg.MediaKeepMode == "open" || s.IsPlaying)).ToList();
+            var keep = _keepSuspended ? null
+                : listed.FirstOrDefault(s => s.AppId == _media.CurrentAppId) ?? listed.FirstOrDefault(s => s.IsPlaying) ?? listed.FirstOrDefault();
+            bool wasActive = _keepActive;
+            _keepActive = keep != null;
+            if (otherStarted != null) _media.ShowSource(otherStarted.Session);
+            else if (keep != null && !wasActive && keep.AppId != _media.CurrentAppId) _media.ShowSource(keep.Session);
+            return otherStarted != null;
+        }
+
         /// <summary>Flyout mit der aktuellen Quelle anzeigen bzw. aktualisieren.</summary>
         private async Task ShowMediaAsync()
         {
             var cfg = ConfigManager.Load();
-            bool wasKeep = _keepActive;
-            var keep = cfg.MediaEnabled ? _media.FindListed(cfg.MediaKeepApps) : null;
-            _keepActive = keep != null;
-            // Programm der Liste kommt dazu: das Flyout zeigt dieses, nicht die Quelle, die zufällig gerade aktuell ist.
-            if (keep != null && !wasKeep && keep.AppId != _media.CurrentAppId) _media.ShowSource(keep.Session);
+            EvaluateKeep(cfg);
 
             if (!cfg.MediaEnabled) { _mediaOsd?.Hide(); return; }
             if (!_media.HasSession) { _mediaOsd?.Hide(); return; }
+            // Abfragen überlappen sich (das Cover zu laden dauert): Eine ältere darf die neuere nicht überschreiben,
+            // sonst steht nach einem Quellenwechsel noch der Titel der vorigen Quelle da.
+            int request = ++_mediaRequest;
             var info = await _media.GetInfoAsync();
-            if (info == null) return;
+            if (info == null || request != _mediaRequest) return;
 
             // Position NUR beim allerersten Erscheinen setzen - nicht bei jeder
             // Metadaten-Aktualisierung (Titelwechsel, Play/Pause, ...), sonst würde ein
@@ -250,7 +350,9 @@ namespace KnobFlyout
             // zurück. Solange es sichtbar ist, nicht (laufendes Ziehen bleibt unberührt).
             bool appearing = _mediaOsd == null || !_mediaOsd.IsVisible;
             _mediaOsd ??= CreateMediaOsd();
-            bool moved = _mediaOsd.SetKeep(_keepActive, _keepActive && cfg.MediaKeepOwnPosition);
+            // Endet die Daueranzeige (Pause, anderes Programm), läuft das sichtbare Flyout an seiner Stelle aus.
+            bool ownPlace = _keepActive ? cfg.MediaKeepOwnPosition : !appearing && _mediaOsd.KeepOwnPosition;
+            bool moved = _mediaOsd.SetKeep(_keepActive, ownPlace);
             if (appearing || moved) _mediaOsd.ApplyPosition(ConfigManager.Load(), _osd!);
             _mediaOsd.UpdateFrom(info);
             if (moved) _osd?.Reposition();
@@ -484,7 +586,8 @@ namespace KnobFlyout
 
         private void ShowNextNewAppPopup()
         {
-            if (_newAppOsd != null) return;
+            // Während der Einführung kein Popup: Die App bleibt eingereiht und kommt beim nächsten Durchlauf danach.
+            if (_newAppOsd != null || _tutorial != null) return;
             while (_newAppQueue.Count > 0)
             {
                 var proc = _newAppQueue.Dequeue();
@@ -569,18 +672,24 @@ namespace KnobFlyout
             if (_tutorial != null)
             {
                 if (_settingsWindow == null) _settingsAfterTutorial = true;
-                _tutorial.Activate();
+                BringToFront(_tutorial);
                 return;
             }
             if (_settingsWindow != null)
             {
-                _settingsWindow.Activate();
+                BringToFront(_settingsWindow);
                 return;
             }
 
             // Einführung kommt beim Öffnen der Einstellungen, bis sie per Häkchen abgestellt ist.
             if (Settings.TutorialWindow.ShowWithSettings(ConfigManager.Load())) ShowTutorial(true);
             else OpenSettingsWindow("general");
+        }
+
+        private static void BringToFront(Window window)
+        {
+            if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+            window.Activate();
         }
 
         private Settings.TutorialWindow? _tutorial;
@@ -663,7 +772,6 @@ namespace KnobFlyout
         {
             var cfg = ConfigManager.Load();
             Loc.Apply(cfg);
-            _tray?.UpdateTexts();
             _hook?.ReloadConfig();
             _osdFollowsMedia = cfg.OsdFollowsMedia();
             _audio.InvalidateCache();
@@ -690,6 +798,8 @@ namespace KnobFlyout
             _youtube.Dispose();
             _media.Dispose();
             _mediaOsd?.Close();
+            _openSettingsWait?.Unregister(null);
+            _openSettingsSignal?.Dispose();
             _singleInstanceMutex?.Dispose();
             base.OnExit(e);
         }

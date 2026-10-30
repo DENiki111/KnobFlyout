@@ -17,12 +17,12 @@ namespace KnobFlyout.Settings
 {
     /// <summary>
     /// Ersetzt settings_app.py (CustomTkinter). Aufbau wie die ModernFlyouts-/Windows-11-Einstellungen:
-    /// Navigation links (Allgemein, Lautstärke &amp; Apps, OSD, Media-Flyout, Position, Tastenkürzel,
+    /// Navigation links (Allgemein, Lautstärke, Profile &amp; Apps, OSD, Media-Flyout, Position, Tastenkürzel,
     /// Spotify | Info), rechts je eine Seite aus kompakten Einstellungs-Karten (UiHelpers.SettingCard usw.).
     /// Sortierung: eine Seite pro sichtbarem Ding (OSD, Media-Flyout) mit Anzeige → Inhalt → Aussehen,
     /// alles zur Position auf „Position“, alle Tasten auf „Tastenkürzel“ (zusätzlich auf ihren Fachseiten).
     /// Alle Texte zweisprachig über Loc.T(de, en); Farbschema- und Sprachwechsel bauen das Fenster neu auf.
-    /// Apps und Profile stehen auf „Lautstärke &amp; Apps“, weil cfg.profiles (nicht cfg.apps) die Zuordnung
+    /// Apps und Profile stehen zusammen auf „Profile &amp; Apps“, weil cfg.profiles (nicht cfg.apps) die Zuordnung
     /// steuert (siehe SessionVolumeController.GetTargets).
     ///
     /// Änderungen liegen bis zum Klick auf "Speichern" nur im Arbeitsspeicher (_cfg). Ausnahmen, die
@@ -49,8 +49,8 @@ namespace KnobFlyout.Settings
         private static NavEntry[] MainNav() => new NavEntry[]
         {
             new("general", "\uE713", T("Allgemein", "General")),
-            new("volume", "\uE767", T("Lautstärke & Apps", "Volume & apps")),
-            new("profiles", "\uE716", T("Profile", "Profiles")),
+            new("volume", "\uE767", T("Lautstärke", "Volume")),
+            new("profiles", "\uE716", T("Profile & Apps", "Profiles & apps")),
             new("osd", "\uE7F4", "OSD"),
             new("media", "\uE8D6", "Media-Flyout"),
             new("position", "\uE81D", "Position"),
@@ -88,7 +88,7 @@ namespace KnobFlyout.Settings
         private static readonly string[] NotForSaveKeys =
         {
             "osd_x", "osd_y", "media_osd_x", "media_osd_y", "media_keep_x", "media_keep_y", "active_profile", "seen_apps", "screen_layout",
-            "tutorial_hidden", "tutorial_started", "snap_independent", "color_profiles",
+            "tutorial_hidden", "tutorial_started", "snap_independent", "color_profiles", "media_saved_designs", "media_preview_live",
         };
 
         /// <summary>Vergleichsstand für den Speichern-Knopf.</summary>
@@ -169,7 +169,7 @@ namespace KnobFlyout.Settings
 
             SelectPage(_navItems.ContainsKey(startPage) ? startPage : "general");
 
-            Closed += (_, _) => { CloseEyePopup(); _customPreviewTimer?.Stop(); _youtubeTimer?.Stop(); _saveTimer?.Stop(); _liveAudio.Dispose(); };
+            Closed += (_, _) => { CloseEyePopup(); _customPreviewTimer?.Stop(); _customPreviewDispose?.Invoke(); _youtubeTimer?.Stop(); _saveTimer?.Stop(); _liveAudio.Dispose(); };
             // Live-Vorschau steht neben dem Fenster: beim Verschieben/Minimieren schließen statt zu verwaisen.
             LocationChanged += (_, _) => CloseEyePopup();
             StateChanged += (_, _) => CloseEyePopup();
@@ -435,6 +435,7 @@ namespace KnobFlyout.Settings
                 _cfg.OsdY = onDisk.OsdY;
                 _cfg.MediaOsdX = onDisk.MediaOsdX;
                 _cfg.MediaOsdY = onDisk.MediaOsdY;
+                _cfg.MediaSavedDesigns = onDisk.MediaSavedDesigns; // sofort gespeichert, siehe PersistSavedDesigns
                 _cfg.MediaKeepX = onDisk.MediaKeepX;
                 _cfg.MediaKeepY = onDisk.MediaKeepY;
                 if (!_keepPlaceTouched)
@@ -496,6 +497,11 @@ namespace KnobFlyout.Settings
 
             page.Children.Add(ThemeCard());
 
+            page.Children.Add(SectionTitle(T("Anzeige", "Display")));
+            page.Children.Add(SettingCard("\uE72E", T("Feststelltasten anzeigen", "Show lock keys"),
+                T("OSD bei Feststell-, Num- und Rollen-Taste", "OSD for Caps Lock, Num Lock and Scroll Lock"),
+                Toggle(_cfg.LockKeysOsd, v => _cfg.LockKeysOsd = v)));
+
             page.Children.Add(SectionTitle(T("Start", "Startup")));
             page.Children.Add(SettingCard("\uE7E8", T("Mit Windows starten", "Start with Windows"),
                 T("Gilt sofort · auch im Task-Manager unter „Autostart-Apps“ umschaltbar", "Applies immediately · can also be switched in Task Manager under “Startup apps”"),
@@ -533,8 +539,8 @@ namespace KnobFlyout.Settings
 
             AddOsdAppearance(page, T("OSD – Aussehen", "OSD – appearance"), T("OSD – Farben", "OSD – colors"), designPage: true);
             AddMediaAppearance(page, T("Media-Flyout – Aussehen", "Media flyout – appearance"), designPage: true);
-            page.Children.Add(Hint(T("Profilfarben und Logos: Seite „Profile“ → „Profile bearbeiten“.",
-                "Profile colors and logos: “Profiles” page → “Edit profiles”.")));
+            page.Children.Add(Hint(T("Profilfarben und Logos: Seite „Profile & Apps“ → „Profile bearbeiten“.",
+                "Profile colors and logos: “Profiles & apps” page → “Edit profiles”.")));
         }
 
         /// <summary>Farbschema System/Hell/Dunkel (Seiten „Allgemein“ und „Design“); ein Wechsel baut das Fenster neu auf.</summary>
@@ -607,11 +613,11 @@ namespace KnobFlyout.Settings
         }
 
         // ══════════════════════════════════════════════════════════════════
-        //  Lautstärke & Apps (Drehknopf, App-Zuweisung, Profile)
+        //  Lautstärke (Drehknopf)
         // ══════════════════════════════════════════════════════════════════
         private void BuildVolumePage(StackPanel page)
         {
-            page.Children.Add(PageTitle(T("Lautstärke & Apps", "Volume & apps")));
+            page.Children.Add(PageTitle(T("Lautstärke", "Volume")));
 
             page.Children.Add(SectionTitle(T("Drehknopf", "Knob")));
             page.Children.Add(SettingCard("\uE767", T("Schrittweite", "Step size"), T("Pro Raste", "Per notch"),
@@ -620,20 +626,18 @@ namespace KnobFlyout.Settings
                 T("Nur bei Steuerung über die Spotify-API", "Only when controlled via the Spotify API"),
                 SliderControl(1, 15, _cfg.StepSpotify, "0' %'", v => _cfg.StepSpotify = (int)v, tick: 1)));
 
-            page.Children.Add(SectionTitle("Apps"));
-            BuildAppsSection(page);
-            page.Children.Add(Hint(T("Profile bearbeiten, wechseln und per Taste zuweisen: Seite „Profile“.",
-                "Edit, switch and assign profiles by key: “Profiles” page.")));
+            page.Children.Add(Hint(T("Welche Apps der Knopf regelt: Seite „Profile & Apps“.",
+                "Which apps the knob controls: “Profiles & apps” page.")));
         }
 
         // ══════════════════════════════════════════════════════════════════
-        //  Profile (eigene Seite, vorher Teil von „Lautstärke & Apps“)
+        //  Profile & Apps (Profile, App-Zuweisung, ignorierte Apps)
         // ══════════════════════════════════════════════════════════════════
         private void BuildProfilesPage(StackPanel page)
         {
-            page.Children.Add(PageTitle(T("Profile", "Profiles")));
-            page.Children.Add(Hint(T("Welche App zu welchem Profil gehört, stellst du in der App-Liste auf „Lautstärke & Apps“ ein – oder im Neue-App-Popup.",
-                "Which app belongs to which profile is set in the app list on “Volume & apps” – or in the new-app popup.")));
+            page.Children.Add(PageTitle(T("Profile & Apps", "Profiles & apps")));
+            page.Children.Add(Hint(T("Welche App zu welchem Profil gehört, stellst du unten unter „Apps“ ein – oder im Neue-App-Popup.",
+                "Which app belongs to which profile is set below under “Apps” – or in the new-app popup.")));
 
             page.Children.Add(SectionTitle(T("Wechseln", "Switching")));
             page.Children.Add(ProfileHotkeyCard());
@@ -668,6 +672,9 @@ namespace KnobFlyout.Settings
                 _autoAssignHost, expanded: _cfg.AutoAssign, headerControl: Toggle(_cfg.AutoAssign, v => _cfg.AutoAssign = v)));
             page.Children.Add(ProfileHotkeysCard(out var profileHotkeyRows));
             _profileHotkeyHost = profileHotkeyRows; // nach Änderungen an den Profilen neu aufbauen
+
+            page.Children.Add(SectionTitle("Apps"));
+            BuildAppsSection(page);
         }
 
         // ── Profile bearbeiten (cfg.profile_list, max. 6, alle änderbar und löschbar) ──
@@ -729,7 +736,7 @@ namespace KnobFlyout.Settings
             if (_currentPage != "hotkeys") _pages.Remove("hotkeys"); // zeigt die Profile ebenfalls
         }
 
-        private StackPanel? _profileHotkeyHost; // „Zuweisen per Taste“ auf der Seite Lautstärke & Apps
+        private StackPanel? _profileHotkeyHost; // „Zuweisen per Taste“ auf der Seite Profile & Apps
         private ContentControl? _autoAssignHost;
 
         private void RenderAutoAssign()
@@ -762,7 +769,7 @@ namespace KnobFlyout.Settings
 
         /// <summary>
         /// „Zuweisen per Taste“: eine Taste je Profil, die im Neue-App-Popup die angezeigte App diesem Profil
-        /// zuweist (Seiten Lautstärke &amp; Apps und Tastenkürzel). Außerhalb des Popups wirkt die Taste nicht.
+        /// zuweist (Seiten Profile &amp; Apps und Tastenkürzel). Außerhalb des Popups wirkt die Taste nicht.
         /// </summary>
         private Border ProfileHotkeysCard(out StackPanel rows)
         {
@@ -1222,8 +1229,8 @@ namespace KnobFlyout.Settings
             // Erscheint direkt unter der Design-Auswahl, nur bei „Eigenes“.
             osdCustomHost.Children.Add(ExpanderCard("\uE771", T("Farben des eigenen Designs", "Custom design colors"), null, customColors));
             if (!designPage)
-                page.Children.Add(Hint(T("Profilfarben: Seite „Profile“ · Hell oder dunkel: Seite „Allgemein“.",
-                    "Profile colors: “Profiles” page · Light or dark: “General” page.")));
+                page.Children.Add(Hint(T("Profilfarben: Seite „Profile & Apps“ · Hell oder dunkel: Seite „Allgemein“.",
+                    "Profile colors: “Profiles & apps” page · Light or dark: “General” page.")));
         }
 
         // ── Aussehen-Bausteine (Augen-Knopf, Ecken, Farbfelder, Farbprofile) ──
@@ -1501,18 +1508,32 @@ namespace KnobFlyout.Settings
             page.Children.Add(SettingCard("\uE916", T("Anzeigedauer", "Duration"), null,
                 SliderControl(2, 30, Math.Clamp(_cfg.MediaDurationMs / 1000.0, 2, 30), "0' s'", v => _cfg.MediaDurationMs = (int)Math.Round(v) * 1000, tick: 1)));
             page.Children.Add(ExpanderCard("\uE718", T("Dauerhaft anzeigen", "Keep on screen"),
-                T("Bleibt stehen, solange bestimmte Programme laufen, z. B. Spotify", "Stays while certain programs are running, e.g. Spotify"),
-                BuildKeepOptions(), expanded: _cfg.MediaKeepApps.Count > 0));
+                T("Bleibt stehen bei Programmen deiner Wahl, z. B. solange Spotify spielt", "Stays for programs you choose, e.g. while Spotify is playing"),
+                new KeepEditor(_cfg, LiveMediaApps, () => { }, () => _keepPlaceTouched = true), expanded: _cfg.MediaKeepApps.Count > 0));
             page.Children.Add(Hint(T("Wo es erscheint und Anordnung mit dem OSD: Seite „Position“ · Per Klick ausblenden: Seite „OSD“.",
                 "Where it appears and arrangement with the OSD: “Position” page · Click to dismiss: “OSD” page.")));
 
             page.Children.Add(SectionTitle(T("Inhalt", "Content")));
-            page.Children.Add(SettingCard("\uE768", T("Fortschrittsleiste", "Progress bar"), null,
-                Toggle(_cfg.MediaShowProgress, v => _cfg.MediaShowProgress = v)));
-            page.Children.Add(SettingCard("\uE893", T("±10-s-Knöpfe", "±10 s buttons"), null,
-                Toggle(_cfg.MediaSkipButtons, v => _cfg.MediaSkipButtons = v)));
+            // Gelten je Design (Teil des Aufbaus): Wechselt das Design, zeigen die Schalter seinen Stand.
+            var showProgress = Toggle(_cfg.MediaShowProgress, v => _cfg.MediaShowProgress = v);
+            var showSkip = Toggle(_cfg.MediaSkipButtons, v => _cfg.MediaSkipButtons = v);
+            var showMore = Toggle(_cfg.MediaShowMore, v => _cfg.MediaShowMore = v);
+            var showSources = Toggle(_cfg.MediaShowSources, v => _cfg.MediaShowSources = v);
+            var showSourcePause = Toggle(_cfg.MediaShowSourcePause, v => _cfg.MediaShowSourcePause = v);
+            _mediaContentToggles = new List<(CheckBox, Func<bool>)>
+            {
+                (showProgress, () => _cfg.MediaShowProgress), (showSkip, () => _cfg.MediaSkipButtons), (showMore, () => _cfg.MediaShowMore),
+                (showSources, () => _cfg.MediaShowSources), (showSourcePause, () => _cfg.MediaShowSourcePause),
+            };
+            page.Children.Add(SettingCard("\uE768", T("Fortschrittsleiste", "Progress bar"), null, showProgress));
+            page.Children.Add(SettingCard("\uE893", T("±10-s-Knöpfe", "±10 s buttons"), null, showSkip));
+            page.Children.Add(ExpanderCard("\uE8AB", T("Quellen-Leiste", "Sources bar"),
+                T("Zeigt die Programme, die gerade Medien melden, zum Umschalten · im Betrieb nur sichtbar, wenn es mehrere sind",
+                    "Shows the programs reporting media so you can switch between them · in use only visible when there are several"),
+                OptionRow(T("Pause-Zeichen neben spielenden Quellen", "Pause symbol next to playing sources"), showSourcePause),
+                headerControl: showSources));
             page.Children.Add(ExpanderCard("\uE712", T("„…“-Menü", "“…” menu"), T("Einträge auswählen", "Choose the items"), BuildMoreMenuOptions(),
-                headerControl: Toggle(_cfg.MediaShowMore, v => _cfg.MediaShowMore = v)));
+                headerControl: showMore));
 
             AddMediaAppearance(page, T("Aussehen", "Appearance"), designPage: false);
 
@@ -1521,40 +1542,6 @@ namespace KnobFlyout.Settings
             AddGestureCards(page);
             page.Children.Add(Hint(T("Zeiten für „Lange halten“ und „Zweimal schnell drücken“: Seite „Tastenkürzel“.",
                 "Times for “Hold” and “Press twice quickly”: “Shortcuts” page.")));
-        }
-
-        /// <summary>Daueranzeige: Programme, bei denen das Flyout stehen bleibt, und ihre eigene Stelle.</summary>
-        private UIElement BuildKeepOptions()
-        {
-            var body = new StackPanel();
-            body.Children.Add(Hint(T("Solange eines dieser Programme geöffnet ist, bleibt das Flyout stehen, auch wenn die Wiedergabe pausiert. Name wie im Flyout.",
-                "While one of these programs is open, the flyout stays on screen, even when playback is paused. Name as shown in the flyout.")));
-            body.Children.Add(ListEditor(_cfg.MediaKeepApps, T("z. B. Spotify", "e.g. Spotify"), LiveMediaApps));
-
-            var picker = new ScreenTilePicker(Placement.Monitors(), _cfg.MediaKeepMonitor, _cfg.MediaKeepPreset)
-            {
-                HorizontalAlignment = HorizontalAlignment.Left,
-                Visibility = _cfg.MediaKeepOwnPosition ? Visibility.Visible : Visibility.Collapsed,
-            };
-            picker.Changed += () =>
-            {
-                _cfg.MediaKeepPreset = picker.Preset;
-                _cfg.MediaKeepMonitor = picker.Device;
-                _keepPlaceTouched = true;
-            };
-            var hint = Hint(T("Kachel anklicken oder das stehende Flyout mit der Maus an die gewünschte Stelle ziehen. Es hängt dann nicht am OSD, das OSD weicht ihm aus.",
-                "Click a tile or drag the flyout to the spot you want. It is then not attached to the OSD, and the OSD moves out of its way."));
-            hint.Visibility = picker.Visibility;
-            var row = OptionRow(T("Eigene Position", "Own position"), Toggle(_cfg.MediaKeepOwnPosition, v =>
-            {
-                _cfg.MediaKeepOwnPosition = v;
-                picker.Visibility = hint.Visibility = v ? Visibility.Visible : Visibility.Collapsed;
-            }));
-            row.Margin = new Thickness(0, 10, 0, 6);
-            body.Children.Add(row);
-            body.Children.Add(picker);
-            body.Children.Add(hint);
-            return body;
         }
 
         private List<string> LiveMediaApps() =>
@@ -1568,26 +1555,34 @@ namespace KnobFlyout.Settings
         {
             // ── Aussehen (Augen-Knopf = Live-Vorschau) ──
             page.Children.Add(SectionTitle(appearanceTitle));
-            // Ältere Designs, dahinter alle aus dem Design-System (Designs.All, z. B. „Dynamic Island“).
-            string[] mediaDesigns = new[] { "modernflyouts", "win11", "custom" }.Concat(Designs.All.Select(d => d.Key)).ToArray();
-            string[] mediaDesignNames = new[] { "ModernFlyouts", "Windows 11", T("Eigenes", "Custom") }.Concat(Designs.All.Select(d => d.Name)).ToArray();
-            var mediaDesign = Combo(200, Math.Max(0, Array.IndexOf(mediaDesigns, _cfg.MediaDesign)), mediaDesignNames);
-            var mediaCustomHost = new StackPanel(); // Einstellungen des eigenen Designs, nur wenn „Eigenes“ gewählt ist
-            void ShowMediaCustom() => mediaCustomHost.Visibility = _cfg.MediaDesign == "custom" ? Visibility.Visible : Visibility.Collapsed;
+            // Ältere Designs, dahinter alle aus dem Design-System (Designs.All, z. B. „Dynamic Island“), zuletzt die gespeicherten.
+            var saved = _cfg.MediaSavedDesigns;
+            string[] mediaDesigns = new[] { "modernflyouts", "win11", "custom" }.Concat(Designs.All.Select(d => d.Key)).Concat(saved.Select(s => "saved:" + s.Name)).ToArray();
+            string[] mediaDesignNames = new[] { "ModernFlyouts", "Windows 11", T("Eigenes", "Custom") }.Concat(Designs.All.Select(d => d.Name)).Concat(saved.Select(s => s.Name)).ToArray();
+            string currentDesign = saved.Any(s => s.Name == _cfg.MediaSavedActive) ? "saved:" + _cfg.MediaSavedActive : _cfg.MediaDesign;
+            var mediaDesign = Combo(200, Math.Max(0, Array.IndexOf(mediaDesigns, currentDesign)), mediaDesignNames);
             mediaDesign.SelectionChanged += (_, _) =>
             {
-                _cfg.MediaDesign = mediaDesigns[Math.Max(0, mediaDesign.SelectedIndex)];
-                ShowMediaCustom();
+                string key = mediaDesigns[Math.Max(0, mediaDesign.SelectedIndex)];
+                if (key.StartsWith("saved:"))
+                {
+                    saved.First(s => "saved:" + s.Name == key).ApplyTo(_cfg);
+                    Dispatcher.BeginInvoke(new Action(RebuildCurrentPage)); // Deckkraft, Ecken usw. zeigen die neuen Werte
+                }
+                else
+                {
+                    _cfg.MediaDesign = key;
+                    _cfg.MediaSavedActive = "";
+                }
+                foreach (var (toggle, value) in _mediaContentToggles) toggle.IsChecked = value();
             };
-            page.Children.Add(SettingCard("\uE8D6", "Design", T("„Eigenes“: Aufbau, Größen und Farben frei wählbar", "“Custom”: layout, sizes and colors of your choice"),
+            page.Children.Add(SettingCard("\uE8D6", "Design", T("Eigene Designs stehen hinten in der Liste", "Your own designs are at the end of the list"),
                 WithEye(WithReset(mediaDesign, () => mediaDesign.SelectedIndex = Math.Max(0, Array.IndexOf(mediaDesigns, Defaults.MediaDesign))),
                     () => new[] { MediaOsd.CreatePreview(_cfg) }, T("Media-Flyout", "Media flyout"))));
-            mediaCustomHost.Children.Add(NavCard("\uE70F", T("Eigenes Design gestalten", "Design your own"), // Edit
-                T("Elemente ein- und ausschalten, Reihenfolge, Cover, Knöpfe und Farben – mit Live-Vorschau",
-                    "Turn elements on and off, order, album art, buttons and colors – with live preview"),
+            page.Children.Add(NavCard("\uE70F", T("Design anpassen", "Customize the design"), // Edit
+                T("Elemente ein- und ausschalten, Reihenfolge, Cover, Knöpfe, Vorlagen und als eigenes Design speichern, mit Live-Vorschau",
+                    "Turn elements on and off, order, album art, buttons, templates and save as your own design, with live preview"),
                 () => OpenMediaCustomEditor(designPage ? "design" : "media")));
-            ShowMediaCustom();
-            page.Children.Add(mediaCustomHost);
             page.Children.Add(SettingCard("\uE8D6", T("Ecken", "Corners"), null,
                 CornerControl(_cfg.MediaCornerRadius, Defaults.MediaCornerRadius, r => _cfg.MediaCornerRadius = r)));
             var mediaCorners = page.Children[^1]; // wie beim OSD: nur bei den älteren Designs
@@ -1621,9 +1616,11 @@ namespace KnobFlyout.Settings
         // Overlay-Baukästen): Vorlagen als Startpunkt, alle Elemente in der Reihenfolge des Flyouts mit Ein/Aus und
         // ↑/↓, Feineinstellungen erst aufgeklappt, und eine Live-Vorschau, die beim Scrollen oben stehen bleibt.
 
+        private List<(CheckBox Toggle, Func<bool> Value)> _mediaContentToggles = new();
         private string _subParent = "media";                      // Seite, von der der Editor geöffnet wurde (Zurück, Navigation)
         private readonly HashSet<string> _customExpanded = new(); // aufgeklappte Bereiche (bleiben beim Umsortieren offen)
         private System.Windows.Threading.DispatcherTimer? _customPreviewTimer;
+        private Action? _customPreviewDispose; // beendet das Live-Flyout der Vorschau
 
         /// <summary>Karte, die wie in den Windows-11-Einstellungen auf eine Unterseite führt (ganze Karte klickbar, › rechts).</summary>
         private static Border NavCard(string glyph, string title, string description, Action open)
@@ -1681,13 +1678,13 @@ namespace KnobFlyout.Settings
             });
             crumbs.Children.Add(new TextBlock
             {
-                Text = T("Eigenes Design", "Custom design"), FontSize = 20, FontWeight = FontWeights.SemiBold, Foreground = Fg,
+                Text = T("Design anpassen", "Customize the design"), FontSize = 20, FontWeight = FontWeights.SemiBold, Foreground = Fg,
                 VerticalAlignment = VerticalAlignment.Center,
             });
 
             // Echte Größe, bei hohen Aufbauten (Cover oben) bzw. niedrigem Fenster verkleinert, damit unten genug Platz für die Einstellungen bleibt.
             var previewHost = new Viewbox { StretchDirection = StretchDirection.DownOnly, HorizontalAlignment = HorizontalAlignment.Center };
-            void Fit() => previewHost.MaxHeight = Math.Clamp(ActualHeight - 450, 110, 230);
+            void Fit() => previewHost.MaxHeight = Math.Clamp(ActualHeight - 470, 110, 230);
             string snapshot = "";
             void Refresh()
             {
@@ -1697,22 +1694,47 @@ namespace KnobFlyout.Settings
                 snapshot = now;
                 try
                 {
-                    var preview = MediaOsd.CreatePreview(_cfg);
-                    preview.IsHitTestVisible = false; // reine Ansicht
-                    previewHost.Child = preview;
+                    _customPreviewDispose?.Invoke();
+                    _customPreviewDispose = null;
+                    if (_cfg.MediaPreviewLive && _media != null)
+                    {
+                        previewHost.Child = MediaOsd.CreateLive(_cfg, _media, null, out var dispose);
+                        _customPreviewDispose = dispose;
+                    }
+                    else
+                    {
+                        var preview = MediaOsd.CreatePreview(_cfg);
+                        preview.IsHitTestVisible = false; // reine Ansicht
+                        previewHost.Child = preview;
+                    }
                 }
                 catch (Exception ex) { Logger.Error($"Design-Vorschau: {ex.Message}"); }
             }
             Refresh();
 
+            var note = new TextBlock { FontSize = 11, Foreground = SubFg, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 2, 0, 0) };
+            void ShowNote() => note.Text = _cfg.MediaPreviewLive
+                ? T("Zeigt, was gerade läuft, die Knöpfe wirken wirklich · gilt nach „Speichern“", "Shows what's playing, the buttons really work · applies after “Save”")
+                : T("Vorschau mit Beispiel · gilt nach „Speichern“", "Preview with a sample · applies after “Save”");
+            ShowNote();
+            var liveRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
+            liveRow.Children.Add(new TextBlock { Text = T("Live-Flyout", "Live flyout"), FontSize = 12, Foreground = Fg, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+            liveRow.Children.Add(Toggle(_cfg.MediaPreviewLive, live =>
+            {
+                _cfg.MediaPreviewLive = live;
+                // Ansichtssache: sofort gespeichert, der Speichern-Knopf bleibt davon unberührt
+                var onDisk = ConfigManager.Load();
+                onDisk.MediaPreviewLive = live;
+                ConfigManager.Save(onDisk);
+                ShowNote();
+                Refresh();
+            }));
+
             var panel = new StackPanel { Margin = new Thickness(24, 14, 32, 12), MaxWidth = 968 };
             panel.Children.Add(crumbs);
             panel.Children.Add(new Border { Margin = new Thickness(0, 12, 0, 0), Child = previewHost });
-            panel.Children.Add(new TextBlock
-            {
-                Text = T("Live-Vorschau · gilt nach „Speichern“", "Live preview · applies after “Save”"), FontSize = 11, Foreground = SubFg,
-                HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0),
-            });
+            panel.Children.Add(liveRow);
+            panel.Children.Add(note);
             _pinnedTop.Child = panel;
             _pinnedTop.Visibility = Visibility.Visible;
 
@@ -1726,47 +1748,76 @@ namespace KnobFlyout.Settings
         {
             _customPreviewTimer?.Stop();
             _customPreviewTimer = null;
+            _customPreviewDispose?.Invoke();
+            _customPreviewDispose = null;
             if (_pinnedTop == null) return;
             _pinnedTop.Child = null;
             _pinnedTop.Visibility = Visibility.Collapsed;
         }
 
         /// <summary>
-        /// Unterseite „Eigenes Design“: Vorlagen als Startpunkt, alle Bereiche in der Reihenfolge des Flyouts (Ein/Aus,
-        /// ↑/↓, aufgeklappt die einzelnen Elemente als Kacheln und die Feineinstellungen), darunter die Farben.
+        /// Unterseite „Design anpassen“ für das gewählte Design: Vorlagen als Startpunkt, alle Bereiche in der Reihenfolge des
+        /// Flyouts (Ein/Aus, ↑/↓, aufgeklappt die einzelnen Elemente als Kacheln und die Feineinstellungen), eigene Designs,
+        /// beim Design „Eigenes“ darunter die Farben.
         /// </summary>
         private void BuildMediaCustomPage(StackPanel page)
         {
             ShowMediaCustomHeader();
 
             page.Children.Add(SectionTitle(T("Vorlage", "Template")));
-            page.Children.Add(Hint(T("Startpunkt wählen und danach beliebig anpassen. Die Farben bleiben erhalten.",
-                "Pick a starting point and adjust it as you like. Your colors are kept.")));
-            var editor = new MediaDesignEditor(_cfg, _customExpanded, () => { }, RebuildMediaCustomPage);
+            page.Children.Add(Hint(T("Startpunkt wählen und danach beliebig anpassen. ↺ setzt einen Wert auf die gewählte Vorlage zurück. Farben und Deckkraft bleiben erhalten.",
+                "Pick a starting point and adjust it as you like. ↺ resets a value to the chosen template. Colors and opacity are kept.")));
+            var editor = new MediaDesignEditor(_cfg, _customExpanded, () => { }, RebuildMediaCustomPage, savedChanged: PersistSavedDesigns);
             page.Children.Add(editor.Templates());
 
             page.Children.Add(SectionTitle(T("Was soll zu sehen sein?", "What should be shown?")));
             page.Children.Add(Hint(T("Schalter und Kacheln blenden ein oder aus · ↑ ↓ ändert die Reihenfolge von oben nach unten · Klick auf eine Zeile zeigt mehr.",
                 "Switches and tiles show or hide · ↑ ↓ changes the order from top to bottom · click a row for more.")));
             page.Children.Add(editor.Elements());
-            page.Children.Add(Hint(T("Zeitleiste, ±10 s und „…“ gelten auch für die anderen Designs.",
-                "Timeline, ±10 s and “…” also apply to the other designs.")));
 
             // ── Farben (eigene Farbprofile wie beim OSD) ──
-            page.Children.Add(SectionTitle(T("Aussehen", "Appearance")));
+            page.Children.Add(SectionTitle(T("Farben", "Colors")));
             var boxes = new Dictionary<string, TextBox>();
             var colors = new StackPanel();
-            AddColorField(colors, boxes, "media_custom_bg", T("Hintergrund", "Background"), _cfg.MediaCustomBg, Defaults.MediaCustomBg, v => _cfg.MediaCustomBg = v);
-            AddColorField(colors, boxes, "media_custom_fg", T("Text und Symbole", "Text and icons"), _cfg.MediaCustomFg, Defaults.MediaCustomFg, v => _cfg.MediaCustomFg = v);
-            AddColorField(colors, boxes, "media_custom_sub", T("Nebentext", "Secondary text"), _cfg.MediaCustomSub, Defaults.MediaCustomSub, v => _cfg.MediaCustomSub = v);
-            AddColorField(colors, boxes, "media_custom_accent", T("Akzent (Leiste, Quelle)", "Accent (bar, source)"), _cfg.MediaCustomAccent, Defaults.MediaCustomAccent, v => _cfg.MediaCustomAccent = v);
-            AddColorField(colors, boxes, "media_custom_button_bg", T("Knopf-Fläche", "Button fill"), _cfg.MediaCustomButtonBg, Defaults.MediaCustomButtonBg, v => _cfg.MediaCustomButtonBg = v);
-            AddColorField(colors, boxes, "media_custom_track", T("Leiste (Hintergrund)", "Bar (background)"), _cfg.MediaCustomTrack, Defaults.MediaCustomTrack, v => _cfg.MediaCustomTrack = v);
+            bool custom = _cfg.MediaDesign == "custom";
+            if (custom)
+            {
+                AddColorField(colors, boxes, "media_custom_bg", T("Hintergrund", "Background"), _cfg.MediaCustomBg, Defaults.MediaCustomBg, v => _cfg.MediaCustomBg = v);
+                AddColorField(colors, boxes, "media_custom_fg", T("Text und Symbole", "Text and icons"), _cfg.MediaCustomFg, Defaults.MediaCustomFg, v => _cfg.MediaCustomFg = v);
+                AddColorField(colors, boxes, "media_custom_sub", T("Nebentext", "Secondary text"), _cfg.MediaCustomSub, Defaults.MediaCustomSub, v => _cfg.MediaCustomSub = v);
+                AddColorField(colors, boxes, "media_custom_accent", T("Akzent (Leiste, Quelle)", "Accent (bar, source)"), _cfg.MediaCustomAccent, Defaults.MediaCustomAccent, v => _cfg.MediaCustomAccent = v);
+                AddColorField(colors, boxes, "media_custom_button_bg", T("Knopf-Fläche", "Button fill"), _cfg.MediaCustomButtonBg, Defaults.MediaCustomButtonBg, v => _cfg.MediaCustomButtonBg = v);
+                AddColorField(colors, boxes, "media_custom_track", T("Leiste (Hintergrund)", "Bar (background)"), _cfg.MediaCustomTrack, Defaults.MediaCustomTrack, v => _cfg.MediaCustomTrack = v);
+            }
+            else colors.Children.Add(editor.DesignColors(boxes));
             colors.Children.Insert(0, BuildColorPresets(boxes));
             page.Children.Add(ExpanderCard("\uE790", T("Farben", "Colors"),
-                T("Hintergrund, Text, Akzent, Knöpfe und Leiste", "Background, text, accent, buttons and bar"), colors));
-            page.Children.Add(Hint(T("Deckkraft, Ecken und Cover als Hintergrund: Seite „Media-Flyout“ → Aussehen.",
-                "Opacity, corners and album art background: “Media flyout” page → Appearance.")));
+                custom ? T("Hintergrund, Text, Akzent, Knöpfe und Leiste", "Background, text, accent, buttons and bar")
+                    : T("Jede Farbe einzeln · ↺ = wie im Design", "Each color individually · ↺ = as in the design"),
+                colors, expanded: !custom && _cfg.Layout().Colors != null));
+
+            page.Children.Add(SectionTitle(T("Eigene Designs", "Your own designs")));
+            page.Children.Add(editor.SavedDesigns());
+            page.Children.Add(Hint(T("Deckkraft und Cover als Hintergrund: Seite „Media-Flyout“ → Aussehen.",
+                "Opacity and album art background: “Media flyout” page → Appearance.")));
+        }
+
+        /// <summary>Liste der gespeicherten Designs sofort sichern (wie die Farbprofile); ein gewähltes gilt erst mit „Speichern“.</summary>
+        private void PersistSavedDesigns()
+        {
+            var onDisk = ConfigManager.Load();
+            onDisk.MediaSavedDesigns = _cfg.MediaSavedDesigns;
+            ConfigManager.Save(onDisk);
+        }
+
+        /// <summary>Aktuelle Seite neu aufbauen (wurde die Config geändert), Scroll-Position bleibt.</summary>
+        private void RebuildCurrentPage()
+        {
+            double offset = _pageScroll?.VerticalOffset ?? 0;
+            SelectPage(_currentPage);
+            if (_pageScroll == null) return;
+            _pageScroll.UpdateLayout();
+            _pageScroll.ScrollToVerticalOffset(offset);
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -1813,7 +1864,7 @@ namespace KnobFlyout.Settings
                 if (k != _currentPage) _pages.Remove(k);
         };
 
-        /// <summary>Profil-Taste (Seiten Lautstärke &amp; Apps, OSD und Tastenkürzel).</summary>
+        /// <summary>Profil-Taste (Seiten Profile &amp; Apps, OSD und Tastenkürzel).</summary>
         private Border ProfileHotkeyCard() => SettingCard("\uE765", T("Profil wechseln", "Switch profile"),
             T("Kurz drücken: nächstes Profil · Halten: nächste gespeicherte Position", "Tap: next profile · Hold: next saved position"),
             BuildHotkeyCapture(_cfg.ProfileHotkey, v => _cfg.ProfileHotkey = v, allowClear: false));
@@ -2413,9 +2464,9 @@ namespace KnobFlyout.Settings
             page.Children.Add(ContentCard("\uE946", T("So geht's", "How to"), null, steps));
 
             page.Children.Add(Hint(T("Spielt im Browser gerade kein YouTube-Video, regelt der Knopf ihn wie bisher über den Windows-Mixer. " +
-                "Der Browser muss im aktiven Profil sein; Schrittweite wie unter „Lautstärke & Apps“.",
+                "Der Browser muss im aktiven Profil sein; Schrittweite wie unter „Lautstärke“.",
                 "When no YouTube video is playing in the browser, the knob controls it through the Windows mixer as before. " +
-                "The browser has to be in the active profile; step size as on “Volume & apps”.")));
+                "The browser has to be in the active profile; step size as on “Volume”.")));
         }
 
         /// <summary>Klickbarer Link im Text (öffnet den Standard-Browser).</summary>

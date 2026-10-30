@@ -10,6 +10,10 @@ namespace KnobFlyout.Config
     public static class Autostart
     {
         public const string Name = "KnobFlyout";
+
+        /// <summary>Steht im Run-Eintrag: Mit Windows gestartet bleibt KnobFlyout im Hintergrund, von Hand gestartet öffnet es die Einstellungen.</summary>
+        public const string Argument = "--autostart";
+
         private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string ApprovedKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 
@@ -35,13 +39,28 @@ namespace KnobFlyout.Config
             using (var run = Registry.CurrentUser.CreateSubKey(RunKey))
             {
                 if (enabled || run.GetValue(Name) == null)
-                    run.SetValue(Name, "\"" + Environment.ProcessPath + "\"");
+                    run.SetValue(Name, "\"" + Environment.ProcessPath + "\" " + Argument);
             }
             var state = new byte[12];
             state[0] = enabled ? (byte)2 : (byte)3;
             if (!enabled) BitConverter.GetBytes(DateTime.UtcNow.ToFileTimeUtc()).CopyTo(state, 4);
             using var approved = Registry.CurrentUser.CreateSubKey(ApprovedKey);
             approved.SetValue(Name, state, RegistryValueKind.Binary);
+        }
+
+        /// <summary>Run-Eintrag einer älteren Version ohne Argument ergänzen, sonst gingen beim Windows-Start die Einstellungen auf.</summary>
+        public static void EnsureArgument()
+        {
+            try
+            {
+                using var run = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+                if (run?.GetValue(Name) is string value && !value.Contains(Argument))
+                    run.SetValue(Name, value.TrimEnd() + " " + Argument);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Autostart-Eintrag: {ex.Message}");
+            }
         }
     }
 }

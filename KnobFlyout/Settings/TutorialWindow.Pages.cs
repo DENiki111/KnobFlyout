@@ -68,7 +68,9 @@ namespace KnobFlyout.Settings
 
         // Unterseite „Eigenes Design“
         private AppConfig? _designCfg, _designBase; // Arbeitsstand; gespeichert wird nur, was sich geändert hat
-        private string _designTab = "layout";
+        private string _designTab = "template";
+        private string _designTarget = "media"; // Farben und Deckkraft: Flyout oder OSD
+        private string _appsTab = "running";
         private readonly HashSet<string> _designExpanded = new();
 
         private void ClearStageFields()
@@ -243,8 +245,8 @@ namespace KnobFlyout.Settings
                         "Save several places and jump between them with a key, for example one for gaming and one for the desktop."),
                     StageSnap, BodySnap),
                 new("#3b82f6", () => T("Alles bereit", "You're all set"),
-                    () => T("KnobFlyout läuft jetzt im Infobereich der Taskleiste. Ein Rechtsklick auf das Lautsprecher-Symbol öffnet die Einstellungen.",
-                        "KnobFlyout now runs in the notification area of the taskbar. Right-click the speaker icon to open the settings."),
+                    () => T("KnobFlyout läuft jetzt im Infobereich der Taskleiste. Ein Rechtsklick auf das Knopf-Symbol öffnet die Einstellungen.",
+                        "KnobFlyout now runs in the notification area of the taskbar. Right-click the knob icon to open the settings."),
                     StageDone, BodyDone),
             };
             _appsIndex = 5;
@@ -807,7 +809,7 @@ namespace KnobFlyout.Settings
             {
                 string g = glyph;
                 var text = new TextBlock { Text = g, FontFamily = IconFont, FontSize = 15, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-                var tile = new Border { Height = 32, Margin = new Thickness(1), CornerRadius = new CornerRadius(6), Cursor = System.Windows.Input.Cursors.Hand, Child = text };
+                var tile = new Border { Height = 30, Margin = new Thickness(1), CornerRadius = new CornerRadius(6), Cursor = System.Windows.Input.Cursors.Hand, Child = text };
                 tile.MouseEnter += (_, _) => { if (g != _draftGlyph) tile.Background = HoverBg; };
                 tile.MouseLeave += (_, _) => { if (g != _draftGlyph) tile.Background = Brushes.Transparent; };
                 tile.MouseLeftButtonUp += (_, _) =>
@@ -843,9 +845,9 @@ namespace KnobFlyout.Settings
                 string h = hex;
                 var swatch = new Border
                 {
-                    Width = 30, Height = 30, CornerRadius = new CornerRadius(15), BorderThickness = new Thickness(2), Margin = new Thickness(0, 0, 6, 0),
+                    Width = 28, Height = 28, CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(2), Margin = new Thickness(0, 0, 6, 0),
                     Cursor = System.Windows.Input.Cursors.Hand, Padding = new Thickness(2),
-                    Child = new Border { CornerRadius = new CornerRadius(11), Background = FromHex(h) },
+                    Child = new Border { CornerRadius = new CornerRadius(10), Background = FromHex(h) },
                 };
                 swatch.MouseLeftButtonUp += (_, _) =>
                 {
@@ -862,13 +864,12 @@ namespace KnobFlyout.Settings
             }
             form.Children.Add(colors);
 
-            if (!editing)
+            if (!editing && !full)
             {
                 var create = AccentBtn(T("Profil anlegen", "Create profile"));
                 create.Margin = new Thickness(0, 12, 0, 0);
                 create.HorizontalAlignment = HorizontalAlignment.Left;
                 create.Padding = new Thickness(16, 6, 16, 6);
-                create.IsEnabled = !full;
                 create.Click += (_, _) =>
                 {
                     string finalName = _draftName.Trim().Length > 0 ? _draftName.Trim() : T("Mein Profil", "My profile");
@@ -881,7 +882,7 @@ namespace KnobFlyout.Settings
                     });
                     _draftName = "";
                     _draftTouched = false;
-                    _draftDone = T($"„{finalName}“ ist angelegt und steht jetzt beim Wechseln und Zuweisen zur Wahl.", $"“{finalName}” has been created and is now available for switching and assigning.");
+                    _draftDone = T($"„{finalName}“ ist angelegt.", $"“{finalName}” has been created.");
                     RefreshPage();
                 };
                 form.Children.Add(create);
@@ -899,7 +900,7 @@ namespace KnobFlyout.Settings
             body.Children.Add(new Border
             {
                 Background = CardBg, BorderBrush = CardBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(14, 12, 14, 14), Margin = new Thickness(0, 0, 0, 10), Child = form,
+                Padding = new Thickness(14, 12, 14, 14), Margin = new Thickness(0, 0, 0, 6), Child = form,
             });
 
             if (_draftDone.Length > 0)
@@ -913,7 +914,7 @@ namespace KnobFlyout.Settings
                     "You already have 6 profiles, the maximum. Delete one with ✕ if you need room.")));
             else
                 body.Children.Add(Hint(editing
-                    ? T("Änderungen gelten sofort. Eigene Bilder als Logo und die Reihenfolge: Einstellungen → Profile.", "Changes apply immediately. Your own images as logos and the order: Settings → Profiles.")
+                    ? T("Änderungen gelten sofort. Eigene Bilder als Logo und die Reihenfolge: Einstellungen → Profile & Apps.", "Changes apply immediately. Your own images as logos and the order: Settings → Profiles & apps.")
                     : T("Klick auf ein Profil bearbeitet es, ✕ löscht es, auch die vorgefertigten. Mindestens eins bleibt.", "Click a profile to edit it, ✕ deletes it, even the ready-made ones. At least one stays.")));
         }
 
@@ -982,19 +983,27 @@ namespace KnobFlyout.Settings
         {
             _appsPill = new StatusPill(T("Probier es aus: Klick links im Popup auf ein Logo …", "Try it: click a logo in the popup on the left …"));
             body.Children.Add(_appsPill);
-            AddAutoAssignCards(body);
-            body.Children.Add(new Border { Height = 6 });
-            body.Children.Add(Heading(T("Gerade spielen Ton ab", "Playing sound right now")));
+            var tabs = Segments(new[] { ("running", T("Spielen gerade Ton ab", "Playing sound now")), ("auto", T("Automatisch einsortieren", "Sort automatically")) }, _appsTab, key =>
+            {
+                _appsTab = key;
+                RefreshPage();
+            });
+            ((Border)tabs).Margin = new Thickness(0, 0, 0, 10);
+            body.Children.Add(tabs);
+            if (_appsTab == "auto") AddAutoAssignCards(body);
             var list = new StackPanel();
             var card = new Border
             {
                 Background = CardBg, BorderBrush = CardBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(6), MinHeight = 74, Child = new ScrollViewer { MaxHeight = 180, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = list, Focusable = false },
             };
-            body.Children.Add(card);
-            body.Children.Add(new Border { Height = 10 });
-            body.Children.Add(Note(T("⊘ ignoriert eine App dauerhaft. Alle Apps findest du später unter Einstellungen → Lautstärke & Apps.",
-                "⊘ ignores an app for good. You'll find all apps later under Settings → Volume & apps.")));
+            if (_appsTab != "auto")
+            {
+                body.Children.Add(card);
+                body.Children.Add(new Border { Height = 10 });
+                body.Children.Add(Note(T("⊘ ignoriert eine App dauerhaft. Alle Apps findest du später unter Einstellungen → Profile & Apps.",
+                    "⊘ ignores an app for good. You'll find all apps later under Settings → Profiles & apps.")));
+            }
 
             string shown = "\0";
             void Render(bool force)
@@ -1123,7 +1132,7 @@ namespace KnobFlyout.Settings
                 var chosen = look;
                 tile.MouseLeftButtonUp += (_, _) =>
                 {
-                    Update(c => { c.OsdDesign = chosen.Osd; c.MediaDesign = chosen.Media; });
+                    Update(c => { c.OsdDesign = chosen.Osd; c.MediaDesign = chosen.Media; c.MediaSavedActive = ""; });
                     RefreshPage();
                 };
                 grid.Children.Add(tile);
@@ -1143,6 +1152,11 @@ namespace KnobFlyout.Settings
             ownTile.MouseLeftButtonUp += (_, _) => OpenDesignEditor();
             grid.Children.Add(ownTile);
             body.Children.Add(grid);
+            body.Children.Add(new Border
+            {
+                Background = CardBg, BorderBrush = CardBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(4), Margin = new Thickness(0, 0, 0, 6),
+                Child = ActionRow("\uE70F", T("Dieses Flyout anpassen", "Customize this flyout"), T("Elemente, Reihenfolge, Vorlagen, als eigenes Design speichern", "Elements, order, templates, save as your own design"), () => OpenSub(DesignPage())),
+            });
 
             body.Children.Add(SettingCard("\uE790", T("Farbschema", "Color scheme"), null, ThemeChoice(cfg.Theme)));
         }
@@ -1155,51 +1169,32 @@ namespace KnobFlyout.Settings
             });
 
         /// <summary>Umschalter mit mehreren Feldern; das gewählte ist hervorgehoben.</summary>
-        private static FrameworkElement Segments((string Key, string Label)[] items, string current, Action<string> pick)
-        {
-            var row = new StackPanel { Orientation = Orientation.Horizontal };
-            foreach (var (key, label) in items)
-            {
-                bool on = key == current;
-                string chosen = key;
-                var seg = new Border
-                {
-                    Background = on ? Accent : Brushes.Transparent, CornerRadius = new CornerRadius(5), Padding = new Thickness(12, 4, 12, 5),
-                    Cursor = System.Windows.Input.Cursors.Hand,
-                    Child = new TextBlock { Text = label, FontSize = 12, Foreground = on ? Brushes.White : Fg },
-                };
-                if (!on)
-                {
-                    seg.MouseEnter += (_, _) => seg.Background = HoverBg;
-                    seg.MouseLeave += (_, _) => seg.Background = Brushes.Transparent;
-                    seg.MouseLeftButtonUp += (_, _) => pick(chosen);
-                }
-                row.Children.Add(seg);
-            }
-            return new Border
-            {
-                Background = FieldBg, BorderBrush = FieldBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7), Padding = new Thickness(2), Child = row,
-                HorizontalAlignment = HorizontalAlignment.Left,
-            };
-        }
-
         // ── 8a · Unterseite „Eigenes Design“ ────────────────────────────────
 
-        private Page DesignPage() => new("#f97316", () => T("Eigenes Design", "Custom design"),
-            () => T("Alles selbst gestalten. Links siehst du sofort das Ergebnis, ausprobieren kannst du es dort auch.",
-                "Design everything yourself. You see the result on the left right away and can try it out there too."),
+        private static string MediaDesignName(string key) => key switch
+        {
+            "modernflyouts" => "ModernFlyouts",
+            "win11" => "Windows 11",
+            "custom" => T("Eigenes", "Custom"),
+            _ => Designs.Get(key)?.Name ?? key,
+        };
+
+        private Page DesignPage() => new("#f97316", () => T("Design anpassen", "Customize the design"),
+            () => T($"Du passt „{MediaDesignName(Cfg().MediaDesign)}“ an. Links siehst du sofort das Ergebnis.", $"You are customizing “{MediaDesignName(Cfg().MediaDesign)}”. You see the result on the left right away."),
             () => StageLive(), BodyDesign)
         {
-            Crumb = () => T("Such dir einen Look aus  ›  Eigenes Design", "Pick a look  ›  Custom design"),
+            Crumb = () => T("Such dir einen Look aus  ›  Design anpassen", "Pick a look  ›  Customize the design"),
             NextText = () => T("Fertig", "Done"),
         };
 
+        /// <summary>Kachel „Eigenes“: leeres Blatt mit freien Farben.</summary>
         private void OpenDesignEditor()
         {
             Update(c =>
             {
                 c.OsdDesign = "dark";
                 c.MediaDesign = "custom";
+                c.MediaSavedActive = "";
             });
             OpenSub(DesignPage());
         }
@@ -1226,124 +1221,91 @@ namespace KnobFlyout.Settings
             _designBase = Clone(cfg);
             void Changed() => _stageDirty = true;
 
-            var tabs = Segments(new[] { ("layout", T("Aufbau", "Layout")), ("colors", T("Farben", "Colors")), ("opacity", T("Deckkraft", "Opacity")) }, _designTab, key =>
+            var tabItems = new[] { ("template", T("Vorlage", "Template")), ("layout", T("Aufbau", "Layout")), ("colors", T("Farben", "Colors")), ("opacity", T("Deckkraft", "Opacity")) };
+            var tabs = Segments(tabItems, _designTab, key =>
             {
                 _designTab = key;
                 RefreshPage();
             });
-            ((Border)tabs).Margin = new Thickness(0, 0, 0, 14);
+            ((Border)tabs).Margin = new Thickness(0, 0, 0, 10);
             body.Children.Add(tabs);
 
-            if (cfg.OsdDesign != "dark" || cfg.MediaDesign != "custom")
+            if (_designTab is "colors" or "opacity")
             {
-                // Aus „Alle Funktionen“ geöffnet: Ohne das eigene Design wären die Einstellungen hier nicht zu sehen.
-                var use = AccentBtn(T("Eigenes Design verwenden", "Use the custom design"));
-                use.Margin = new Thickness(0, 0, 0, 12);
-                use.HorizontalAlignment = HorizontalAlignment.Left;
-                use.Click += (_, _) =>
+                bool osdColors = cfg.OsdDesign == "dark"; // die OSD-Farben wirken nur beim OSD-Design „Eigenes“
+                if (_designTab == "opacity" || osdColors)
                 {
-                    SaveDesign();
-                    Update(c =>
+                    var target = Segments(new[] { ("media", T("Media-Flyout", "Media flyout")), ("osd", "OSD") }, _designTarget, key =>
                     {
-                        c.OsdDesign = "dark";
-                        c.MediaDesign = "custom";
+                        _designTarget = key;
+                        RefreshPage();
                     });
-                    RefreshPage();
-                };
-                body.Children.Add(Note(T("Gerade ist ein anderes Design aktiv. Die Einstellungen hier gelten für „Eigenes“.", "Another design is active right now. The settings here apply to “Custom”.")));
-                body.Children.Add(use);
+                    ((Border)target).Margin = new Thickness(0, 2, 0, 10);
+                    body.Children.Add(target);
+                }
+                if (_designTab == "colors") AddDesignColors(body, cfg, Changed, osdColors && _designTarget == "osd");
+                else AddDesignOpacity(body, cfg, Changed);
+                return;
             }
 
-            if (_designTab == "colors") AddDesignColors(body, cfg, Changed);
-            else if (_designTab == "opacity") AddDesignOpacity(body, cfg, Changed);
-            else
+            var editor = new MediaDesignEditor(cfg, _designExpanded, Changed, () =>
             {
-                var editor = new MediaDesignEditor(cfg, _designExpanded, Changed, () =>
-                {
-                    SaveDesign();
-                    ConfigChanged?.Invoke();
-                    RefreshPage();
-                }, compact: true);
-                body.Children.Add(Heading(T("Vorlage", "Template")));
+                SaveDesign();
+                ConfigChanged?.Invoke();
+                RefreshPage();
+            }, compact: true);
+            if (_designTab == "template")
+            {
                 body.Children.Add(editor.Templates());
-                body.Children.Add(new Border { Height = 12 });
-                body.Children.Add(Heading(T("Was soll im Flyout zu sehen sein?", "What should the flyout show?")));
-                body.Children.Add(editor.Elements());
-                body.Children.Add(Hint(T("Schalter und Kacheln blenden ein oder aus, die Pfeile ändern die Reihenfolge.", "Switches and tiles show or hide, the arrows change the order.")));
+                body.Children.Add(new Border { Height = 10 });
+                body.Children.Add(Heading(T("Eigene Designs", "Your own designs")));
+                body.Children.Add(editor.SavedDesigns());
+                return;
             }
+            body.Children.Add(editor.Elements());
+            body.Children.Add(Hint(T("Schalter blenden ein oder aus, die Pfeile ändern die Reihenfolge, Klick auf eine Zeile zeigt mehr.", "Switches show or hide, the arrows change the order, clicking a row shows more.")));
         }
 
-        private void AddDesignColors(StackPanel body, AppConfig cfg, Action changed)
+        private void AddDesignColors(StackPanel body, AppConfig cfg, Action changed, bool osd)
         {
+            string hint = T("Klick auf eine Farbe öffnet den Farbkreis, ↺ setzt sie zurück.", "Click a color to open the color wheel, ↺ resets it.");
+            if (!osd && cfg.MediaDesign != "custom")
+            {
+                body.Children.Add(new MediaDesignEditor(cfg, _designExpanded, changed, () => { }, compact: true).DesignColors());
+                body.Children.Add(Hint(hint));
+                return;
+            }
+
             var d = new AppConfig();
             void Add(UniformGrid grid, string label, string value, string def, Action<string> set) =>
-                grid.Children.Add(ColorRow(label, value, def, hex => { set(hex); changed(); }));
+                grid.Children.Add(MediaDesignEditor.ColorRow(label, value, def, hex => { set(hex); changed(); }));
 
-            body.Children.Add(Heading(T("Media-Flyout", "Media flyout")));
-            var media = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 12) };
-            Add(media, T("Hintergrund", "Background"), cfg.MediaCustomBg, d.MediaCustomBg, v => cfg.MediaCustomBg = v);
-            Add(media, T("Text und Symbole", "Text and icons"), cfg.MediaCustomFg, d.MediaCustomFg, v => cfg.MediaCustomFg = v);
-            Add(media, T("Nebentext", "Secondary text"), cfg.MediaCustomSub, d.MediaCustomSub, v => cfg.MediaCustomSub = v);
-            Add(media, T("Akzent", "Accent"), cfg.MediaCustomAccent, d.MediaCustomAccent, v => cfg.MediaCustomAccent = v);
-            Add(media, T("Knopf-Fläche", "Button fill"), cfg.MediaCustomButtonBg, d.MediaCustomButtonBg, v => cfg.MediaCustomButtonBg = v);
-            Add(media, T("Leiste", "Bar"), cfg.MediaCustomTrack, d.MediaCustomTrack, v => cfg.MediaCustomTrack = v);
-            body.Children.Add(media);
-
-            body.Children.Add(Heading("OSD"));
-            var osd = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 8) };
-            Add(osd, T("Hintergrund", "Background"), cfg.ColorBg, d.ColorBg, v => cfg.ColorBg = v);
-            Add(osd, T("Rahmen", "Border"), cfg.ColorVolBorder, d.ColorVolBorder, v => cfg.ColorVolBorder = v);
-            Add(osd, T("App-Name", "App name"), cfg.ColorVolText, d.ColorVolText, v => cfg.ColorVolText = v);
-            Add(osd, T("Prozent", "Percent"), cfg.ColorVolPct, d.ColorVolPct, v => cfg.ColorVolPct = v);
-            Add(osd, T("Symbol", "Icon"), cfg.ColorVolIcon, d.ColorVolIcon, v => cfg.ColorVolIcon = v);
-            Add(osd, T("Balken leer", "Bar empty"), cfg.ColorBarBg, d.ColorBarBg, v => cfg.ColorBarBg = v);
-            Add(osd, T("Balken hoch", "Bar high"), cfg.ColorBarHi, d.ColorBarHi, v => cfg.ColorBarHi = v);
-            Add(osd, T("Balken mittel", "Bar medium"), cfg.ColorBarMid, d.ColorBarMid, v => cfg.ColorBarMid = v);
-            Add(osd, T("Balken niedrig", "Bar low"), cfg.ColorBarLo, d.ColorBarLo, v => cfg.ColorBarLo = v);
-            Add(osd, T("Profil-Rahmen", "Profile border"), cfg.ColorProfBorder, d.ColorProfBorder, v => cfg.ColorProfBorder = v);
-            Add(osd, T("Profil-Text", "Profile text"), cfg.ColorProfText, d.ColorProfText, v => cfg.ColorProfText = v);
-            body.Children.Add(osd);
-            body.Children.Add(Hint(T("Klick auf eine Farbe öffnet den Farbkreis, ↺ setzt sie zurück.", "Click a color to open the color wheel, ↺ resets it.")));
-        }
-
-        /// <summary>Farbzeile ohne Hex-Feld: Name, Farbfeld (Klick = Farbkreis), ↺.</summary>
-        private static Grid ColorRow(string label, string value, string def, Action<string> set)
-        {
-            string current = value;
-            var row = new Grid { Height = 32, Margin = new Thickness(0, 0, 10, 2) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.Children.Add(new TextBlock { Text = label, FontSize = 13, Foreground = Fg, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
-
-            var swatch = new Border
+            var grid = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 6) };
+            if (osd)
             {
-                Width = 26, Height = 26, CornerRadius = new CornerRadius(6), BorderBrush = FieldBorder, BorderThickness = new Thickness(1),
-                Background = FromHex(value), Cursor = System.Windows.Input.Cursors.Hand, ToolTip = T("Farbe auswählen", "Pick a color"), VerticalAlignment = VerticalAlignment.Center,
-            };
-            void Apply(string hex)
-            {
-                current = hex;
-                swatch.Background = FromHex(hex, value);
-                set(hex);
+                Add(grid, T("Hintergrund", "Background"), cfg.ColorBg, d.ColorBg, v => cfg.ColorBg = v);
+                Add(grid, T("Rahmen", "Border"), cfg.ColorVolBorder, d.ColorVolBorder, v => cfg.ColorVolBorder = v);
+                Add(grid, T("App-Name", "App name"), cfg.ColorVolText, d.ColorVolText, v => cfg.ColorVolText = v);
+                Add(grid, T("Prozent", "Percent"), cfg.ColorVolPct, d.ColorVolPct, v => cfg.ColorVolPct = v);
+                Add(grid, T("Symbol", "Icon"), cfg.ColorVolIcon, d.ColorVolIcon, v => cfg.ColorVolIcon = v);
+                Add(grid, T("Balken leer", "Bar empty"), cfg.ColorBarBg, d.ColorBarBg, v => cfg.ColorBarBg = v);
+                Add(grid, T("Balken hoch", "Bar high"), cfg.ColorBarHi, d.ColorBarHi, v => cfg.ColorBarHi = v);
+                Add(grid, T("Balken mittel", "Bar medium"), cfg.ColorBarMid, d.ColorBarMid, v => cfg.ColorBarMid = v);
+                Add(grid, T("Balken niedrig", "Bar low"), cfg.ColorBarLo, d.ColorBarLo, v => cfg.ColorBarLo = v);
+                Add(grid, T("Profil-Rahmen", "Profile border"), cfg.ColorProfBorder, d.ColorProfBorder, v => cfg.ColorProfBorder = v);
+                Add(grid, T("Profil-Text", "Profile text"), cfg.ColorProfText, d.ColorProfText, v => cfg.ColorProfText = v);
             }
-            swatch.MouseLeftButtonUp += (_, _) =>
+            else
             {
-                var picker = new ColorWheelPopup(swatch, current, Apply);
-                row.Children.Add(picker); // im Fensterbaum, damit die Theme-Stile greifen
-                picker.Closed += (_, _) => row.Children.Remove(picker);
-                picker.IsOpen = true;
-            };
-            Grid.SetColumn(swatch, 1);
-            row.Children.Add(swatch);
-
-            var reset = ResetButton(() => Apply(def));
-            reset.Margin = new Thickness(2, 0, 0, 0);
-            reset.Width = reset.Height = 24;
-            reset.Focusable = false;
-            Grid.SetColumn(reset, 2);
-            row.Children.Add(reset);
-            return row;
+                Add(grid, T("Hintergrund", "Background"), cfg.MediaCustomBg, d.MediaCustomBg, v => cfg.MediaCustomBg = v);
+                Add(grid, T("Text und Symbole", "Text and icons"), cfg.MediaCustomFg, d.MediaCustomFg, v => cfg.MediaCustomFg = v);
+                Add(grid, T("Nebentext", "Secondary text"), cfg.MediaCustomSub, d.MediaCustomSub, v => cfg.MediaCustomSub = v);
+                Add(grid, T("Akzent", "Accent"), cfg.MediaCustomAccent, d.MediaCustomAccent, v => cfg.MediaCustomAccent = v);
+                Add(grid, T("Knopf-Fläche", "Button fill"), cfg.MediaCustomButtonBg, d.MediaCustomButtonBg, v => cfg.MediaCustomButtonBg = v);
+                Add(grid, T("Leiste", "Bar"), cfg.MediaCustomTrack, d.MediaCustomTrack, v => cfg.MediaCustomTrack = v);
+            }
+            body.Children.Add(grid);
+            body.Children.Add(Hint(hint));
         }
 
         private void AddDesignOpacity(StackPanel body, AppConfig cfg, Action changed)
@@ -1352,12 +1314,13 @@ namespace KnobFlyout.Settings
             Border Slide(string glyph, string title, double min, double value, double def, Action<int> set) =>
                 SettingCard(glyph, title, null, ResetSlider(SliderControl(min, 100, value, "0' %'", v => { set((int)v); changed(); }, tick: 1, width: 110), def));
 
-            body.Children.Add(Heading("OSD"));
-            body.Children.Add(Slide("\uE706", T("Hintergrund", "Background"), 0, Math.Round(cfg.WinAlpha * 100), Math.Round(d.WinAlpha * 100), v => cfg.WinAlpha = v / 100.0));
-            body.Children.Add(Slide("\uE8D2", T("Text und Symbole", "Text and icons"), 20, Math.Clamp(cfg.OsdContentOpacity, 20, 100), d.OsdContentOpacity, v => cfg.OsdContentOpacity = v));
-            body.Children.Add(ContentCard("\uE7F4", T("Ecken", "Corners"), null, SettingsWindow.CornerControl(cfg.OsdCornerRadius, d.OsdCornerRadius, r => { cfg.OsdCornerRadius = r; changed(); })));
-            body.Children.Add(new Border { Height = 10 });
-            body.Children.Add(Heading(T("Media-Flyout", "Media flyout")));
+            if (_designTarget == "osd")
+            {
+                body.Children.Add(Slide("\uE706", T("Hintergrund", "Background"), 0, Math.Round(cfg.WinAlpha * 100), Math.Round(d.WinAlpha * 100), v => cfg.WinAlpha = v / 100.0));
+                body.Children.Add(Slide("\uE8D2", T("Text und Symbole", "Text and icons"), 20, Math.Clamp(cfg.OsdContentOpacity, 20, 100), d.OsdContentOpacity, v => cfg.OsdContentOpacity = v));
+                body.Children.Add(ContentCard("\uE7F4", T("Ecken", "Corners"), null, SettingsWindow.CornerControl(cfg.OsdCornerRadius, d.OsdCornerRadius, r => { cfg.OsdCornerRadius = r; changed(); })));
+                return;
+            }
             body.Children.Add(Slide("\uE706", T("Hintergrund", "Background"), 0, Math.Clamp(cfg.MediaOpacity, 0, 100), d.MediaOpacity, v => cfg.MediaOpacity = v));
             body.Children.Add(Slide("\uE8D2", T("Text und Symbole", "Text and icons"), 20, Math.Clamp(cfg.MediaContentOpacity, 20, 100), d.MediaContentOpacity, v => cfg.MediaContentOpacity = v));
             body.Children.Add(ContentCard("\uE8D6", T("Ecken", "Corners"), null, SettingsWindow.CornerControl(cfg.MediaCornerRadius, d.MediaCornerRadius, r => { cfg.MediaCornerRadius = r; changed(); })));
@@ -1495,15 +1458,27 @@ namespace KnobFlyout.Settings
                     CornerRadius = new CornerRadius(6), Effect = Soft(),
                 }, X(m.Work.X), Y(m.Work.Y));
 
+            var boxes = new List<Rect>();
+            // Stelle für ein Element der Größe w×h: in seinem Bildschirm, auch wenn es in der kleinen Karte größer gezeichnet wird als maßstäblich.
+            Point Inside(Rect r, double w, double h)
+            {
+                var screen = Placement.WorkAreaFor(r, monitors);
+                double left = X(screen.Left) + 1, top = Y(screen.Top) + 1, right = X(screen.Right) - 1, bottom = Y(screen.Bottom) - 1;
+                return new Point(Math.Clamp(X(r.X), left, Math.Max(left, right - w)), Math.Clamp(Y(r.Y), top, Math.Max(top, bottom - h)));
+            }
             void Box(Rect r, string text, string hex)
             {
                 var brush = UiColor.Brush(hex);
+                var label = new TextBlock { Text = text, FontSize = 9, Foreground = Fg, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+                label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                double w = Math.Max(r.Width * scale, label.DesiredSize.Width + 6), h = Math.Max(r.Height * scale, label.DesiredSize.Height + 2);
+                var at = Inside(r, w, h);
+                boxes.Add(new Rect(at, new Size(w, h)));
                 Put(new Border
                 {
-                    Width = Math.Max(r.Width * scale, 26), Height = Math.Max(r.Height * scale, 14), CornerRadius = new CornerRadius(3), Background = UiColor.Brush(hex, 0.25),
-                    BorderBrush = brush, BorderThickness = new Thickness(1),
-                    Child = new TextBlock { Text = text, FontSize = 9, Foreground = Fg, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
-                }, X(r.X), Y(r.Y));
+                    Width = w, Height = h, CornerRadius = new CornerRadius(3), Background = UiColor.Brush(hex, 0.25),
+                    BorderBrush = brush, BorderThickness = new Thickness(1), Child = label,
+                }, at.X, at.Y);
             }
             var (osd, media) = Placement.Layout(cfg, 220);
             Box(media, "Flyout", "#14b8a6");
@@ -1519,7 +1494,11 @@ namespace KnobFlyout.Settings
                     Child = new TextBlock { Text = (i + 1).ToString(), FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
                 };
                 marker.MouseLeftButtonUp += (_, _) => TestSnapPoint(point);
-                Put(marker, Math.Clamp(X(point.X), 0, map.Width - 22), Math.Clamp(Y(point.Y), 0, map.Height - 22));
+                var spot = Inside(new Rect(point.X, point.Y, 1, 1), 22, 22);
+                // Liegt die Nummer auf OSD oder Flyout (der Platz ist gerade aktiv): daneben, sonst wäre deren Text verdeckt.
+                foreach (var box in boxes)
+                    if (box.IntersectsWith(new Rect(spot, new Size(22, 22)))) spot.X = Math.Max(X(Placement.WorkAreaFor(new Rect(point.X, point.Y, 1, 1), monitors).Left) + 1, box.Left - 24);
+                Put(marker, spot.X, spot.Y);
             }
             return OnStage(map, cfg.SnapPositions.Count == 0
                 ? T("Hier siehst du gleich deine gespeicherten Plätze.", "Your saved places will show up here.")

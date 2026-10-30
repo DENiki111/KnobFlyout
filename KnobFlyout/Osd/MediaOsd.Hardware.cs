@@ -30,7 +30,7 @@ namespace KnobFlyout.Osd
         private void ArrangeHardware(Grid root, Grid header, StackPanel left, StackPanel appRow, Grid controls, StackPanel center)
         {
             var pal = _pal!;
-            var hw = _hw = HardwareParts.Colors(_light);
+            var hw = _hw = OwnHwColors(HardwareParts.Colors(_light));
             var lcdFont = HardwareParts.LcdFont;
             var amber = Hex(hw.LcdText);
             root.Children.Clear();
@@ -98,6 +98,9 @@ namespace KnobFlyout.Osd
             text.Children.Add(info);
             Grid.SetColumn(text, 1);
             top.Children.Add(text);
+            _artBlock = _art;
+            _textBlock = text;
+            _infoRow = top;
 
             var screenTop = new Grid();
             screenTop.Children.Add(top);
@@ -113,7 +116,11 @@ namespace KnobFlyout.Osd
             _seekHost.Height = 12;
             _seekHost.Margin = new Thickness(0, 5, 0, 0);
             foreach (UIElement child in _seekHost.Children) child.Visibility = Visibility.Collapsed; // Standard-Spur, Füllung, Griff
-            _seekHost.Children.Add(new Border { Height = 4, VerticalAlignment = VerticalAlignment.Center, Background = Hex("#1FFFB04A"), IsHitTestVisible = false });
+            _seekHost.Children.Add(new Border
+            {
+                Height = 4, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false,
+                Background = Hex(Own(Config.MediaLayout.ColorTrack) ?? "#1F" + NormHex(hw.LcdText, "#FFB04A")[1..]),
+            });
             _hwFill = new Border
             {
                 Height = 4, Width = 0, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left,
@@ -170,6 +177,8 @@ namespace KnobFlyout.Osd
             Grid.SetColumn(moreKey, 1);
             controls.Children.Add(moreKey);
             stack.Children.Add(controls);
+            _moreHost = moreKey;
+            _buttonsPanel = center;
 
             // ── Eingangswahl (RenderInputs) ──
             _hwInputs = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 12, 0, 0), Visibility = Visibility.Collapsed };
@@ -180,6 +189,16 @@ namespace KnobFlyout.Osd
             var screws = HardwareParts.Screws(0, 0, hw);
             screws.Width = screws.Height = double.NaN; // an den Kartenecken ausrichten
             _host.Children.Add(screws);
+        }
+
+        /// <summary>Eigene Farben auf Display und Tasten anwenden.</summary>
+        private HwColors OwnHwColors(HwColors hw)
+        {
+            if (Own(Config.MediaLayout.ColorDisplay) is { } text) hw = hw with { LcdText = text };
+            if (Own(Config.MediaLayout.ColorDisplayBg) is { } lcd) hw = hw with { Lcd = lcd };
+            if (Own(Config.MediaLayout.ColorButton) is { } key)
+                hw = hw with { KeyTop = key, KeyBottom = Mix(Hex(key).Color, Colors.Black, 0.12).ToString() };
+            return hw;
         }
 
         /// <summary>Knopf aus dem Standardaufbau füllt die Tastenoberseite (Hover-Fläche mit gleicher Rundung).</summary>
@@ -231,10 +250,10 @@ namespace KnobFlyout.Osd
         {
             if (_hwInputs == null || _hw == null) return;
             _hwInputs.Children.Clear();
-            _hwInputs.Visibility = sources.Count < 2 ? Visibility.Collapsed : Visibility.Visible;
-            if (sources.Count < 2) return;
+            _hwInputs.Visibility = sources.Count < MinSources ? Visibility.Collapsed : Visibility.Visible;
+            if (sources.Count < MinSources) return;
 
-            string? activeAppId = _media.CurrentAppId;
+            string? activeAppId = ActiveSourceId;
             foreach (var src in sources)
             {
                 bool active = src.AppId == activeAppId;
@@ -253,7 +272,7 @@ namespace KnobFlyout.Osd
                     Text = HudParts.Caps(src.Label), FontFamily = _spec!.Font, FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = fg,
                     VerticalAlignment = VerticalAlignment.Center,
                 });
-                if (src.IsPlaying)
+                if (src.IsPlaying && _showSourcePause)
                 {
                     var pauseDot = new TextBlock
                     {

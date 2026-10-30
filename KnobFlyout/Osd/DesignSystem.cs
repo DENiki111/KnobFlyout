@@ -41,6 +41,29 @@ namespace KnobFlyout.Osd
         string? OnTrack = null,   // Inhalt auf Track (gewählter Chip)
         string? Scan = null)      // Scanlines (Gaming-HUD)
     {
+        /// <summary>Eigene Farben (MediaLayout.Colors) über die Palette legen; was nicht gesetzt ist, bleibt wie im Design.</summary>
+        public DesignPalette WithColors(Config.MediaLayout layout)
+        {
+            if (layout.Colors == null) return this;
+            var p = this;
+            if (layout.ColorOf(Config.MediaLayout.ColorBg) is { } bg) p = p with { Bg = bg, BgTop = null };
+            if (layout.ColorOf(Config.MediaLayout.ColorFg) is { } fg) p = p with { Fg = fg };
+            if (layout.ColorOf(Config.MediaLayout.ColorSub) is { } sub) p = p with { Sub = sub };
+            if (layout.ColorOf(Config.MediaLayout.ColorAccent) is { } accent)
+                p = p with { Fill = accent, Scrub = accent, SegOn = accent, SegOnText = OnColor(accent), OnAccent = OnColor(accent) };
+            if (layout.ColorOf(Config.MediaLayout.ColorButton) is { } button) p = p with { Button = button, Tile = button, Seg = button };
+            if (layout.ColorOf(Config.MediaLayout.ColorTrack) is { } track) p = p with { Track = track, OnTrack = OnColor(track), OutlineVariant = track };
+            if (layout.ColorOf(Config.MediaLayout.ColorEdge) is { } edge) p = p with { Edge = edge };
+            return p;
+        }
+
+        /// <summary>Lesbare Schrift auf einer Fläche dieser Farbe.</summary>
+        private static string OnColor(string hex)
+        {
+            var c = UiColor.Brush(hex).Color;
+            return (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) / 255.0 > 0.55 ? "#1B1B1B" : "#FFFFFF";
+        }
+
         /// <summary>Kartenfläche mit Deckkraft (nur der Hintergrund) – einfarbig oder als senkrechter Verlauf.</summary>
         public Brush Background(double opacity)
         {

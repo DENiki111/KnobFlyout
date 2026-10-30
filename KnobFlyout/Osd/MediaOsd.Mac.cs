@@ -93,6 +93,12 @@ namespace KnobFlyout.Osd
             Grid.SetColumn(_moreBtn, 2);
             top.Children.Add(_moreBtn);
             stack.Children.Add(top);
+            _artBlock = _art;
+            _textBlock = text;
+            _infoRow = top;
+            _infoExtra = _moreBtn;
+            _moreHost = _moreBtn;
+            _buttonsPanel = center;
 
             // ── Fortschritt: dünne Leiste, Zeiten darunter (Griff nur beim Überfahren, siehe Konstruktor) ──
             _seekHost.Height = 16;
@@ -172,11 +178,11 @@ namespace KnobFlyout.Osd
         {
             if (_segGrid == null || _segHost == null) return;
             _segGrid.Children.Clear();
-            _segHost.Visibility = sources.Count < 2 ? Visibility.Collapsed : Visibility.Visible;
-            if (sources.Count < 2) return;
+            _segHost.Visibility = sources.Count < MinSources ? Visibility.Collapsed : Visibility.Visible;
+            if (sources.Count < MinSources) return;
 
             var pal = _pal!;
-            string? activeAppId = _media.CurrentAppId;
+            string? activeAppId = ActiveSourceId;
             foreach (var src in sources)
             {
                 bool active = src.AppId == activeAppId;
@@ -187,7 +193,7 @@ namespace KnobFlyout.Osd
                     Text = src.Label, FontFamily = _spec!.Font, FontSize = 12, FontWeight = FontWeights.Medium, Foreground = fg,
                     VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
                 });
-                if (src.IsPlaying)
+                if (src.IsPlaying && _showSourcePause)
                 {
                     var pauseDot = new TextBlock
                     {

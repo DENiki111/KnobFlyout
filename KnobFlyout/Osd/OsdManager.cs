@@ -89,7 +89,7 @@ namespace KnobFlyout.Osd
             try
             {
                 var cfg = ConfigManager.Load();
-                if (!cfg.Osd) return;
+                if (!cfg.Osd || !cfg.LockKeysOsd) return;
 
                 RemoveAllExcept(null); // nur eine Karte: vorherige verschwindet
 

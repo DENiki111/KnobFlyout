@@ -20,6 +20,7 @@ namespace KnobFlyout.Settings
         private sealed record FeatureItem(Func<string> Group, string Glyph, Func<string> Short, Page Page);
 
         private List<FeatureItem>? _features;
+        private string _catalogGroup = "";
 
         // Live-Rückmeldungen auf den Funktions-Seiten
         private StatusPill? _lockPill, _skipPill, _gesturePill;
@@ -57,32 +58,46 @@ namespace KnobFlyout.Settings
             Next = Close,
         };
 
+        /// <summary>Themen als Pillen, darunter nur die Funktionen des gewählten Themas: passt ohne Scrollen ins Fenster.</summary>
         private void BodyCatalog(StackPanel body)
         {
             var features = Features();
-            foreach (var group in features.GroupBy(f => f.Group()))
+            string settings = T("Einstellungen", "Settings");
+            var groups = features.Select(f => f.Group()).Distinct().Append(settings).ToList();
+            if (!groups.Contains(_catalogGroup)) _catalogGroup = groups[0];
+
+            var chips = new WrapPanel { Margin = new Thickness(0, 0, -6, 6) };
+            foreach (var group in groups)
             {
-                body.Children.Add(Heading(group.Key));
-                var rows = new StackPanel();
-                foreach (var item in group)
+                string chosen = group;
+                var chip = Chip(group, group == _catalogGroup, () =>
+                {
+                    _catalogGroup = chosen;
+                    RefreshPage();
+                });
+                chip.Margin = new Thickness(0, 0, 6, 6);
+                chips.Children.Add(chip);
+            }
+            body.Children.Add(chips);
+
+            var rows = new StackPanel();
+            if (_catalogGroup == settings)
+            {
+                rows.Children.Add(LinkRow("\uE765", T("Alle Tastenkürzel", "All shortcuts"), T("Alle Tasten und Zeiten an einem Ort", "All keys and times in one place"), "hotkeys"));
+                rows.Children.Add(LinkRow("\uE713", T("Alle Einstellungen", "All settings"), T("Einführung schließen und dort weitermachen", "Close the introduction and continue there"), "general"));
+            }
+            else
+            {
+                foreach (var item in features.Where(f => f.Group() == _catalogGroup))
                 {
                     int index = features.IndexOf(item);
                     rows.Children.Add(ActionRow(item.Glyph, item.Page.Title(), item.Short(), () => OpenSub(FeatureDetail(index))));
                 }
-                body.Children.Add(new Border
-                {
-                    Background = CardBg, BorderBrush = CardBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
-                    Padding = new Thickness(4), Margin = new Thickness(0, 0, 0, 12), Child = rows,
-                });
             }
-            body.Children.Add(Heading(T("In den Einstellungen", "In the settings")));
-            var links = new StackPanel();
-            links.Children.Add(LinkRow("\uE765", T("Alle Tastenkürzel", "All shortcuts"), T("Alle Tasten und Zeiten an einem Ort", "All keys and times in one place"), "hotkeys"));
-            links.Children.Add(LinkRow("\uE713", T("Alle Einstellungen", "All settings"), T("Einführung schließen und dort weitermachen", "Close the introduction and continue there"), "general"));
             body.Children.Add(new Border
             {
                 Background = CardBg, BorderBrush = CardBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(4), Margin = new Thickness(0, 0, 0, 6), Child = links,
+                Padding = new Thickness(4), Child = rows,
             });
         }
 
@@ -91,6 +106,7 @@ namespace KnobFlyout.Settings
         {
             var features = Features();
             bool last = index >= features.Count - 1;
+            _catalogGroup = features[index].Group(); // zurück in der Übersicht: dieses Thema
             return features[index].Page with
             {
                 Crumb = () => T($"Alle Funktionen  ›  {index + 1} von {features.Count}", $"All features  ›  {index + 1} of {features.Count}"),
@@ -181,8 +197,8 @@ namespace KnobFlyout.Settings
                         body.Children.Add(_appsPill);
                         AddAutoAssignCards(body);
                         body.Children.Add(new Border { Height = 6 });
-                        body.Children.Add(Hint(T("Gilt nur für neue Apps. Bereits zugewiesene bleiben, wo sie sind; ändern kannst du alles unter Einstellungen → Lautstärke & Apps.",
-                            "Only applies to new apps. Assigned ones stay where they are; you can change everything under Settings → Volume & apps.")));
+                        body.Children.Add(Hint(T("Gilt nur für neue Apps. Bereits zugewiesene bleiben, wo sie sind; ändern kannst du alles unter Einstellungen → Profile & Apps.",
+                            "Only applies to new apps. Assigned ones stay where they are; you can change everything under Settings → Profiles & apps.")));
                     }),
                 Item(Profiles, "\uE733", "#64748b", () => T("Neue und ignorierte Apps", "New and ignored apps"),
                     () => T("Spielt eine unbekannte App Ton ab, fragt das Popup nach. Ohne Antwort verschwindet es nach 12 Sekunden und fragt später wieder. ⊘ ignoriert eine App dauerhaft.",
@@ -199,6 +215,7 @@ namespace KnobFlyout.Settings
                     {
                         _lockPill = new StatusPill(T("Probier es aus: Drück die Feststelltaste …", "Try it: press Caps Lock …"));
                         body.Children.Add(_lockPill);
+                        body.Children.Add(SwitchCard("\uE72E", T("Feststelltasten anzeigen", "Show lock keys"), T("Auch unter Einstellungen → Allgemein", "Also under Settings → General"), Cfg().LockKeysOsd, (c, v) => c.LockKeysOsd = v));
                     }),
                 Item(Keys, "\uE893", "#14b8a6", () => T("Vor- und Zurückspulen", "Skip forward and back"),
                     () => T("Zwei eigene Tasten springen im laufenden Titel 10 Sekunden vor oder zurück, in jeder App, die das zulässt.",
@@ -254,9 +271,9 @@ namespace KnobFlyout.Settings
                         body.Children.Add(SwitchCard("\uE893", T("±10-s-Knöpfe", "±10 s buttons"), null, cfg.MediaSkipButtons, (c, v) => c.MediaSkipButtons = v));
                     }),
                 Item(Flyout, "\uE718", "#14b8a6", () => T("Flyout dauerhaft anzeigen", "Keep the flyout on screen"),
-                    () => T("Bei Programmen deiner Wahl bleibt das Flyout stehen, solange sie geöffnet sind, zum Beispiel Spotify. Auf Wunsch an einer eigenen Stelle.",
-                        "For programs you choose, the flyout stays on screen while they are open, for example Spotify. At its own spot if you like."),
-                    () => T("Zum Beispiel, solange Spotify läuft", "For example while Spotify is running"),
+                    () => T("Bei Programmen deiner Wahl bleibt das Flyout stehen, zum Beispiel solange Spotify spielt. Spielt ein anderes Programm los, zeigt es das kurz an und verschwindet.",
+                        "For programs you choose, the flyout stays on screen, for example while Spotify is playing. If another program starts playing, it shows that briefly and disappears."),
+                    () => T("Zum Beispiel, solange Spotify spielt", "For example while Spotify is playing"),
                     () => StageLive(osd: false), BodyKeep),
                 Item(Flyout, "\uE712", "#14b8a6", () => T("Das „…“-Menü", "The “…” menu"),
                     () => T("Der „…“-Knopf öffnet ein Menü direkt im Flyout. Welche Einträge es zeigt, wählst du selbst. Klick links darauf, um es auszuprobieren.",
@@ -280,13 +297,17 @@ namespace KnobFlyout.Settings
                     () => T("Zwischen Apps umschalten, die gerade spielen", "Switch between apps that are playing"),
                     () => StageLive(osd: false), body =>
                     {
-                        body.Children.Add(Note(T("Zum Ausprobieren: Starte in zwei Apps gleichzeitig etwas, zum Beispiel Spotify und ein Video im Browser. Links erscheint dann die Quellen-Leiste.",
-                            "To try it: start something in two apps at once, for example Spotify and a video in the browser. The sources bar then appears on the left.")));
+                        var cfg = Cfg();
+                        body.Children.Add(SwitchCard("\uE8AB", T("Quellen-Leiste anzeigen", "Show sources bar"), null, cfg.MediaShowSources, (c, v) => c.MediaShowSources = v));
+                        body.Children.Add(SwitchCard("\uE769", T("Pause-Zeichen neben spielenden Quellen", "Pause symbol next to playing sources"), null, cfg.MediaShowSourcePause, (c, v) => c.MediaShowSourcePause = v));
+                        body.Children.Add(new Border { Height = 6 });
+                        body.Children.Add(Note(T("Zum Ausprobieren: Starte in zwei Apps gleichzeitig etwas, zum Beispiel Spotify und ein Video im Browser. Links stehen dann beide in der Quellen-Leiste. Im Betrieb erscheint sie nur, wenn mehrere Apps spielen.",
+                            "To try it: start something in two apps at once, for example Spotify and a video in the browser. Both then appear in the sources bar on the left. In use it only appears when several apps are playing.")));
                     }),
 
                 // ── Aussehen ──
                 Step(Looks, "\uE790", 7, () => T("8 Designs für OSD und Flyout, hell oder dunkel", "8 designs for OSD and flyout, light or dark")),
-                new FeatureItem(Looks, "\uE70F", () => T("Alles selbst gestalten: Aufbau, Farben, Deckkraft", "Design everything yourself: layout, colors, opacity"), DesignPage()),
+                new FeatureItem(Looks, "\uE70F", () => T("Jedes Design anpassen, Vorlagen, eigene Designs speichern", "Customize any design, templates, save your own designs"), DesignPage()),
 
                 // ── Platz ──
                 Step(Place, "\uE8A9", 8, () => T("9 Plätze je Bildschirm, getrennt oder zusammen", "9 places per monitor, separate or together")),
@@ -399,20 +420,14 @@ namespace KnobFlyout.Settings
         private void BodyKeep(StackPanel body)
         {
             var cfg = Cfg();
-            var apps = new List<string>(cfg.MediaKeepApps);
-            body.Children.Add(ListEditor(apps, T("z. B. Spotify", "e.g. Spotify"),
-                () => _media.GetSources().Select(s => s.Label).Distinct().OrderBy(n => n).ToList(),
-                () => Update(c => c.MediaKeepApps = new List<string>(apps))));
-
-            var picker = new ScreenTilePicker(Placement.Monitors(), cfg.MediaKeepMonitor, cfg.MediaKeepPreset, width: 200, maxScreenHeight: 112)
+            body.Children.Add(new KeepEditor(cfg, () => _media.GetSources().Select(s => s.Label).Distinct().OrderBy(n => n).ToList(), () => Update(c =>
             {
-                Margin = new Thickness(0, 10, 0, 0),
-            };
-            picker.Changed += () => Update(c => { c.MediaKeepPreset = picker.Preset; c.MediaKeepMonitor = picker.Device; });
-            var card = ContentCard("\uE8A9", T("Eigene Position", "Own position"), T("Kachel anklicken oder das stehende Flyout ziehen", "Click a tile or drag the flyout"),
-                picker, Toggle(cfg.MediaKeepOwnPosition, v => Update(c => c.MediaKeepOwnPosition = v)));
-            card.Margin = new Thickness(0, 10, 0, 0);
-            body.Children.Add(card);
+                c.MediaKeepApps = new List<string>(cfg.MediaKeepApps);
+                c.MediaKeepMode = cfg.MediaKeepMode;
+                c.MediaKeepOwnPosition = cfg.MediaKeepOwnPosition;
+                c.MediaKeepPreset = cfg.MediaKeepPreset;
+                c.MediaKeepMonitor = cfg.MediaKeepMonitor;
+            })));
         }
 
         private void BodyKnobSteps(StackPanel body)
@@ -480,7 +495,8 @@ namespace KnobFlyout.Settings
             body.Children.Add(Heading(T("Ignorierte Apps", "Ignored apps")));
             body.Children.Add(new Border
             {
-                Background = CardBg, BorderBrush = CardBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(4), Child = list,
+                Background = CardBg, BorderBrush = CardBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(4),
+                Child = new ScrollViewer { MaxHeight = 190, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = list, Focusable = false }, // lange Liste scrollt in sich, die Seite nicht
             });
         }
 

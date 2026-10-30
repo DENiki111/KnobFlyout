@@ -70,8 +70,11 @@ namespace KnobFlyout.Media
         /// <summary>Feuert bei Titel-/Wiedergabe-Wechsel. Läuft auf einem WinRT-Callback-Thread, Aufrufer muss ggf. auf den UI-Thread wechseln.</summary>
         public event Action? Changed;
 
-        /// <summary>Ein Programm mit Media-Session kam dazu oder ging (Daueranzeige). Läuft ebenfalls auf einem WinRT-Callback-Thread.</summary>
+        /// <summary>Ein Programm mit Media-Session kam dazu, ging, spielt oder pausiert (Daueranzeige). Läuft ebenfalls auf einem WinRT-Callback-Thread.</summary>
         public event Action? SourcesChanged;
+
+        // Alle Sessions, nicht nur die gezeigte: Die Daueranzeige muss merken, wenn ein anderes Programm losspielt.
+        private readonly List<GlobalSystemMediaTransportControlsSession> _watched = new();
 
         public async Task InitializeAsync()
         {
@@ -90,9 +93,11 @@ namespace KnobFlyout.Media
                 };
                 _manager.SessionsChanged += (_, _) =>
                 {
+                    WatchSessions();
                     if (_session == null || !IsStillValid(_session)) Rehook();
                     SourcesChanged?.Invoke();
                 };
+                WatchSessions();
                 Rehook();
             }
             catch (Exception ex)
@@ -100,6 +105,40 @@ namespace KnobFlyout.Media
                 Logger.Error($"Media init: {ex.Message}");
             }
         }
+
+        private void WatchSessions()
+        {
+            lock (_watched)
+            {
+                UnwatchSessions();
+                try
+                {
+                    var sessions = _manager?.GetSessions();
+                    if (sessions == null) return;
+                    foreach (var s in sessions)
+                    {
+                        s.PlaybackInfoChanged += OnAnyPlayback;
+                        _watched.Add(s);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Media watch: {ex.Message}");
+                }
+            }
+        }
+
+        private void UnwatchSessions()
+        {
+            foreach (var s in _watched)
+            {
+                try { s.PlaybackInfoChanged -= OnAnyPlayback; }
+                catch { /* Session schon weg */ }
+            }
+            _watched.Clear();
+        }
+
+        private void OnAnyPlayback(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args) => SourcesChanged?.Invoke();
 
         private void Rehook()
         {
@@ -203,14 +242,6 @@ namespace KnobFlyout.Media
             return name.Length > 0 && (source.Label.Contains(name, StringComparison.OrdinalIgnoreCase) || source.AppId.Contains(name, StringComparison.OrdinalIgnoreCase));
         });
 
-        /// <summary>Quelle eines Programms aus der Liste (die gerade gezeigte zuerst, dann eine spielende), sonst null.</summary>
-        public MediaSource? FindListed(IReadOnlyCollection<string> names)
-        {
-            if (names.Count == 0) return null;
-            var listed = GetSources().Where(s => IsListed(s, names)).ToList();
-            return listed.FirstOrDefault(s => s.AppId == CurrentAppId) ?? listed.FirstOrDefault(s => s.IsPlaying) ?? listed.FirstOrDefault();
-        }
-
         /// <summary>
         /// Ermittelt einen lesbaren App-Namen zur AppUserModelId. Reihenfolge:
         /// 1. Windows' eigene Namensauflösung (AppInfo) - funktioniert für die meisten paketierten
@@ -289,7 +320,7 @@ namespace KnobFlyout.Media
         /// </summary>
         public void SwitchTo(GlobalSystemMediaTransportControlsSession session)
         {
-            if (ReferenceEquals(session, _session)) return;
+            if (session == null || ReferenceEquals(session, _session)) return; // null: Beispiel-Quelle der Vorschau
 
             var previous = _session;
             if (previous != null)
@@ -373,8 +404,10 @@ namespace KnobFlyout.Media
         }
 
         /// <summary>Pausiert eine beliebige Quelle direkt, ohne zu ihr zu wechseln (z.B. Spotify stummschalten, während YouTube aktiv bleibt).</summary>
-        public void PauseSource(GlobalSystemMediaTransportControlsSession session) =>
-            _ = SafeCall(() => session.TryPauseAsync().AsTask());
+        public void PauseSource(GlobalSystemMediaTransportControlsSession session)
+        {
+            if (session != null) _ = SafeCall(() => session.TryPauseAsync().AsTask());
+        }
 
         /// <summary>Entspricht GetAppId() - aktuell aktive Quelle, für den Vergleich in der Quellen-Leiste.</summary>
         public string? CurrentAppId => _session?.SourceAppUserModelId;
@@ -738,6 +771,7 @@ namespace KnobFlyout.Media
 
         public void Dispose()
         {
+            lock (_watched) UnwatchSessions();
             if (_session != null)
             {
                 _session.MediaPropertiesChanged -= OnPropsChanged;

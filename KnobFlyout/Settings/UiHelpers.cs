@@ -202,6 +202,56 @@ namespace KnobFlyout.Settings
         }
 
         /// <summary>Zeile im aufgeklappten Teil einer Karte: Beschriftung links, Bedienelement rechts.</summary>
+        /// <summary>Umschalter mit wenigen Möglichkeiten nebeneinander; pick läuft nur beim Wechsel.</summary>
+        public static FrameworkElement Segments((string Key, string Label)[] items, string current, Action<string> pick)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            foreach (var (key, label) in items)
+            {
+                bool on = key == current;
+                string chosen = key;
+                var seg = new Border
+                {
+                    Background = on ? Accent : Brushes.Transparent, CornerRadius = new CornerRadius(5), Padding = new Thickness(12, 4, 12, 5),
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    Child = new TextBlock { Text = label, FontSize = 12, Foreground = on ? Brushes.White : Fg },
+                };
+                if (!on)
+                {
+                    seg.MouseEnter += (_, _) => seg.Background = HoverBg;
+                    seg.MouseLeave += (_, _) => seg.Background = Brushes.Transparent;
+                    seg.MouseLeftButtonUp += (_, _) => pick(chosen);
+                }
+                row.Children.Add(seg);
+            }
+            return new Border
+            {
+                Background = FieldBg, BorderBrush = FieldBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7), Padding = new Thickness(2), Child = row,
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+        }
+
+        /// <summary>Auswahl-Pille: an = Akzentfarbe (mit check zusätzlich Häkchen), aus = Feld mit Rand.</summary>
+        public static Border Chip(string label, bool on, Action click, bool check = false)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            if (on && check)
+                row.Children.Add(new TextBlock { Text = "\uE73E", FontFamily = IconFont, FontSize = 10, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 1, 6, 0) });
+            row.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = on ? Brushes.White : Fg, VerticalAlignment = VerticalAlignment.Center });
+            var chip = new Border
+            {
+                Background = on ? Accent : FieldBg, BorderBrush = on ? Accent : FieldBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(13),
+                Padding = new Thickness(11, 4, 11, 5), Cursor = System.Windows.Input.Cursors.Hand, Child = row,
+            };
+            if (!on)
+            {
+                chip.MouseEnter += (_, _) => chip.Background = HoverBg;
+                chip.MouseLeave += (_, _) => chip.Background = FieldBg;
+            }
+            chip.MouseLeftButtonUp += (_, _) => click();
+            return chip;
+        }
+
         public static Grid OptionRow(string label, UIElement control)
         {
             var row = new Grid { Margin = new Thickness(0, 3, 0, 3) };
@@ -642,7 +692,7 @@ namespace KnobFlyout.Settings
         }
 
         /// <summary>Platzhaltertext als ToolTip, da WPF TextBox keinen nativen Platzhalter kennt.</summary>
-        private static void InputHint(TextBox box, string hint)
+        public static void InputHint(TextBox box, string hint)
         {
             box.ToolTip = hint;
         }

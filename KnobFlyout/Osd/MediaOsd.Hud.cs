@@ -101,6 +101,7 @@ namespace KnobFlyout.Osd
             status.Children.Add(_hudStatusText);
             Grid.SetColumn(status, 1);
             top.Children.Add(status);
+            _hudStatus = status;
 
             var more = new Grid { Width = 30, Height = 26, Margin = new Thickness(8, 0, 0, 0) };
             more.Children.Add(HudParts.ChamferPath(30, 26, 5, null, Hex(pal.Edge)));
@@ -119,6 +120,7 @@ namespace KnobFlyout.Osd
             Grid.SetColumn(more, 2);
             top.Children.Add(more);
             stack.Children.Add(top);
+            _moreHost = more;
 
             // ── Cover mit Eck-Klammern | TITEL / Interpret ──
             var mid = new Grid { Margin = new Thickness(0, 8, 0, 0) };
@@ -133,10 +135,11 @@ namespace KnobFlyout.Osd
             _art.Margin = new Thickness(0);
             _art.VerticalAlignment = VerticalAlignment.Center;
             artHost.Children.Add(_art);
-            artHost.Children.Add(new System.Windows.Shapes.Path
+            _hudArtCorners = new System.Windows.Shapes.Path
             {
                 Data = HudParts.CornerGeometry(art, art, 9, 4), Stroke = _accent, StrokeThickness = 2, IsHitTestVisible = false,
-            });
+            };
+            artHost.Children.Add(_hudArtCorners);
             Grid.SetColumn(artHost, 0);
             mid.Children.Add(artHost);
             _title.FontFamily = font;
@@ -152,6 +155,10 @@ namespace KnobFlyout.Osd
             Grid.SetColumn(text, 1);
             mid.Children.Add(text);
             stack.Children.Add(mid);
+            _artBlock = artHost;
+            _textBlock = text;
+            _infoRow = mid;
+            _buttonsPanel = center;
 
             // ── Fortschritt: Zeit · Segmente (Klicken/Ziehen über _seekHost wie gehabt) · Gesamtzeit ──
             var progress = new Grid { Margin = new Thickness(0, 10, 0, 0) };
@@ -266,10 +273,10 @@ namespace KnobFlyout.Osd
         {
             if (_hudTabs == null) return;
             _hudTabs.Children.Clear();
-            _hudTabs.Visibility = sources.Count < 2 ? Visibility.Collapsed : Visibility.Visible;
-            if (sources.Count < 2) return;
+            _hudTabs.Visibility = sources.Count < MinSources ? Visibility.Collapsed : Visibility.Visible;
+            if (sources.Count < MinSources) return;
 
-            string? activeAppId = _media.CurrentAppId;
+            string? activeAppId = ActiveSourceId;
             foreach (var src in sources)
             {
                 bool active = src.AppId == activeAppId;
@@ -280,7 +287,7 @@ namespace KnobFlyout.Osd
                     Text = HudParts.Caps(src.Label), FontFamily = _spec!.Font, FontSize = 13, FontWeight = FontWeights.Bold, Foreground = fg,
                     VerticalAlignment = VerticalAlignment.Center,
                 });
-                if (src.IsPlaying)
+                if (src.IsPlaying && _showSourcePause)
                 {
                     var pauseDot = new TextBlock
                     {
