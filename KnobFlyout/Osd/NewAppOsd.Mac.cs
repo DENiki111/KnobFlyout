@@ -17,7 +17,7 @@ namespace KnobFlyout.Osd
         /// </summary>
         private Border BuildMac(AppConfig cfg, DesignSpec spec, double alpha, string processName)
         {
-            var pal = spec.Palette(ThemeHelper.IsLight(cfg));
+            var pal = OsdDesignColors.Palette(cfg, spec, OsdDesignColors.Light(cfg));
             var fg = UiColor.Brush(pal.Fg);
             var root = new StackPanel { Margin = new Thickness(13, 11, 13, 0), Opacity = _contentAlpha };
 

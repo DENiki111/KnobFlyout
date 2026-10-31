@@ -83,12 +83,16 @@ namespace KnobFlyout.Settings
         private string _savedKey = "";
         private System.Windows.Threading.DispatcherTimer? _saveTimer;
         private HashSet<string> _assignedAtOpen = new();
+        private List<string> _keepAppsAtOpen = new();
+        private Action _saveAll = () => { };
+        private bool _skipLeavePrompt; // Fenster wird nur neu aufgebaut, die Änderungen ziehen mit um
+        private DesignDraft? _designDraft; // Entwurf der Unterseite „Design anpassen“
 
         // Ändern sich außerhalb dieses Fensters oder werden sofort gespeichert: zählen nicht als „ungespeichert“.
         private static readonly string[] NotForSaveKeys =
         {
             "osd_x", "osd_y", "media_osd_x", "media_osd_y", "media_keep_x", "media_keep_y", "active_profile", "seen_apps", "screen_layout",
-            "tutorial_hidden", "tutorial_started", "snap_independent", "color_profiles", "media_saved_designs", "media_preview_live",
+            "tutorial_hidden", "tutorial_started", "snap_independent", "color_profiles", "media_preview_live",
         };
 
         /// <summary>Vergleichsstand für den Speichern-Knopf.</summary>
@@ -126,6 +130,7 @@ namespace KnobFlyout.Settings
             _media = media;
             _cfg = carry ?? ConfigManager.Load();
             _assignedAtOpen = AssignedApps(_cfg);
+            _keepAppsAtOpen = new List<string>(_cfg.MediaKeepApps);
 
             Title = T("KnobFlyout – Einstellungen", "KnobFlyout – Settings");
             Icon = Tray.AppIcon.Render(48); // Titelleiste + Taskleiste
@@ -169,6 +174,23 @@ namespace KnobFlyout.Settings
 
             SelectPage(_navItems.ContainsKey(startPage) ? startPage : "general");
 
+            Closing += (_, e) =>
+            {
+                if (_skipLeavePrompt || Application.Current is App { IsExiting: true }) return;
+                if (!ConfirmLeaveDesign())
+                {
+                    e.Cancel = true;
+                    return;
+                }
+                if (SaveKey(_cfg) == _savedKey) return;
+                var choice = DesignSaveDialog.AskSettings(this);
+                if (choice == LeaveChoice.Save) _saveAll();
+                else if (choice == LeaveChoice.Stay)
+                {
+                    e.Cancel = true;
+                    if (_currentPage == "media_custom") OpenMediaCustomEditor(_subParent);
+                }
+            };
             Closed += (_, _) => { CloseEyePopup(); _customPreviewTimer?.Stop(); _customPreviewDispose?.Invoke(); _youtubeTimer?.Stop(); _saveTimer?.Stop(); _liveAudio.Dispose(); };
             // Live-Vorschau steht neben dem Fenster: beim Verschieben/Minimieren schließen statt zu verwaisen.
             LocationChanged += (_, _) => CloseEyePopup();
@@ -239,6 +261,7 @@ namespace KnobFlyout.Settings
             Replaced?.Invoke(next);
             next.Show();
             next.Activate();
+            _skipLeavePrompt = true;
             Close();
             return next;
         }
@@ -332,6 +355,7 @@ namespace KnobFlyout.Settings
 
         private void SelectPage(string key)
         {
+            if (_currentPage == "media_custom" && key != "media_custom" && !ConfirmLeaveDesign()) return;
             CloseEyePopup();
             _currentPage = key;
             if (key == "media_custom") _pages.Remove(key); // Unterseite immer frisch (Werte können sich auf der Fachseite geändert haben)
@@ -425,7 +449,7 @@ namespace KnobFlyout.Settings
             _saveTimer.Tick += (_, _) => RefreshSave();
             _saveTimer.Start();
 
-            save.Click += (_, _) =>
+            _saveAll = () =>
             {
                 // Felder, die sich außerhalb dieses Fensters ändern können (Drag am OSD, Profil-
                 // Hotkey, neu erkannte Apps), werden vor dem Speichern vom Datenträger übernommen,
@@ -435,9 +459,10 @@ namespace KnobFlyout.Settings
                 _cfg.OsdY = onDisk.OsdY;
                 _cfg.MediaOsdX = onDisk.MediaOsdX;
                 _cfg.MediaOsdY = onDisk.MediaOsdY;
-                _cfg.MediaSavedDesigns = onDisk.MediaSavedDesigns; // sofort gespeichert, siehe PersistSavedDesigns
                 _cfg.MediaKeepX = onDisk.MediaKeepX;
                 _cfg.MediaKeepY = onDisk.MediaKeepY;
+                if (_cfg.MediaKeepApps.SequenceEqual(_keepAppsAtOpen)) _cfg.MediaKeepApps = onDisk.MediaKeepApps; // hier nicht geändert: was das „…“-Menü gesetzt hat, bleibt
+                _keepAppsAtOpen = new List<string>(_cfg.MediaKeepApps);
                 if (!_keepPlaceTouched)
                 {
                     _cfg.MediaKeepPreset = onDisk.MediaKeepPreset;
@@ -459,6 +484,11 @@ namespace KnobFlyout.Settings
                         if (!_assignedAtOpen.Contains(app.ToLowerInvariant()) && AppRow.CurrentProfile(_cfg, app) == null && _cfg.Profiles.TryGetValue(profile, out var list))
                             list.Add(app);
                 _assignedAtOpen = AssignedApps(_cfg);
+                // Deckkraft usw. der Fachseiten gehören zum gewählten eigenen Design
+                int ownMedia = _cfg.MediaSavedDesigns.FindIndex(s => s.Name == _cfg.MediaSavedActive && s.Design == _cfg.MediaDesign);
+                if (ownMedia >= 0) _cfg.MediaSavedDesigns[ownMedia] = SavedMediaDesign.From(_cfg, _cfg.MediaSavedActive);
+                int ownOsd = _cfg.OsdSavedDesigns.FindIndex(s => s.Name == _cfg.OsdSavedActive && s.Design == _cfg.OsdDesign);
+                if (ownOsd >= 0) _cfg.OsdSavedDesigns[ownOsd] = SavedOsdDesign.From(_cfg, _cfg.OsdSavedActive);
 
                 ConfigManager.Save(_cfg);
                 _savedKey = SaveKey(_cfg);
@@ -466,6 +496,7 @@ namespace KnobFlyout.Settings
                 ConfigApplied?.Invoke();
                 status.Text = savedText;
             };
+            save.Click += (_, _) => _saveAll();
 
             var close = Btn(T("Schließen", "Close"), 100);
             close.Margin = new Thickness(0);
@@ -501,6 +532,7 @@ namespace KnobFlyout.Settings
             page.Children.Add(SettingCard("\uE72E", T("Feststelltasten anzeigen", "Show lock keys"),
                 T("OSD bei Feststell-, Num- und Rollen-Taste", "OSD for Caps Lock, Num Lock and Scroll Lock"),
                 Toggle(_cfg.LockKeysOsd, v => _cfg.LockKeysOsd = v)));
+            page.Children.Add(NewAppPopupCard());
 
             page.Children.Add(SectionTitle(T("Start", "Startup")));
             page.Children.Add(SettingCard("\uE7E8", T("Mit Windows starten", "Start with Windows"),
@@ -664,11 +696,12 @@ namespace KnobFlyout.Settings
             page.Children.Add(ExpanderCard("\uE8A9", T("Profile im Überblick", "Profiles overview"), null, _profileNestedHost));
 
             page.Children.Add(SectionTitle(T("Neue Apps zuweisen", "Assign new apps")));
+            page.Children.Add(NewAppPopupCard());
             _autoAssignHost = new ContentControl { Focusable = false };
             RenderAutoAssign();
             page.Children.Add(ExpanderCard("\uE8CB", T("Automatisch einsortieren", "Sort automatically"),
-                T("Spiele, Browser, Musik und Chat-Apps ohne Nachfrage ins passende Profil · Unbekannte Apps fragt weiter das Popup",
-                    "Games, browsers, music and chat apps go to the right profile without asking · The popup still asks about unknown apps"),
+                T("Spiele, Browser, Musik und Chat-Apps ohne Nachfrage ins passende Profil · Unbekannte Apps fragt das Zuweisungs-OSD",
+                    "Games, browsers, music and chat apps go to the right profile without asking · The assignment OSD asks about unknown apps"),
                 _autoAssignHost, expanded: _cfg.AutoAssign, headerControl: Toggle(_cfg.AutoAssign, v => _cfg.AutoAssign = v)));
             page.Children.Add(ProfileHotkeysCard(out var profileHotkeyRows));
             _profileHotkeyHost = profileHotkeyRows; // nach Änderungen an den Profilen neu aufbauen
@@ -1021,8 +1054,7 @@ namespace KnobFlyout.Settings
             RenderAppList("");
             page.Children.Add(ContentCard("\uE71D", T("Apps zuweisen", "Assign apps"), T("Profil per Klick zuweisen · ⊘ = ignorieren", "Click to assign a profile · ⊘ = ignore"), body));
 
-            page.Children.Add(ExpanderCard("\uE733", T("Ignorierte Apps", "Ignored apps"), T("Werden nie gesteuert", "Never controlled"),
-                ListEditor(_cfg.Exclude, T("z. B. systemsounds", "e.g. systemsounds"), LiveAudioApps)));
+            page.Children.Add(ExpanderCard("\uE733", T("Ignorierte Apps", "Ignored apps"), T("Werden nie gesteuert", "Never controlled"), BuildIgnoredApps()));
         }
 
         private void RerenderApps()
@@ -1030,6 +1062,107 @@ namespace KnobFlyout.Settings
             RenderActiveList();
             RenderAppList(_searchBox?.Text ?? "");
             RenderProfileOverview();
+            RenderIgnoredApps();
+        }
+
+        private StackPanel? _ignoredList;
+        private WrapPanel? _ignoredRunning;
+        private TextBlock? _ignoredRunningTitle;
+        private TextBox? _ignoredInput;
+        private Button? _ignoredAdd;
+
+        /// <summary>Ignorierte Apps als Zeilen mit ✕, darunter eintragen und gerade laufende Apps als Pillen.</summary>
+        private StackPanel BuildIgnoredApps()
+        {
+            var panel = new StackPanel();
+            panel.Children.Add(_ignoredList = new StackPanel { Margin = new Thickness(0, 0, 0, 10) });
+
+            _ignoredInput = TextField();
+            _ignoredInput.Margin = new Thickness(0);
+            InputHint(_ignoredInput, T("Programm eintragen, z. B. systemsounds", "Enter a program, e.g. systemsounds"));
+            _ignoredAdd = Btn(T("Hinzufügen", "Add"));
+            _ignoredAdd.Margin = new Thickness(8, 0, 0, 0);
+            void Add()
+            {
+                string name = _ignoredInput.Text.Trim();
+                if (name.Length == 0) return;
+                IgnoreApp(name);
+                _ignoredInput.Text = "";
+                _ignoredInput.Focus();
+            }
+            _ignoredAdd.Click += (_, _) => Add();
+            _ignoredInput.PreviewKeyDown += (_, e) =>
+            {
+                if (e.Key != System.Windows.Input.Key.Enter) return;
+                e.Handled = true;
+                Add();
+            };
+            var addRow = new Grid();
+            addRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            addRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            addRow.Children.Add(_ignoredInput);
+            Grid.SetColumn(_ignoredAdd, 1);
+            addRow.Children.Add(_ignoredAdd);
+            panel.Children.Add(addRow);
+
+            panel.Children.Add(_ignoredRunningTitle = new TextBlock { Text = T("Läuft gerade, Klick ignoriert:", "Running now, click to ignore:"), FontSize = 12, Foreground = SubFg, Margin = new Thickness(0, 12, 0, 6) });
+            panel.Children.Add(_ignoredRunning = new WrapPanel());
+            RenderIgnoredApps();
+            return panel;
+        }
+
+        private void IgnoreApp(string name)
+        {
+            if (!_cfg.Exclude.Any(e => e.Equals(name, StringComparison.OrdinalIgnoreCase))) AppRow.ToggleExclude(_cfg, name);
+            RerenderApps();
+        }
+
+        private void RenderIgnoredApps()
+        {
+            if (_ignoredList == null || _ignoredRunning == null || _ignoredRunningTitle == null) return;
+            _ignoredList.Children.Clear();
+            if (_cfg.Exclude.Count == 0)
+                _ignoredList.Children.Add(new TextBlock { Text = T("Keine App wird ignoriert.", "No apps are ignored."), Foreground = SubFg });
+            foreach (var proc in _cfg.Exclude.OrderBy(AppRow.Label, StringComparer.OrdinalIgnoreCase))
+                _ignoredList.Children.Add(IgnoredRow(proc));
+
+            _ignoredRunning.Children.Clear();
+            var running = LiveAudioApps().Where(a => !_cfg.Exclude.Any(e => e.Equals(a, StringComparison.OrdinalIgnoreCase))).OrderBy(AppRow.Label, StringComparer.OrdinalIgnoreCase).ToList();
+            _ignoredRunningTitle.Visibility = running.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            foreach (var proc in running)
+            {
+                string name = proc;
+                var chip = Chip(AppRow.Label(proc), false, () => IgnoreApp(name));
+                chip.Margin = new Thickness(0, 0, 6, 6);
+                chip.ToolTip = proc.ToLowerInvariant();
+                _ignoredRunning.Children.Add(chip);
+            }
+        }
+
+        /// <summary>Eine ignorierte App: Name und Prozess wie in der App-Liste, ✕ nimmt sie wieder auf.</summary>
+        private Border IgnoredRow(string proc)
+        {
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            text.Children.Add(new TextBlock { Text = AppRow.Label(proc), FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = Fg, TextTrimming = TextTrimming.CharacterEllipsis });
+            text.Children.Add(new TextBlock { Text = proc.ToLowerInvariant(), FontSize = 11, Foreground = SubFg, TextTrimming = TextTrimming.CharacterEllipsis });
+            grid.Children.Add(text);
+            var remove = FlatIconButton("\uE711", T($"„{AppRow.Label(proc)}“ nicht mehr ignorieren", $"Stop ignoring “{AppRow.Label(proc)}”"), () =>
+            {
+                AppRow.ToggleExclude(_cfg, proc);
+                RerenderApps();
+            });
+            remove.Width = remove.Height = 28;
+            remove.FontSize = 11;
+            remove.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(remove, 1);
+            grid.Children.Add(remove);
+            var row = new Border { Background = Brushes.Transparent, CornerRadius = new CornerRadius(8), Padding = new Thickness(8, 5, 4, 5), Margin = new Thickness(0, 0, 0, 1), Child = grid };
+            row.MouseEnter += (_, _) => row.Background = HoverBg;
+            row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+            return row;
         }
 
         /// <summary>Entspricht _render_inc(): nur Apps, die gerade aktiv Ton abspielen.</summary>
@@ -1155,15 +1288,45 @@ namespace KnobFlyout.Settings
             string[] osdDesignNames = new[] { T("Eigenes", "Custom"), "ModernFlyouts", "Windows 11" }.Concat(Designs.All.Select(d => d.Name)).ToArray();
             int OsdDesignIndex(string design) => Math.Max(0, Array.IndexOf(osdDesigns, design == "windows" ? "modern" : design));
             var designCombo = Combo(200, OsdDesignIndex(_cfg.OsdDesign), osdDesignNames);
-            var osdCustomHost = new StackPanel(); // Einstellungen des eigenen Designs, nur wenn „Eigenes“ gewählt ist
-            void ShowOsdCustom() => osdCustomHost.Visibility = _cfg.OsdDesign == "dark" ? Visibility.Visible : Visibility.Collapsed;
+            var osdColorsHost = new StackPanel(); // Farben des gewählten Designs
+            ComboBox? ownCombo = null;
+            Action refreshProfile = () => { };
+            bool colorsOpen = _cfg.OsdColorSet().Colors != null;
+            void RenderOsdColors()
+            {
+                osdColorsHost.Children.Clear();
+                var colors = new StackPanel();
+                if (_cfg.OsdDesign == "dark")
+                {
+                    void Custom(string label, string value, string def, Action<string> set) =>
+                        AddColorField(colors, new Dictionary<string, TextBox>(), label, label, value, def, set);
+                    Custom(T("Hintergrund", "Background"), _cfg.ColorBg, Defaults.ColorBg, v => _cfg.ColorBg = v);
+                    Custom(T("Rahmen", "Border"), _cfg.ColorVolBorder, Defaults.ColorVolBorder, v => _cfg.ColorVolBorder = v);
+                    Custom(T("App-Name", "App name"), _cfg.ColorVolText, Defaults.ColorVolText, v => _cfg.ColorVolText = v);
+                    Custom(T("Prozent", "Percent"), _cfg.ColorVolPct, Defaults.ColorVolPct, v => _cfg.ColorVolPct = v);
+                    Custom("Icon", _cfg.ColorVolIcon, Defaults.ColorVolIcon, v => _cfg.ColorVolIcon = v);
+                    Custom(T("Balken-Hintergrund", "Bar background"), _cfg.ColorBarBg, Defaults.ColorBarBg, v => _cfg.ColorBarBg = v);
+                    Custom(T("Balken hoch", "Bar high"), _cfg.ColorBarHi, Defaults.ColorBarHi, v => _cfg.ColorBarHi = v);
+                    Custom(T("Balken mittel", "Bar medium"), _cfg.ColorBarMid, Defaults.ColorBarMid, v => _cfg.ColorBarMid = v);
+                    Custom(T("Balken niedrig", "Bar low"), _cfg.ColorBarLo, Defaults.ColorBarLo, v => _cfg.ColorBarLo = v);
+                    Custom(T("Profil-Rahmen", "Profile border"), _cfg.ColorProfBorder, Defaults.ColorProfBorder, v => _cfg.ColorProfBorder = v);
+                    Custom(T("Profil-Text", "Profile text"), _cfg.ColorProfText, Defaults.ColorProfText, v => _cfg.ColorProfText = v);
+                }
+                else colors.Children.Add(MediaDesignEditor.OsdColors(_cfg, () => { }, compact: false));
+                osdColorsHost.Children.Add(ExpanderCard("\uE771", T("Farben", "Colors"),
+                    T("Gelten je Design · ↺ = wie im Design", "Apply per design · ↺ = as in the design"), colors, colorsOpen, onExpandedChanged: open => colorsOpen = open));
+            }
+            RenderOsdColors();
             designCombo.SelectionChanged += (_, _) =>
             {
                 _cfg.OsdDesign = osdDesigns[Math.Max(0, designCombo.SelectedIndex)];
-                ShowOsdCustom();
+                _cfg.OsdSavedActive = "";
+                if (ownCombo != null) ownCombo.SelectedIndex = 0;
+                RenderOsdColors();
+                refreshProfile();
             };
             int defaultDesign = OsdDesignIndex(Defaults.OsdDesign);
-            page.Children.Add(SettingCard("\uE7F4", "Design", T("Auch fürs Neue-App-Popup · „Eigenes“ mit frei wählbaren Farben", "Also for the new-app popup · “Custom” with your own colors"),
+            page.Children.Add(SettingCard("\uE7F4", "Design", T("Auch fürs Neue-App-Popup", "Also for the new-app popup"),
                 WithEye(WithReset(designCombo, () => designCombo.SelectedIndex = defaultDesign), () => new FrameworkElement[]
                 {
                     OsdCard.CreatePreview(_cfg, "volume"),
@@ -1172,8 +1335,9 @@ namespace KnobFlyout.Settings
                     OsdCard.CreatePreview(_cfg, "lockkey"),
                     NewAppOsd.CreatePreview(_cfg),
                 }, T("OSD-Design", "OSD design"))));
-            page.Children.Add(osdCustomHost); // Inhalt (Farben des eigenen Designs) siehe unten
-            ShowOsdCustom();
+            page.Children.Add(SavedOsdCard(out ownCombo));
+            page.Children.Add(ColorProfileCard(true, out refreshProfile, RenderOsdColors));
+            page.Children.Add(osdColorsHost);
             page.Children.Add(SettingCard("\uE7F4", T("Ecken", "Corners"), T("Auch das Neue-App-Popup", "Also the new-app popup"),
                 CornerControl(_cfg.OsdCornerRadius, Defaults.OsdCornerRadius, r => _cfg.OsdCornerRadius = r)));
             // Designs aus dem Design-System bringen ihre Form selbst mit: „Ecken“ nur bei den älteren Designs zeigen.
@@ -1210,24 +1374,6 @@ namespace KnobFlyout.Settings
             ShowSnapColors();
             designCombo.SelectionChanged += (_, _) => ShowSnapColors();
 
-            var customBoxes = new Dictionary<string, TextBox>();
-            var customColors = new StackPanel();
-            void Custom(string key, string label, string value, string def, Action<string> set) =>
-                AddColorField(customColors, customBoxes, key, label, value, def, set);
-            Custom("color_bg", T("Hintergrund", "Background"), _cfg.ColorBg, Defaults.ColorBg, v => _cfg.ColorBg = v);
-            Custom("color_vol_border", T("Rahmen", "Border"), _cfg.ColorVolBorder, Defaults.ColorVolBorder, v => _cfg.ColorVolBorder = v);
-            Custom("color_vol_text", T("App-Name", "App name"), _cfg.ColorVolText, Defaults.ColorVolText, v => _cfg.ColorVolText = v);
-            Custom("color_vol_pct", T("Prozent", "Percent"), _cfg.ColorVolPct, Defaults.ColorVolPct, v => _cfg.ColorVolPct = v);
-            Custom("color_vol_icon", "Icon", _cfg.ColorVolIcon, Defaults.ColorVolIcon, v => _cfg.ColorVolIcon = v);
-            Custom("color_bar_bg", T("Balken-Hintergrund", "Bar background"), _cfg.ColorBarBg, Defaults.ColorBarBg, v => _cfg.ColorBarBg = v);
-            Custom("color_bar_hi", T("Balken hoch", "Bar high"), _cfg.ColorBarHi, Defaults.ColorBarHi, v => _cfg.ColorBarHi = v);
-            Custom("color_bar_mid", T("Balken mittel", "Bar medium"), _cfg.ColorBarMid, Defaults.ColorBarMid, v => _cfg.ColorBarMid = v);
-            Custom("color_bar_lo", T("Balken niedrig", "Bar low"), _cfg.ColorBarLo, Defaults.ColorBarLo, v => _cfg.ColorBarLo = v);
-            Custom("color_prof_border", T("Profil-Rahmen", "Profile border"), _cfg.ColorProfBorder, Defaults.ColorProfBorder, v => _cfg.ColorProfBorder = v);
-            Custom("color_prof_text", T("Profil-Text", "Profile text"), _cfg.ColorProfText, Defaults.ColorProfText, v => _cfg.ColorProfText = v);
-            customColors.Children.Insert(0, BuildColorPresets(customBoxes));
-            // Erscheint direkt unter der Design-Auswahl, nur bei „Eigenes“.
-            osdCustomHost.Children.Add(ExpanderCard("\uE771", T("Farben des eigenen Designs", "Custom design colors"), null, customColors));
             if (!designPage)
                 page.Children.Add(Hint(T("Profilfarben: Seite „Profile & Apps“ · Hell oder dunkel: Seite „Allgemein“.",
                     "Profile colors: “Profiles & apps” page · Light or dark: “General” page.")));
@@ -1417,7 +1563,7 @@ namespace KnobFlyout.Settings
             void Refill(string? select = null)
             {
                 combo.Items.Clear();
-                foreach (var name in _cfg.ColorProfiles.Where(kv => kv.Value.Keys.Any(boxes.ContainsKey))
+                foreach (var name in _cfg.ColorProfiles.Where(kv => kv.Value.Keys.Any(k => boxes.ContainsKey(PresetKey(k))))
                                                        .Select(kv => kv.Key)
                                                        .OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
                     combo.Items.Add(name);
@@ -1432,8 +1578,10 @@ namespace KnobFlyout.Settings
             {
                 if (combo.SelectedItem is not string name || !_cfg.ColorProfiles.TryGetValue(name, out var preset)) return;
                 foreach (var kv in preset)
-                    if (boxes.TryGetValue(kv.Key, out var box)) box.Text = kv.Value;
-                if (_status != null) _status.Text = T($"Farbprofil „{name}“ angewendet – mit „Speichern“ übernehmen", $"Color profile “{name}” applied – click “Save” to keep it");
+                    if (boxes.TryGetValue(PresetKey(kv.Key), out var box) && (kv.Value != MediaLayout.CoverColor || box.Tag as string == MediaLayout.CoverColor)) box.Text = kv.Value;
+                if (_status != null) _status.Text = _currentPage == "media_custom"
+                    ? T($"Farbprofil „{name}“ angewendet – als eigenes Design speichern, um es zu behalten", $"Color profile “{name}” applied – save as your own design to keep it")
+                    : T($"Farbprofil „{name}“ angewendet – mit „Speichern“ übernehmen", $"Color profile “{name}” applied – click “Save” to keep it");
             };
 
             var delete = Btn("\uE74D"); // Delete
@@ -1443,7 +1591,7 @@ namespace KnobFlyout.Settings
             delete.Click += (_, _) =>
             {
                 if (combo.SelectedItem is not string name || !_cfg.ColorProfiles.TryGetValue(name, out var preset)) return;
-                foreach (var key in boxes.Keys) preset.Remove(key);
+                foreach (var key in preset.Keys.Where(k => boxes.ContainsKey(PresetKey(k))).ToList()) preset.Remove(key);
                 if (preset.Count == 0) _cfg.ColorProfiles.Remove(name);
                 PersistColorProfiles();
                 Refill();
@@ -1480,6 +1628,177 @@ namespace KnobFlyout.Settings
 
             panel.Children.Add(new Border { Height = 1, Background = CardBorder, Margin = new Thickness(0, 6, 0, 6) });
             return panel;
+        }
+
+        private static string PresetKey(string key) => ColorProfiles.Normalize(key);
+
+        /// <summary>
+        /// Zeile „Farbprofil“ für OSD (osd) oder Flyout: Auswahl wendet das Profil gleich an, ↺ zurück auf das Design; aufgeklappt
+        /// speichern, löschen und ob ein Profil für beide gilt. Die Liste ist für beide dieselbe. refresh zeigt nach einem Designwechsel den neuen Stand.
+        /// </summary>
+        private Border ColorProfileCard(bool osd, out Action refresh, Action? changed = null)
+        {
+            var combo = new ComboBox { Width = 200 };
+            bool filling = false;
+            void Fill()
+            {
+                filling = true;
+                var names = _cfg.ColorProfiles.Where(kv => ColorProfiles.Usable(kv.Value)).Select(kv => kv.Key).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
+                combo.Items.Clear();
+                combo.Items.Add("—");
+                foreach (var n in names) combo.Items.Add(n);
+                string? active = names.FirstOrDefault(n => ColorProfiles.Matches(_cfg, _cfg.ColorProfiles[n], osd));
+                combo.SelectedIndex = active != null ? names.IndexOf(active) + 1 : 0;
+                filling = false;
+            }
+            Fill();
+            combo.MouseLeftButtonUp += (_, e) => e.Handled = true; // klappt die Karte nicht mit auf
+            combo.SelectionChanged += (_, _) =>
+            {
+                if (filling || combo.SelectedIndex <= 0 || combo.SelectedItem is not string name) return;
+                var preset = _cfg.ColorProfiles[name];
+                ColorProfiles.Apply(_cfg, preset, osd);
+                if (_cfg.ColorProfileBoth) ColorProfiles.Apply(_cfg, preset, !osd);
+                changed?.Invoke();
+                if (_status != null) _status.Text = T($"Farbprofil „{name}“ angewendet – mit „Speichern“ übernehmen", $"Color profile “{name}” applied – click “Save” to keep it");
+            };
+
+            var nameBox = TextField();
+            nameBox.Margin = new Thickness(0);
+            InputHint(nameBox, T("Name des Farbprofils", "Color profile name"));
+            var save = AccentBtn(T("Speichern", "Save"));
+            save.Margin = new Thickness(6, 0, 0, 0);
+            save.Click += (_, _) =>
+            {
+                string name = nameBox.Text.Trim();
+                if (name.Length == 0)
+                {
+                    nameBox.Focus();
+                    return;
+                }
+                if (!_cfg.ColorProfiles.TryGetValue(name, out var preset))
+                    _cfg.ColorProfiles[name] = preset = new Dictionary<string, string>();
+                foreach (var kv in ColorProfiles.Current(_cfg, osd)) preset[kv.Key] = kv.Value;
+                PersistColorProfiles();
+                nameBox.Text = "";
+                Fill();
+                if (_status != null) _status.Text = T($"Farbprofil „{name}“ gespeichert ✓", $"Color profile “{name}” saved ✓");
+            };
+            var saveRow = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+            saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            saveRow.Children.Add(nameBox);
+            Grid.SetColumn(save, 1);
+            saveRow.Children.Add(save);
+
+            var delete = Btn(T("Gewähltes Profil löschen", "Delete selected profile"));
+            delete.HorizontalAlignment = HorizontalAlignment.Left;
+            delete.Margin = new Thickness(0, 3, 0, 3);
+            delete.Click += (_, _) =>
+            {
+                if (combo.SelectedIndex <= 0 || combo.SelectedItem is not string name) return;
+                _cfg.ColorProfiles.Remove(name);
+                PersistColorProfiles();
+                Fill();
+            };
+
+            var body = new StackPanel();
+            body.Children.Add(saveRow);
+            body.Children.Add(delete);
+            body.Children.Add(OptionRow(osd ? T("Beim Auswählen auch aufs Media-Flyout anwenden", "When selecting, also apply to the media flyout")
+                    : T("Beim Auswählen auch aufs OSD anwenden", "When selecting, also apply to the OSD"),
+                Toggle(_cfg.ColorProfileBoth, v => _cfg.ColorProfileBoth = v)));
+            refresh = Fill;
+            return ExpanderCard("\uE790", T("Farbprofil", "Color profile"),
+                T("Dieselben Profile für OSD und Flyout, in jedem Design · ↺ = Farben des Designs", "The same profiles for OSD and flyout, in every design · ↺ = the design's colors"),
+                body, headerControl: WithReset(combo, () =>
+                {
+                    ColorProfiles.Clear(_cfg, osd);
+                    changed?.Invoke();
+                    Fill();
+                }));
+        }
+
+        /// <summary>Zeile „Eigene Designs“ des Flyouts: Auswahl wendet an, aufgeklappt speichern und löschen.</summary>
+        private Border SavedMediaCard(out ComboBox combo)
+        {
+            var saved = _cfg.MediaSavedDesigns;
+            var names = saved.Select(s => s.Name).ToList();
+            var own = combo = Combo(200, names.IndexOf(_cfg.MediaSavedActive) + 1, new[] { "—" }.Concat(names).ToArray());
+            own.MouseLeftButtonUp += (_, e) => e.Handled = true; // klappt die Karte nicht mit auf
+            own.SelectionChanged += (_, _) =>
+            {
+                if (own.SelectedIndex <= 0)
+                {
+                    if (_cfg.MediaSavedActive.Length == 0) return;
+                    _cfg.SelectMediaPreset(_cfg.MediaDesign);
+                    Dispatcher.BeginInvoke(new Action(RebuildCurrentPage)); // Inhalt und Farben zeigen wieder die der Voreinstellung
+                    return;
+                }
+                saved[own.SelectedIndex - 1].ApplyTo(_cfg);
+                Dispatcher.BeginInvoke(new Action(RebuildCurrentPage)); // Design, Deckkraft, Ecken usw. zeigen die neuen Werte
+            };
+            var editor = new MediaDesignEditor(_cfg, _customExpanded, () => { }, RebuildCurrentPage, savedChanged: PersistSavedDesigns);
+            return ExpanderCard("\uE74E", T("Eigene Designs", "Your own designs"), T("Design, Aufbau, Farben und Deckkraft unter einem Namen", "Design, layout, colors and opacity under one name"),
+                editor.SavedDesigns(), headerControl: own);
+        }
+
+        /// <summary>Zeile „Eigene Designs“ des OSD: Auswahl wendet an, aufgeklappt speichern und löschen.</summary>
+        private Border SavedOsdCard(out ComboBox combo)
+        {
+            var saved = _cfg.OsdSavedDesigns;
+            var names = saved.Select(s => s.Name).ToList();
+            var own = combo = Combo(200, names.IndexOf(_cfg.OsdSavedActive) + 1, new[] { "—" }.Concat(names).ToArray());
+            own.MouseLeftButtonUp += (_, e) => e.Handled = true; // klappt die Karte nicht mit auf
+            own.SelectionChanged += (_, _) =>
+            {
+                if (own.SelectedIndex <= 0)
+                {
+                    if (_cfg.OsdSavedActive.Length == 0) return;
+                    _cfg.SelectOsdPreset();
+                    Dispatcher.BeginInvoke(new Action(RebuildCurrentPage)); // Farben zeigen wieder die des Designs
+                    return;
+                }
+                saved[own.SelectedIndex - 1].ApplyTo(_cfg);
+                Dispatcher.BeginInvoke(new Action(RebuildCurrentPage));
+            };
+            void Done()
+            {
+                PersistOsdSavedDesigns();
+                RebuildCurrentPage();
+            }
+            var body = MediaDesignEditor.SavedPanel(names, _cfg.OsdSavedActive,
+                name =>
+                {
+                    saved.First(s => s.Name == name).ApplyTo(_cfg);
+                    RebuildCurrentPage();
+                },
+                name =>
+                {
+                    saved.RemoveAll(s => s.Name == name);
+                    if (_cfg.OsdSavedActive == name) _cfg.SelectOsdPreset();
+                    Done();
+                },
+                text =>
+                {
+                    var entry = SavedOsdDesign.From(_cfg, text);
+                    int index = saved.FindIndex(s => string.Equals(s.Name, text, StringComparison.OrdinalIgnoreCase));
+                    if (index >= 0) saved[index] = entry;
+                    else saved.Add(entry);
+                    _cfg.OsdSavedActive = text;
+                    Done();
+                },
+                false, T("Name, z. B. Mein OSD", "Name, e.g. My OSD"),
+                T("Speichert Design, Farben, Deckkraft und Ecken. Gleicher Name überschreibt.", "Saves the design, colors, opacity and corners. The same name overwrites."));
+            return ExpanderCard("\uE74E", T("Eigene Designs", "Your own designs"), T("Design, Farben und Deckkraft unter einem Namen", "Design, colors and opacity under one name"), body, headerControl: own);
+        }
+
+        private void PersistOsdSavedDesigns()
+        {
+            var onDisk = ConfigManager.Load();
+            onDisk.OsdSavedDesigns = _cfg.OsdSavedDesigns;
+            ConfigManager.Save(onDisk);
+            _savedKey = SaveKey(ConfigManager.Load());
         }
 
         /// <summary>Farbprofile sofort auf die Platte schreiben (übrige ungespeicherte Änderungen bleiben im Fenster).</summary>
@@ -1555,33 +1874,27 @@ namespace KnobFlyout.Settings
         {
             // ── Aussehen (Augen-Knopf = Live-Vorschau) ──
             page.Children.Add(SectionTitle(appearanceTitle));
-            // Ältere Designs, dahinter alle aus dem Design-System (Designs.All, z. B. „Dynamic Island“), zuletzt die gespeicherten.
-            var saved = _cfg.MediaSavedDesigns;
-            string[] mediaDesigns = new[] { "modernflyouts", "win11", "custom" }.Concat(Designs.All.Select(d => d.Key)).Concat(saved.Select(s => "saved:" + s.Name)).ToArray();
-            string[] mediaDesignNames = new[] { "ModernFlyouts", "Windows 11", T("Eigenes", "Custom") }.Concat(Designs.All.Select(d => d.Name)).Concat(saved.Select(s => s.Name)).ToArray();
-            string currentDesign = saved.Any(s => s.Name == _cfg.MediaSavedActive) ? "saved:" + _cfg.MediaSavedActive : _cfg.MediaDesign;
-            var mediaDesign = Combo(200, Math.Max(0, Array.IndexOf(mediaDesigns, currentDesign)), mediaDesignNames);
+            // Ältere Designs, dahinter alle aus dem Design-System (Designs.All, z. B. „Dynamic Island“).
+            string[] mediaDesigns = new[] { "modernflyouts", "win11", "custom" }.Concat(Designs.All.Select(d => d.Key)).ToArray();
+            string[] mediaDesignNames = new[] { "ModernFlyouts", "Windows 11", T("Eigenes", "Custom") }.Concat(Designs.All.Select(d => d.Name)).ToArray();
+            var mediaDesign = Combo(200, Math.Max(0, Array.IndexOf(mediaDesigns, _cfg.MediaDesign)), mediaDesignNames);
+            ComboBox? ownCombo = null;
+            Action refreshProfile = () => { };
             mediaDesign.SelectionChanged += (_, _) =>
             {
-                string key = mediaDesigns[Math.Max(0, mediaDesign.SelectedIndex)];
-                if (key.StartsWith("saved:"))
-                {
-                    saved.First(s => "saved:" + s.Name == key).ApplyTo(_cfg);
-                    Dispatcher.BeginInvoke(new Action(RebuildCurrentPage)); // Deckkraft, Ecken usw. zeigen die neuen Werte
-                }
-                else
-                {
-                    _cfg.MediaDesign = key;
-                    _cfg.MediaSavedActive = "";
-                }
+                _cfg.SelectMediaPreset(mediaDesigns[Math.Max(0, mediaDesign.SelectedIndex)]);
+                if (ownCombo != null) ownCombo.SelectedIndex = 0;
+                refreshProfile();
                 foreach (var (toggle, value) in _mediaContentToggles) toggle.IsChecked = value();
             };
-            page.Children.Add(SettingCard("\uE8D6", "Design", T("Eigene Designs stehen hinten in der Liste", "Your own designs are at the end of the list"),
+            page.Children.Add(SettingCard("\uE8D6", "Design", null,
                 WithEye(WithReset(mediaDesign, () => mediaDesign.SelectedIndex = Math.Max(0, Array.IndexOf(mediaDesigns, Defaults.MediaDesign))),
                     () => new[] { MediaOsd.CreatePreview(_cfg) }, T("Media-Flyout", "Media flyout"))));
+            page.Children.Add(SavedMediaCard(out ownCombo));
+            page.Children.Add(ColorProfileCard(false, out refreshProfile));
             page.Children.Add(NavCard("\uE70F", T("Design anpassen", "Customize the design"), // Edit
-                T("Elemente ein- und ausschalten, Reihenfolge, Cover, Knöpfe, Vorlagen und als eigenes Design speichern, mit Live-Vorschau",
-                    "Turn elements on and off, order, album art, buttons, templates and save as your own design, with live preview"),
+                T("Elemente ein- und ausschalten, Reihenfolge, Cover, Knöpfe, Vorlagen, Farben · Gespeichert wird als eigenes Design, die Voreinstellung bleibt",
+                    "Turn elements on and off, order, album art, buttons, templates, colors · Saved as your own design, the preset stays as it is"),
                 () => OpenMediaCustomEditor(designPage ? "design" : "media")));
             page.Children.Add(SettingCard("\uE8D6", T("Ecken", "Corners"), null,
                 CornerControl(_cfg.MediaCornerRadius, Defaults.MediaCornerRadius, r => _cfg.MediaCornerRadius = r)));
@@ -1640,6 +1953,7 @@ namespace KnobFlyout.Settings
         {
             _subParent = parent;
             _customExpanded.Clear();
+            _designDraft = new DesignDraft(_cfg);
             SelectPage("media_custom");
             _pageScroll?.ScrollToTop();
         }
@@ -1657,7 +1971,8 @@ namespace KnobFlyout.Settings
         /// <summary>Kopf (Zurück + Pfad) und Live-Vorschau über der scrollenden Seite; die Vorschau baut sich bei jeder Änderung neu.</summary>
         private void ShowMediaCustomHeader()
         {
-            if (_pinnedTop == null) return;
+            if (_pinnedTop == null || _designDraft == null) return;
+            var draft = _designDraft;
             var back = FlatIconButton("\uE72B", T("Zurück", "Back"), () => SelectPage(_subParent)); // Back
             back.Width = back.Height = 32;
             back.FontSize = 14;
@@ -1686,10 +2001,21 @@ namespace KnobFlyout.Settings
             var previewHost = new Viewbox { StretchDirection = StretchDirection.DownOnly, HorizontalAlignment = HorizontalAlignment.Center };
             void Fit() => previewHost.MaxHeight = Math.Clamp(ActualHeight - 470, 110, 230);
             string snapshot = "";
+            var saveDraft = AccentBtn(T("Als eigenes Design speichern", "Save as your own design"));
+            saveDraft.Margin = new Thickness(20, 0, 0, 0);
+            saveDraft.Click += (_, _) =>
+            {
+                var (choice, name) = DesignSaveDialog.AskDesign(this, draft.SuggestedName(), leaving: false);
+                if (choice == LeaveChoice.Save) SaveDesignDraft(name);
+            };
             void Refresh()
             {
                 Fit();
-                string now = ConfigSnapshot();
+                saveDraft.IsEnabled = draft.Dirty;
+                saveDraft.Background = draft.Dirty ? Accent : ButtonBg;
+                saveDraft.BorderBrush = draft.Dirty ? Accent : ButtonBorder;
+                saveDraft.Foreground = draft.Dirty ? Brushes.White : SubFg;
+                string now = System.Text.Json.JsonSerializer.Serialize(draft.Cfg) + _cfg.MediaPreviewLive;
                 if (now == snapshot) return;
                 snapshot = now;
                 try
@@ -1698,12 +2024,12 @@ namespace KnobFlyout.Settings
                     _customPreviewDispose = null;
                     if (_cfg.MediaPreviewLive && _media != null)
                     {
-                        previewHost.Child = MediaOsd.CreateLive(_cfg, _media, null, out var dispose);
+                        previewHost.Child = MediaOsd.CreateLive(draft.Cfg, _media, null, out var dispose);
                         _customPreviewDispose = dispose;
                     }
                     else
                     {
-                        var preview = MediaOsd.CreatePreview(_cfg);
+                        var preview = MediaOsd.CreatePreview(draft.Cfg);
                         preview.IsHitTestVisible = false; // reine Ansicht
                         previewHost.Child = preview;
                     }
@@ -1713,9 +2039,10 @@ namespace KnobFlyout.Settings
             Refresh();
 
             var note = new TextBlock { FontSize = 11, Foreground = SubFg, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 2, 0, 0) };
-            void ShowNote() => note.Text = _cfg.MediaPreviewLive
-                ? T("Zeigt, was gerade läuft, die Knöpfe wirken wirklich · gilt nach „Speichern“", "Shows what's playing, the buttons really work · applies after “Save”")
-                : T("Vorschau mit Beispiel · gilt nach „Speichern“", "Preview with a sample · applies after “Save”");
+            void ShowNote() => note.Text = (_cfg.MediaPreviewLive
+                ? T("Zeigt, was gerade läuft, die Knöpfe wirken wirklich", "Shows what's playing, the buttons really work")
+                : T("Vorschau mit Beispiel", "Preview with a sample"))
+                + T(" · Änderungen sind ein Entwurf, bis du sie als eigenes Design speicherst", " · Changes are a draft until you save them as your own design");
             ShowNote();
             var liveRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
             liveRow.Children.Add(new TextBlock { Text = T("Live-Flyout", "Live flyout"), FontSize = 12, Foreground = Fg, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
@@ -1729,6 +2056,7 @@ namespace KnobFlyout.Settings
                 ShowNote();
                 Refresh();
             }));
+            liveRow.Children.Add(saveDraft);
 
             var panel = new StackPanel { Margin = new Thickness(24, 14, 32, 12), MaxWidth = 968 };
             panel.Children.Add(crumbs);
@@ -1742,6 +2070,34 @@ namespace KnobFlyout.Settings
             _customPreviewTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             _customPreviewTimer.Tick += (_, _) => Refresh();
             _customPreviewTimer.Start();
+        }
+
+        /// <summary>Entwurf als eigenes Design speichern und gleich verwenden; andere noch nicht gespeicherte Einstellungen bleiben offen.</summary>
+        private void SaveDesignDraft(string name)
+        {
+            if (_designDraft == null) return;
+            var onDisk = ConfigManager.Load();
+            _designDraft.SaveTo(name, _cfg, onDisk);
+            ConfigManager.Save(onDisk);
+            _savedKey = SaveKey(ConfigManager.Load());
+            _designDraft = new DesignDraft(_cfg);
+            ConfigApplied?.Invoke();
+            if (_status != null) _status.Text = T($"Design „{name}“ gespeichert ✓", $"Design “{name}” saved ✓");
+            if (_currentPage == "media_custom") RebuildMediaCustomPage();
+        }
+
+        /// <summary>Unterseite „Design anpassen“ verlassen: bei ungespeichertem Entwurf nachfragen. false = bleiben.</summary>
+        private bool ConfirmLeaveDesign()
+        {
+            if (_designDraft == null) return true;
+            if (_designDraft.Dirty)
+            {
+                var (choice, name) = DesignSaveDialog.AskDesign(this, _designDraft.SuggestedName(), leaving: true);
+                if (choice == LeaveChoice.Stay) return false;
+                if (choice == LeaveChoice.Save) SaveDesignDraft(name);
+            }
+            _designDraft = null;
+            return true;
         }
 
         private void HideMediaCustomHeader()
@@ -1762,12 +2118,13 @@ namespace KnobFlyout.Settings
         /// </summary>
         private void BuildMediaCustomPage(StackPanel page)
         {
+            _designDraft ??= new DesignDraft(_cfg);
             ShowMediaCustomHeader();
 
             page.Children.Add(SectionTitle(T("Vorlage", "Template")));
             page.Children.Add(Hint(T("Startpunkt wählen und danach beliebig anpassen. ↺ setzt einen Wert auf die gewählte Vorlage zurück. Farben und Deckkraft bleiben erhalten.",
                 "Pick a starting point and adjust it as you like. ↺ resets a value to the chosen template. Colors and opacity are kept.")));
-            var editor = new MediaDesignEditor(_cfg, _customExpanded, () => { }, RebuildMediaCustomPage, savedChanged: PersistSavedDesigns);
+            var editor = new MediaDesignEditor(_designDraft.Cfg, _customExpanded, () => { }, RebuildMediaCustomPage);
             page.Children.Add(editor.Templates());
 
             page.Children.Add(SectionTitle(T("Was soll zu sehen sein?", "What should be shown?")));
@@ -1779,27 +2136,14 @@ namespace KnobFlyout.Settings
             page.Children.Add(SectionTitle(T("Farben", "Colors")));
             var boxes = new Dictionary<string, TextBox>();
             var colors = new StackPanel();
-            bool custom = _cfg.MediaDesign == "custom";
-            if (custom)
-            {
-                AddColorField(colors, boxes, "media_custom_bg", T("Hintergrund", "Background"), _cfg.MediaCustomBg, Defaults.MediaCustomBg, v => _cfg.MediaCustomBg = v);
-                AddColorField(colors, boxes, "media_custom_fg", T("Text und Symbole", "Text and icons"), _cfg.MediaCustomFg, Defaults.MediaCustomFg, v => _cfg.MediaCustomFg = v);
-                AddColorField(colors, boxes, "media_custom_sub", T("Nebentext", "Secondary text"), _cfg.MediaCustomSub, Defaults.MediaCustomSub, v => _cfg.MediaCustomSub = v);
-                AddColorField(colors, boxes, "media_custom_accent", T("Akzent (Leiste, Quelle)", "Accent (bar, source)"), _cfg.MediaCustomAccent, Defaults.MediaCustomAccent, v => _cfg.MediaCustomAccent = v);
-                AddColorField(colors, boxes, "media_custom_button_bg", T("Knopf-Fläche", "Button fill"), _cfg.MediaCustomButtonBg, Defaults.MediaCustomButtonBg, v => _cfg.MediaCustomButtonBg = v);
-                AddColorField(colors, boxes, "media_custom_track", T("Leiste (Hintergrund)", "Bar (background)"), _cfg.MediaCustomTrack, Defaults.MediaCustomTrack, v => _cfg.MediaCustomTrack = v);
-            }
-            else colors.Children.Add(editor.DesignColors(boxes));
+            colors.Children.Add(editor.DesignColors(boxes));
             colors.Children.Insert(0, BuildColorPresets(boxes));
             page.Children.Add(ExpanderCard("\uE790", T("Farben", "Colors"),
-                custom ? T("Hintergrund, Text, Akzent, Knöpfe und Leiste", "Background, text, accent, buttons and bar")
-                    : T("Jede Farbe einzeln · ↺ = wie im Design", "Each color individually · ↺ = as in the design"),
-                colors, expanded: !custom && _cfg.Layout().Colors != null));
+                T("Jede Farbe einzeln, fest oder nach dem Titelbild · Farbprofile gelten für alle Designs", "Each color individually, fixed or from the album art · Color profiles work across designs"),
+                colors, expanded: _designDraft.Cfg.Layout().Colors != null));
 
-            page.Children.Add(SectionTitle(T("Eigene Designs", "Your own designs")));
-            page.Children.Add(editor.SavedDesigns());
-            page.Children.Add(Hint(T("Deckkraft und Cover als Hintergrund: Seite „Media-Flyout“ → Aussehen.",
-                "Opacity and album art background: “Media flyout” page → Appearance.")));
+            page.Children.Add(Hint(T("Deckkraft und Cover als Hintergrund: Seite „Media-Flyout“ → Aussehen. Eigene Designs wählen und löschen: dort unter „Eigene Designs“.",
+                "Opacity and album art background: “Media flyout” page → Appearance. Choose and delete your own designs: there under “Your own designs”.")));
         }
 
         /// <summary>Liste der gespeicherten Designs sofort sichern (wie die Farbprofile); ein gewähltes gilt erst mit „Speichern“.</summary>
@@ -1808,6 +2152,7 @@ namespace KnobFlyout.Settings
             var onDisk = ConfigManager.Load();
             onDisk.MediaSavedDesigns = _cfg.MediaSavedDesigns;
             ConfigManager.Save(onDisk);
+            _savedKey = SaveKey(ConfigManager.Load());
         }
 
         /// <summary>Aktuelle Seite neu aufbauen (wurde die Config geändert), Scroll-Position bleibt.</summary>
@@ -1864,6 +2209,16 @@ namespace KnobFlyout.Settings
                 if (k != _currentPage) _pages.Remove(k);
         };
 
+        /// <summary>Zuweisungs-OSD an/aus (Seiten Allgemein und Profile &amp; Apps).</summary>
+        private Border NewAppPopupCard() => SettingCard("\uE7E7", T("Zuweisungs-OSD anzeigen", "Show assignment OSD"),
+            T("Popup, das bei einer neuen App nach dem Profil fragt · Aus: Automatisch einsortieren läuft weiter, der Rest bleibt ohne Profil",
+                "Popup asking which profile a new app belongs to · Off: sorting automatically keeps running, the rest stays without a profile"),
+            Toggle(_cfg.NewAppPopup, v =>
+            {
+                _cfg.NewAppPopup = v;
+                _pages.Remove(_currentPage == "general" ? "profiles" : "general"); // die andere Seite zeigt beim Öffnen den neuen Wert
+            }));
+
         /// <summary>Profil-Taste (Seiten Profile &amp; Apps, OSD und Tastenkürzel).</summary>
         private Border ProfileHotkeyCard() => SettingCard("\uE765", T("Profil wechseln", "Switch profile"),
             T("Kurz drücken: nächstes Profil · Halten: nächste gespeicherte Position", "Tap: next profile · Hold: next saved position"),
@@ -1917,6 +2272,7 @@ namespace KnobFlyout.Settings
             ("shuffle", T("Zufallswiedergabe", "Shuffle")),
             ("repeat", T("Wiederholen", "Repeat")),
             ("switch_source", T("Nächste Quelle", "Next source")),
+            ("keep", T("Dauerhaft anzeigen an/aus", "Keep on screen on/off")),
             ("skip_hotkeys", T("Hotkeys ±10 s an/aus", "±10 s hotkeys on/off")),
             ("pin", T("Angeheftet lassen (nicht ausblenden)", "Keep pinned (don't hide)")),
             ("save_position", T("Position speichern", "Save position")),

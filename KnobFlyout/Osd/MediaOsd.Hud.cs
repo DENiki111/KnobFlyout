@@ -54,7 +54,7 @@ namespace KnobFlyout.Osd
             _card.BorderThickness = new Thickness(0);
             _card.CornerRadius = new CornerRadius(0);
             _card.Background = Brushes.Transparent; // Fläche zeichnet _hudBg (siehe ApplyHudBackground)
-            _hudBg = new System.Windows.Shapes.Path { Stroke = Hex(pal.Edge), StrokeThickness = 1 };
+            _hudBg = new System.Windows.Shapes.Path { Stroke = Role(Config.MediaLayout.ColorEdge, pal.Edge), StrokeThickness = 1 };
             _host.Children.Insert(0, _hudBg);
             if (pal.Scan != null) _host.Children.Add(new Rectangle { Fill = HudParts.Scanlines(pal.Scan), IsHitTestVisible = false });
             _hudBrackets = new System.Windows.Shapes.Path { Stroke = _accent, StrokeThickness = 2, IsHitTestVisible = false };
@@ -104,7 +104,7 @@ namespace KnobFlyout.Osd
             _hudStatus = status;
 
             var more = new Grid { Width = 30, Height = 26, Margin = new Thickness(8, 0, 0, 0) };
-            more.Children.Add(HudParts.ChamferPath(30, 26, 5, null, Hex(pal.Edge)));
+            more.Children.Add(HudParts.ChamferPath(30, 26, 5, null, Role(Config.MediaLayout.ColorEdge, pal.Edge)));
             _moreBtn.Width = 30;
             _moreBtn.Height = 26;
             _moreBtn.CornerRadius = new CornerRadius(0);
@@ -112,7 +112,7 @@ namespace KnobFlyout.Osd
             _moreBtn.Clip = HudParts.Chamfer(30, 26, 5);
             _moreBtn.HorizontalAlignment = HorizontalAlignment.Stretch;
             if (_moreBtn.Child is TextBlock dots) dots.FontSize = 13;
-            var hover = Hex(pal.Button);
+            var hover = Role(Config.MediaLayout.ColorButton, pal.Button);
             _moreBtn.MouseEnter += (_, _) => _moreBtn.Background = hover;
             _moreBtn.MouseLeave += (_, _) => _moreBtn.Background = Brushes.Transparent;
             more.Children.Add(_moreBtn);
@@ -178,10 +178,11 @@ namespace KnobFlyout.Osd
             _elapsed.Margin = new Thickness(0, 0, 10, 0);
             _total.Margin = new Thickness(10, 0, 0, 0);
             foreach (UIElement child in _seekHost.Children) child.Visibility = Visibility.Collapsed; // Standard-Spur, Füllung, Griff
-            var segs = HudParts.Segments(36, 8, 2, Hex(pal.Track), out _hudProg, out var front);
+            var segs = HudParts.Segments(36, 8, 2, Role(Config.MediaLayout.ColorTrack, pal.Track), out _hudProg, out var front);
             segs.VerticalAlignment = VerticalAlignment.Center;
             segs.IsHitTestVisible = false;
             front.Effect = HudParts.Glow(_accent.Color, _hudGlowOpacity, 6);
+            if (_layout.FollowsCover(Config.MediaLayout.ColorAccent)) _coverGlows.Add((front, _accent, _hudGlowOpacity, 6));
             _seekHost.Children.Add(segs);
             _seekHost.Margin = new Thickness(0);
             Grid.SetRow(_seekHost, 0);
@@ -202,7 +203,7 @@ namespace KnobFlyout.Osd
                 bool play = i == 2;
                 double w = play ? 64 : 44, h = 34;
                 var shell = new Grid { Width = w, Height = h, Margin = new Thickness(4, 0, 4, 0) };
-                shell.Children.Add(HudParts.ChamferPath(w, h, 6, play ? _accent : null, play ? _accent : Hex(pal.Edge)));
+                shell.Children.Add(HudParts.ChamferPath(w, h, 6, play ? _accent : null, play ? _accent : Role(Config.MediaLayout.ColorEdge, pal.Edge)));
                 inner.Width = w;
                 inner.Height = h;
                 inner.Margin = new Thickness(0);
@@ -215,7 +216,7 @@ namespace KnobFlyout.Osd
             if (buttons[0] is Border { Child: TextBlock prev }) prev.FontSize = 16;
             if (buttons[4] is Border { Child: TextBlock next }) next.FontSize = 16;
             _playPauseGlyph.FontSize = 18;
-            _playPauseGlyph.Foreground = Hex(pal.OnAccent ?? pal.Bg);
+            _playPauseGlyph.Foreground = Role(RoleOnAccent, pal.OnAccent ?? pal.Bg);
             HudSkipLabel(_skipBackBtn, "−10");
             HudSkipLabel(_skipFwdBtn, "+10");
             controls.Margin = new Thickness(0, 12, 0, 0);

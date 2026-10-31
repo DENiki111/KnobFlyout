@@ -174,10 +174,10 @@ namespace KnobFlyout.Osd
             // Eigenes Design: Farben aus der Config; hell/dunkel (Hover, Quellen-Pills, Menü) nach dem Hintergrund.
             string customBg = NormHex(cfg.MediaCustomBg, "#222222");
             _light = LightFor(cfg);
-            _pal = _spec?.Palette(_light).WithColors(layout);
+            _pal = _basePal = _spec?.Palette(_light).WithColors(layout);
             _flatButtons = _spec != null || (layout.Buttons ?? (_win11 ? "flat" : "round")) == "flat";
             if (_spec == null && layout.ButtonSize > 0) _buttonScale = Math.Clamp(layout.ButtonSize, 70, 140) / 100.0;
-            if (_custom) _customButtonBg = Hex(NormHex(cfg.MediaCustomButtonBg, "#3a3a3a"));
+            if (_custom) _customButtonBg = Role(MediaLayout.ColorButton, NormHex(cfg.MediaCustomButtonBg, "#3a3a3a"));
             else if (_spec == null && Own(MediaLayout.ColorButton) is { } ownButton) _customButtonBg = Hex(ownButton);
             _hideSources = !layout.Shows(MediaLayout.Sources);
             _showSourcePause = layout.Shows(MediaLayout.SourcePause);
@@ -187,11 +187,11 @@ namespace KnobFlyout.Osd
             if (_spec != null) _radius = _spec.MediaRadius; // Form des Designs statt Ecken-Einstellung
 
             // Windows 11: schwarz/weiß (Füllungen in Textfarbe), gedämpfte Flächen, 1-px-Rand.
-            var fg = _pal != null ? Hex(_pal.Fg) : _custom ? Hex(NormHex(cfg.MediaCustomFg, "#ffffff")) : Hex(Own(MediaLayout.ColorFg) ?? (_light ? "#1b1b1b" : "#ffffff"));
-            var sub = _pal != null ? Hex(_pal.Sub) : _custom ? Hex(NormHex(cfg.MediaCustomSub, "#a0a0a6")) : Hex(Own(MediaLayout.ColorSub) ?? (_light ? "#5c5c5c" : _win11 ? "#c5c5c5" : "#a0a0a6"));
-            var accent = _accent = _pal != null ? Hex(_pal.Fill) : _custom ? Hex(NormHex(cfg.MediaCustomAccent, "#3b82f6"))
-                : Own(MediaLayout.ColorAccent) is { } ownAccent ? Hex(ownAccent) : _win11 ? fg : Hex("#3b82f6");
-            string cardHex = _cardHex = _pal != null ? NormHex(_pal.Bg, "#000000") : _custom ? customBg
+            var fg = Role(MediaLayout.ColorFg, _pal != null ? _pal.Fg : _custom ? NormHex(cfg.MediaCustomFg, "#ffffff") : Own(MediaLayout.ColorFg) ?? (_light ? "#1b1b1b" : "#ffffff"));
+            var sub = Role(MediaLayout.ColorSub, _pal != null ? _pal.Sub : _custom ? NormHex(cfg.MediaCustomSub, "#a0a0a6") : Own(MediaLayout.ColorSub) ?? (_light ? "#5c5c5c" : _win11 ? "#c5c5c5" : "#a0a0a6"));
+            var accent = _accent = _win11 && Own(MediaLayout.ColorAccent) == null && !layout.FollowsCover(MediaLayout.ColorAccent) ? fg // Windows 11: Füllungen in Textfarbe
+                : Role(MediaLayout.ColorAccent, _pal != null ? _pal.Fill : _custom ? NormHex(cfg.MediaCustomAccent, "#3b82f6") : Own(MediaLayout.ColorAccent) ?? (_win11 ? (_light ? "#1b1b1b" : "#ffffff") : "#3b82f6"));
+            string cardHex = _cardHex = _baseCardHex = _pal != null ? NormHex(_pal.Bg, "#000000") : _custom ? customBg
                 : Own(MediaLayout.ColorBg) is { } ownBg ? NormHex(ownBg, "#222222") : _win11 ? (_light ? "#E9E9EB" : "#2C2C2C") : (_light ? "#EFEFEF" : "#222222");
             _fgBrush = fg;
             _subBrush = sub;
@@ -230,7 +230,7 @@ namespace KnobFlyout.Osd
             {
                 CornerRadius = new CornerRadius(_radius), // Standard 8 = exakt ModernFlyouts' FlyoutCornerRadius
                 Background = Hex(cardHex),          // ModernFlyouts: exakt dessen FlyoutBackground
-                BorderBrush = _pal != null ? Hex(_pal.Edge) : _win11 ? Hex(Own(MediaLayout.ColorEdge) ?? (_light ? "#D0D0D4" : "#404040")) : null,
+                BorderBrush = _pal != null ? Role(MediaLayout.ColorEdge, _pal.Edge) : _win11 ? Hex(Own(MediaLayout.ColorEdge) ?? (_light ? "#D0D0D4" : "#404040")) : null,
                 BorderThickness = new Thickness(_win11 || _pal != null ? 1 : 0),
                 Child = host,
             };
@@ -277,7 +277,7 @@ namespace KnobFlyout.Osd
 
             // "…"-Knopf: ModernFlyouts unten links in der Knopfreihe, Windows 11 oben rechts als kleines
             // Quadrat (wie der ">"-Knopf der Windows-Schnelleinstellungen).
-            Brush moreBg = _customButtonBg ?? (_win11 ? Hex(_light ? "#0F000000" : "#14FFFFFF") : Hex(_light ? "#DADADA" : "#3a3a3a"));
+            Brush moreBg = _customButtonBg ?? Role(MediaLayout.ColorButton, _win11 ? (_light ? "#0F000000" : "#14FFFFFF") : (_light ? "#DADADA" : "#3a3a3a"));
             _moreBtn = new Border
             {
                 Width = _win11 ? 30 : 34, Height = _win11 ? 30 : 28, CornerRadius = new CornerRadius(4),
@@ -349,7 +349,7 @@ namespace KnobFlyout.Osd
             _seekHost.Children.Add(new Border
             {
                 Height = trackH, CornerRadius = new CornerRadius(trackH / 2), VerticalAlignment = VerticalAlignment.Center,
-                Background = _pal != null ? Hex(_pal.Track) : _custom ? Hex(NormHex(cfg.MediaCustomTrack, "#5a5a5a")) : Hex(Own(MediaLayout.ColorTrack) ?? (_light ? "#BDBDBD" : "#5a5a5a")),
+                Background = Role(MediaLayout.ColorTrack, _pal != null ? _pal.Track : _custom ? NormHex(cfg.MediaCustomTrack, "#5a5a5a") : Own(MediaLayout.ColorTrack) ?? (_light ? "#BDBDBD" : "#5a5a5a")),
             });
             _seekFill = new Border
             {
@@ -480,16 +480,16 @@ namespace KnobFlyout.Osd
             size *= _buttonScale;
             // Design-System: reine Symbole mit runder Hover-Fläche, Play größer (48) als die übrigen (40).
             if (_spec != null) size = isPlay ? 48 : 40;
-            Brush normalBg = filled ? _customButtonBg ?? Hex(_light ? "#D4D4D4" : "#3a3a3a") : Brushes.Transparent;
+            Brush normalBg = filled ? _customButtonBg ?? Role(MediaLayout.ColorButton, _light ? "#D4D4D4" : "#3a3a3a") : Brushes.Transparent;
             Brush hoverBg = filled
-                ? (_customButtonBg != null ? Shade(_customButtonBg, 0.12) : Hex(_light ? "#C6C6C6" : "#4a4a4a"))
-                : _pal != null ? Hex(_pal.Button) : !_custom && _customButtonBg != null ? _customButtonBg : Hex(_light ? "#14000000" : "#1AFFFFFF");
+                ? (_customButtonBg != null ? Shade(_customButtonBg, 0.12) : Role(MediaLayout.ColorButton, _light ? "#C6C6C6" : "#4a4a4a"))
+                : _pal != null ? Role(MediaLayout.ColorButton, _pal.Button) : !_custom && _customButtonBg != null ? _customButtonBg : Role(MediaLayout.ColorButton, _light ? "#14000000" : "#1AFFFFFF");
 
             var border = new Border
             {
                 Width = size, Height = size, CornerRadius = new CornerRadius(_flatButtons && _spec == null ? 4 : size / 2),
                 Background = normalBg,
-                BorderBrush = filled ? (_customButtonBg != null ? Shade(_customButtonBg, 0.2) : Hex(_light ? "#B4B4B4" : "#5c5c5c")) : Brushes.Transparent,
+                BorderBrush = filled ? (_customButtonBg != null ? Shade(_customButtonBg, 0.2) : Role(MediaLayout.ColorButton, _light ? "#B4B4B4" : "#5c5c5c")) : Brushes.Transparent,
                 BorderThickness = new Thickness(filled ? 1 : 0),
                 // Win11: weiter auseinander wie in den Schnelleinstellungen
                 Margin = _spec != null ? new Thickness(3, 0, 3, 0)
@@ -705,7 +705,7 @@ namespace KnobFlyout.Osd
             var badge = new Border
             {
                 Width = 22, Height = 22, CornerRadius = new CornerRadius(11), Background = Hex(pal.ArtPlaceholder),
-                BorderBrush = Hex(_cardHex), BorderThickness = new Thickness(2), Child = badgeContent,
+                BorderBrush = Role(MediaLayout.ColorBg, _cardHex), BorderThickness = new Thickness(2), Child = badgeContent,
                 HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
                 Margin = new Thickness(0, 0, -6, -6),
             };
@@ -782,7 +782,7 @@ namespace KnobFlyout.Osd
             controls.Children.Add(center);
             _moreBtn.Width = _moreBtn.Height = 30;
             _moreBtn.CornerRadius = new CornerRadius(15);
-            _moreBtn.Background = Hex(pal.Button);
+            _moreBtn.Background = Role(MediaLayout.ColorButton, pal.Button);
             _moreBtn.HorizontalAlignment = HorizontalAlignment.Right;
             if (_moreBtn.Child is TextBlock dots) dots.FontSize = 13;
             _moreBtn.MouseEnter += (_, _) => _moreBtn.Opacity = 0.8;
@@ -862,7 +862,8 @@ namespace KnobFlyout.Osd
             return bg != null ? IsLightHex(bg) : ThemeHelper.IsLight(cfg);
         }
 
-        private Color WaveColor(BitmapSource? cover) => Own(MediaLayout.ColorWave) is { } wave ? Hex(wave).Color : CoverAccent(cover);
+        private Color WaveColor(BitmapSource? cover) => Own(MediaLayout.ColorWave) is { } wave ? Hex(wave).Color
+            : cover == null && _sampleCover ? SampleCoverColor : CoverAccent(cover);
 
         /// <summary>Kräftigste Farbe des Covers (für die Wellenform), für Kontrast zum Hintergrund aufgehellt/abgedunkelt.</summary>
         private Color CoverAccent(BitmapSource? cover)
@@ -985,6 +986,8 @@ namespace KnobFlyout.Osd
 
             bool useBackground = cover != null && cfg.MediaArtBackground;
             if (IsMaterial) ApplyMaterial(cover, useBackground); // Farben aus dem Cover (vor dem Kartenhintergrund)
+            else ApplyCoverColors(cover);
+            if (_waveBars.Count > 0 && cover == null) _waveBrush.Color = WaveColor(null);
             _bgImage.Source = useBackground ? cover : null;
             _bgImage.Visibility = _bgOverlay.Visibility = useBackground ? Visibility.Visible : Visibility.Collapsed;
             // Deckkraft: media_opacity für den Hintergrund (Fläche, Rand, Cover-Hintergrund), media_content_opacity für den Inhalt.
@@ -993,7 +996,7 @@ namespace KnobFlyout.Osd
             _card.Background = _pal != null ? _pal.Background(opacity) : Hex($"#{(byte)Math.Round(255 * opacity):X2}{_cardHex[1..]}");
             if (IsHud) ApplyHudBackground(opacity); // abgeschrägte Fläche statt Rechteck
             if (_win11)
-                _card.BorderBrush = UiColor.Brush(Own(MediaLayout.ColorEdge) ?? (_light ? "#D0D0D4" : "#404040"), opacity);
+                _card.BorderBrush = UiColor.Brush(_coverEdgeHex ?? Own(MediaLayout.ColorEdge) ?? (_light ? "#D0D0D4" : "#404040"), opacity);
             _bgImage.Opacity = opacity;
             if (useBackground)
             {
@@ -1050,7 +1053,7 @@ namespace KnobFlyout.Osd
         public static FrameworkElement CreatePreview(AppConfig cfg)
         {
             using var media = new MediaController(); // nicht initialisiert: keine Quellen, Knöpfe ohne Wirkung
-            var w = new MediaOsd(media, cfg) { _alwaysSources = true };
+            var w = new MediaOsd(media, cfg) { _alwaysSources = true, _sampleCover = true };
             w.UpdateFrom(SampleInfo());
             var content = (FrameworkElement)w.Content;
             w.Content = null;
@@ -1066,7 +1069,7 @@ namespace KnobFlyout.Osd
         /// </summary>
         public static FrameworkElement CreateLive(AppConfig cfg, MediaController media, Action<bool>? hasMedia, out Action dispose)
         {
-            var w = new MediaOsd(media, cfg) { _live = true, _alwaysSources = true };
+            var w = new MediaOsd(media, cfg) { _live = true, _alwaysSources = true, _sampleCover = true };
             w.UpdateFrom(SampleInfo());
             bool closed = false;
 
@@ -1076,7 +1079,11 @@ namespace KnobFlyout.Osd
                 {
                     var info = media.HasSession ? await media.GetInfoAsync() : null;
                     if (closed) return;
-                    if (info != null) w.UpdateFrom(info);
+                    if (info != null)
+                    {
+                        w._sampleCover = false;
+                        w.UpdateFrom(info);
+                    }
                     hasMedia?.Invoke(info != null);
                 }
                 catch (Exception ex)
@@ -1088,7 +1095,7 @@ namespace KnobFlyout.Osd
             media.Changed += changed;
             Action sourcesChanged = () => w.Dispatcher.BeginInvoke(new Action(() => { if (!closed) w.RenderSources(); }));
             media.SourcesChanged += sourcesChanged;
-            Refresh();
+            changed(); // über den Dispatcher, damit es nach dem await sicher im Oberflächen-Thread weitergeht
             w._tickTimer.Start();
 
             dispose = () =>
@@ -1357,6 +1364,22 @@ namespace KnobFlyout.Osd
                 Row(Loc.T("Nächste Quelle", "Next source"), "\uE8AB", false, _media.GetSources().Count > 1, () => _media.CycleSource());
             }
 
+            if (items.Contains("keep"))
+            {
+                Group();
+                var source = _media.GetSources().FirstOrDefault(s => s.AppId == _media.CurrentAppId);
+                bool kept = source != null && MediaController.IsListed(source, cfg.MediaKeepApps);
+                Row(source != null ? Loc.T($"{source.Label} dauerhaft anzeigen", $"Keep {source.Label} on screen") : Loc.T("Dauerhaft anzeigen", "Keep on screen"),
+                    "\uE718", kept, source != null, () => // Pin
+                {
+                    var c = ConfigManager.Load();
+                    if (kept) c.MediaKeepApps.RemoveAll(name => MediaController.IsListed(source!, new[] { name }));
+                    else c.MediaKeepApps.Add(source!.Label);
+                    ConfigManager.Save(c);
+                    ConfigChanged?.Invoke();
+                });
+            }
+
             if (items.Contains("skip_hotkeys") || items.Contains("pin"))
             {
                 Group();
@@ -1482,13 +1505,15 @@ namespace KnobFlyout.Osd
             {
                 bool active = src.AppId == activeAppId;
 
+                SolidColorBrush pillBg = _pal != null ? Hex(active ? _pal.Fill : _pal.Button) // Design-System: aktive Quelle in Textfarbe
+                    : active ? _accent
+                    : Own(MediaLayout.ColorButton) is { } ownButton ? Hex(ownButton)
+                    : _coverButtonHex != null ? Hex(_coverButtonHex)
+                    : _light ? Hex(_win11 ? "#D6D6DA" : "#D9D9D9") : Hex(_win11 ? "#3A3A3A" : "#33333C");
                 var pill = new Border
                 {
                     CornerRadius = new CornerRadius(_spec != null ? 12 : 11),
-                    Background = _pal != null ? Hex(active ? _pal.Fill : _pal.Button) // Design-System: aktive Quelle in Textfarbe
-                        : active ? _accent
-                        : Own(MediaLayout.ColorButton) is { } ownButton ? Hex(ownButton)
-                        : _light ? Hex(_win11 ? "#D6D6DA" : "#D9D9D9") : Hex(_win11 ? "#3A3A3A" : "#33333C"),
+                    Background = pillBg,
                     Padding = _spec != null ? new Thickness(11, 4, 9, 4) : new Thickness(8, 3, 6, 3),
                     Margin = new Thickness(0, 0, 6, 0),
                     Cursor = Cursors.Hand,
@@ -1496,7 +1521,8 @@ namespace KnobFlyout.Osd
 
                 // Windows-11-Akzent im Dunkelmodus ist hellblau → dort dunkle Schrift auf dem aktiven Pill.
                 bool lightText = _spec != null ? (active ? _light : !_light) : active ? !(_win11 && !_light) : !_light;
-                if (Own(active ? MediaLayout.ColorAccent : MediaLayout.ColorButton) is { } pillColor) lightText = !IsLightHex(pillColor); // eigene Farbe: Schrift nach der Fläche
+                string pillKey = active ? MediaLayout.ColorAccent : MediaLayout.ColorButton;
+                if (Own(pillKey) != null || _layout.FollowsCover(pillKey)) lightText = !IsLightHex(pillBg.Color.ToString()); // eigene Farbe: Schrift nach der Fläche
                 var row = new StackPanel { Orientation = Orientation.Horizontal };
                 row.Children.Add(new TextBlock
                 {

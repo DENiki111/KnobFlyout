@@ -23,7 +23,7 @@ namespace KnobFlyout.Osd
         private SevenSegment? _hwSeg;
         private TextBlock? _hwMuteText;
 
-        private HwColors Hw => HardwareParts.Colors(ThemeHelper.IsLight(_cfg));
+        private HwColors Hw => OsdDesignColors.Hw(_cfg, OsdDesignColors.Light(_cfg));
 
         /// <summary>Lautstärke: Drehknopf mit LED-Kranz · APP-NAME / „LAUTSTÄRKE“ · Display mit dreistelliger Sieben-Segment-Zahl.</summary>
         private void BuildVolumeHardware()

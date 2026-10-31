@@ -31,7 +31,7 @@ namespace KnobFlyout.Osd
         private void SetupHudShell()
         {
             var pal = _pal!;
-            _hudGlow = ThemeHelper.IsLight(_cfg) ? 0.3 : 0.6;
+            _hudGlow = OsdDesignColors.Light(_cfg) ? 0.3 : 0.6;
             _shell.Background = Brushes.Transparent; // bleibt für Maus-Treffer (Ziehen/Wegklicken) durchsichtig
             _shell.BorderBrush = Brushes.Transparent;
             _shell.CornerRadius = new CornerRadius(0);

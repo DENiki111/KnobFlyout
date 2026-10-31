@@ -17,8 +17,8 @@ namespace KnobFlyout.Osd
         /// </summary>
         private Border BuildMaterial(AppConfig cfg, DesignSpec spec, double alpha, string processName)
         {
-            bool light = ThemeHelper.IsLight(cfg);
-            var pal = spec.Palette(light);
+            bool light = OsdDesignColors.Light(cfg);
+            var pal = OsdDesignColors.Palette(cfg, spec, light);
             var root = new StackPanel { Margin = new Thickness(15, 15, 15, 0), Opacity = _contentAlpha };
             root.Children.Add(new TextBlock
             {

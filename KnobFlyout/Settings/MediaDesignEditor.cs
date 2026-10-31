@@ -300,7 +300,7 @@ namespace KnobFlyout.Settings
             var layout = MediaLayout.FromTemplate(key);
             layout.Colors = old.Colors;
             layout.Set(MediaLayout.SourcePause, old.Shows(MediaLayout.SourcePause));
-            c.MediaLayouts[c.MediaDesign] = layout;
+            c.SetLayout(layout);
         }
 
         /// <summary>Vorlagen als Kacheln mit echter Mini-Vorschau im gewählten Design; die aktive ist markiert.</summary>
@@ -343,7 +343,6 @@ namespace KnobFlyout.Settings
                 tile.MouseLeftButtonUp += (_, _) =>
                 {
                     ApplyTemplate(_cfg, key);
-                    _cfg.MediaSavedActive = "";
                     _changed();
                     _rebuild();
                 };
@@ -355,65 +354,117 @@ namespace KnobFlyout.Settings
         // ── Farben ──────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Eigene Farben des gewählten Designs. Der Wert im Design (auch über ↺) heißt: keine eigene Farbe.
+        /// Farben des gewählten Designs, jede fest oder nach dem Titelbild. Der Wert im Design (auch über ↺) heißt: keine eigene Farbe.
         /// Breite Spalte einzeilig mit Hex-Feld, schmale Spalte zweispaltig ohne.
         /// </summary>
-        /// <param name="boxes">Hex-Felder für die Farbprofile der Einstellungen.</param>
+        /// <param name="boxes">Hex-Felder für die Farbprofile der Einstellungen (in allen Designs dieselben Schlüssel).</param>
         public UIElement DesignColors(Dictionary<string, TextBox>? boxes = null)
         {
             var layout = Layout;
-            var panel = new StackPanel();
-            if (MediaDesignColors.CoverColor(_cfg) is { } cover)
-            {
-                string last = layout.ColorOf(cover.Key) ?? cover.Default;
-                var field = ColorRow(cover.Label, last, cover.Default, hex =>
-                {
-                    last = hex;
-                    layout.SetColor(cover.Key, hex);
-                    _changed();
-                }, !_compact);
-                field.Visibility = layout.ColorOf(cover.Key) != null ? Visibility.Visible : Visibility.Collapsed;
-                panel.Children.Add(OptionRow(cover.Toggle, Toggle(layout.ColorOf(cover.Key) == null, Set<bool>(fromCover =>
-                {
-                    layout.SetColor(cover.Key, fromCover ? null : last);
-                    field.Visibility = fromCover ? Visibility.Collapsed : Visibility.Visible;
-                }))));
-                panel.Children.Add(field);
-            }
-
             Panel fields = _compact ? new UniformGrid { Columns = 2 } : new StackPanel();
-            foreach (var (key, label, def) in MediaDesignColors.For(_cfg))
+            void Add(string key, string label, string value, string def, string firstColor, Action<string> set)
             {
-                var row = ColorRow(label, layout.ColorOf(key) ?? def, def, hex =>
+                var row = ColorRow(label, value, def, hex =>
                 {
-                    layout.SetColor(key, string.Equals(hex, def, StringComparison.OrdinalIgnoreCase) ? null : hex);
+                    set(hex);
                     _changed();
-                }, !_compact);
+                }, !_compact, cover: true, firstColor);
                 if (boxes != null && row.Tag is TextBox box) boxes["media_color_" + key] = box;
                 fields.Children.Add(row);
             }
+
+            string Cover = MediaLayout.CoverColor;
+            if (MediaDesignColors.CoverColor(_cfg) is { } own) // Wellen bzw. Grundfarbe: folgen von sich aus dem Titelbild
+                Add(own.Key, own.Label, layout.ColorOf(own.Key) ?? Cover, Cover, own.Default, hex => layout.SetColor(own.Key, hex == Cover ? null : hex));
+            foreach (var (key, label, def) in MediaDesignColors.For(_cfg))
+            {
+                bool custom = Design == "custom"; // das Design „Eigenes“ hat seine festen Farben in media_custom_*
+                string value = layout.FollowsCover(key) ? Cover : custom ? ColorProfiles.CustomColor(_cfg, key) : layout.ColorOf(key) ?? def;
+                Add(key, label, value, def, custom ? ColorProfiles.CustomColor(_cfg, key) : layout.ColorOf(key) ?? def, hex =>
+                {
+                    if (hex == Cover) layout.SetCover(key);
+                    else if (custom)
+                    {
+                        layout.SetColor(key, null);
+                        ColorProfiles.SetCustomColor(_cfg, key, hex);
+                    }
+                    else layout.SetColor(key, string.Equals(hex, def, StringComparison.OrdinalIgnoreCase) ? null : hex);
+                });
+            }
+
+            var panel = new StackPanel();
             panel.Children.Add(fields);
+            panel.Children.Add(Hint(T("Klick auf eine Farbe öffnet den Farbkreis · Bild-Knopf: Farbe kommt aus dem Titelbild, ohne Titelbild wie im Design · ↺ setzt zurück.",
+                "Click a color to open the color wheel · Picture button: the color comes from the album art, without album art as in the design · ↺ resets it.")));
             return panel;
         }
 
-        /// <summary>Farbzeile: Name, auf Wunsch das Hex-Feld (steht dann in Tag), Farbfeld (Klick = Farbkreis), ↺.</summary>
-        internal static Grid ColorRow(string label, string value, string def, Action<string> set, bool hexField = false)
+        /// <summary>Eigene Farben des gewählten OSD-Designs (ohne „aus dem Titelbild“, das OSD kennt kein Cover). Wert des Designs oder ↺ = keine eigene Farbe.</summary>
+        public static UIElement OsdColors(AppConfig cfg, Action changed, bool compact)
         {
+            Panel fields = compact ? new UniformGrid { Columns = 2 } : new StackPanel();
+            foreach (var (key, label, def) in OsdDesignColors.For(cfg))
+            {
+                fields.Children.Add(ColorRow(label, cfg.OsdColorSet().ColorOf(key) ?? def, def, hex =>
+                {
+                    cfg.SetOsdColor(key, string.Equals(hex, def, StringComparison.OrdinalIgnoreCase) ? null : hex);
+                    changed();
+                }, !compact));
+            }
+            return fields;
+        }
+
+        /// <summary>
+        /// Farbzeile: Name, auf Wunsch das Hex-Feld (steht dann in Tag), Farbfeld (Klick = Farbkreis), auf Wunsch der Bild-Knopf
+        /// (Wert MediaLayout.CoverColor = Farbe aus dem Titelbild), ↺.
+        /// </summary>
+        /// <param name="firstColor">Feste Farbe, wenn man den Bild-Knopf ausschaltet und noch keine gewählt war.</param>
+        internal static Grid ColorRow(string label, string value, string def, Action<string> set, bool hexField = false, bool cover = false, string? firstColor = null)
+        {
+            string Cover = MediaLayout.CoverColor;
+            static bool Valid(string text)
+            {
+                try
+                {
+                    ColorConverter.ConvertFromString(text);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
             string current = value;
+            string lastColor = Valid(value) ? value : firstColor != null && Valid(firstColor) ? firstColor : Valid(def) ? def : "#FFFFFF";
             var row = new Grid { Height = 32, Margin = new Thickness(0, 0, hexField ? 0 : 10, 2) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.Children.Add(new TextBlock { Text = label, FontSize = 13, Foreground = Fg, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+            for (int i = 0; i < 4; i++) row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(new TextBlock { Text = label, ToolTip = label, FontSize = 13, Foreground = Fg, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
 
             var swatch = new Border
             {
                 Width = 26, Height = 26, CornerRadius = new CornerRadius(6), BorderBrush = FieldBorder, BorderThickness = new Thickness(1),
-                Background = FromHex(value), Cursor = System.Windows.Input.Cursors.Hand, ToolTip = T("Farbe auswählen", "Pick a color"), VerticalAlignment = VerticalAlignment.Center,
+                Cursor = System.Windows.Input.Cursors.Hand, ToolTip = T("Farbe auswählen", "Pick a color"), VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(hexField ? 8 : 0, 0, 0, 0),
             };
+            var coverIcon = new TextBlock { Text = "\uE91B", FontFamily = IconFont, FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }; // Photo
+            var coverButton = new Border
+            {
+                Width = 26, Height = 26, CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1), Margin = new Thickness(4, 0, 0, 0), Child = coverIcon,
+                Cursor = System.Windows.Input.Cursors.Hand, VerticalAlignment = VerticalAlignment.Center, Visibility = cover ? Visibility.Visible : Visibility.Collapsed,
+                ToolTip = T("Farbe aus dem Titelbild", "Color from the album art"),
+            };
             TextBox? box = null;
+            void Show()
+            {
+                bool fromCover = current == Cover;
+                swatch.Background = fromCover ? Brushes.Transparent : FromHex(current, lastColor);
+                swatch.Opacity = fromCover ? 0.4 : 1;
+                coverButton.Background = fromCover ? Accent : Brushes.Transparent;
+                coverButton.BorderBrush = fromCover ? Accent : FieldBorder;
+                coverIcon.Foreground = fromCover ? Brushes.White : SubFg;
+                if (box != null) box.IsReadOnly = fromCover;
+            }
             void Apply(string hex)
             {
                 if (box != null && box.Text != hex)
@@ -422,7 +473,8 @@ namespace KnobFlyout.Settings
                     return;
                 }
                 current = hex;
-                swatch.Background = FromHex(hex, value);
+                if (hex != Cover && Valid(hex)) lastColor = hex;
+                Show();
                 set(hex);
             }
             if (hexField)
@@ -431,12 +483,14 @@ namespace KnobFlyout.Settings
                 box.Margin = new Thickness(0);
                 box.VerticalAlignment = VerticalAlignment.Center;
                 box.TextChanged += (_, _) => Apply(box.Text.Trim());
+                if (cover) box.Tag = Cover; // darf „aus dem Titelbild“ aus einem Farbprofil übernehmen
                 Grid.SetColumn(box, 1);
                 row.Children.Add(box);
                 row.Tag = box;
             }
             swatch.MouseLeftButtonUp += (_, _) =>
             {
+                if (current == Cover) Apply(lastColor); // Farbe wählen heißt: wieder eine feste Farbe
                 var picker = new ColorWheelPopup(swatch, current, Apply);
                 row.Children.Add(picker); // im Fensterbaum, damit die Theme-Stile greifen
                 picker.Closed += (_, _) => row.Children.Remove(picker);
@@ -445,56 +499,89 @@ namespace KnobFlyout.Settings
             Grid.SetColumn(swatch, 2);
             row.Children.Add(swatch);
 
+            coverButton.MouseLeftButtonUp += (_, e) =>
+            {
+                Apply(current == Cover ? lastColor : Cover);
+                e.Handled = true;
+            };
+            Grid.SetColumn(coverButton, 3);
+            row.Children.Add(coverButton);
+
             var reset = ResetButton(() => Apply(def));
             reset.Margin = new Thickness(2, 0, 0, 0);
             reset.Width = reset.Height = 24;
             reset.Focusable = false;
-            Grid.SetColumn(reset, 3);
+            Grid.SetColumn(reset, 4);
             row.Children.Add(reset);
+            Show();
             return row;
         }
 
         // ── Gespeicherte Designs ────────────────────────────────────────────
 
-        /// <summary>Eigene Designs als Pillen (Klick wendet an, ✕ löscht) und das Speichern des aktuellen Stands unter einem Namen.</summary>
+        /// <summary>Eigene Flyout-Designs: siehe SavedPanel.</summary>
         public UIElement SavedDesigns()
         {
-            var panel = new StackPanel();
             var saved = _cfg.MediaSavedDesigns;
-            if (saved.Count > 0)
+            void Done()
+            {
+                _savedChanged?.Invoke();
+                _changed();
+                _rebuild();
+            }
+            return SavedPanel(saved.Select(d => d.Name).ToList(), _cfg.MediaSavedActive,
+                name =>
+                {
+                    saved.First(d => d.Name == name).ApplyTo(_cfg);
+                    _changed();
+                    _rebuild();
+                },
+                name =>
+                {
+                    saved.RemoveAll(d => d.Name == name);
+                    if (_cfg.MediaSavedActive == name) _cfg.SelectMediaPreset(_cfg.MediaDesign);
+                    Done();
+                },
+                text =>
+                {
+                    var entry = SavedMediaDesign.From(_cfg, text);
+                    int index = saved.FindIndex(s => string.Equals(s.Name, text, StringComparison.OrdinalIgnoreCase));
+                    if (index >= 0) saved[index] = entry;
+                    else saved.Add(entry);
+                    _cfg.MediaSavedActive = text;
+                    Done();
+                },
+                _compact, T("Name, z. B. Mein Island", "Name, e.g. My Island"),
+                T("Speichert Aufbau, Deckkraft, Ecken und Farben. Das Design steht danach auch unter „Eigene Designs“ auf der Seite „Media-Flyout“. Gleicher Name überschreibt.",
+                    "Saves the layout, opacity, corners and colors. The design then also appears under “Your own designs” on the “Media flyout” page. The same name overwrites."));
+        }
+
+        /// <summary>Eigene Designs als Pillen (Klick wendet an, ✕ löscht) und das Speichern des aktuellen Stands unter einem Namen; für Flyout und OSD.</summary>
+        internal static UIElement SavedPanel(List<string> names, string active, Action<string> apply, Action<string> remove, Action<string> save, bool compact, string placeholder, string hint)
+        {
+            var panel = new StackPanel();
+            if (names.Count > 0)
             {
                 var chips = new WrapPanel { Margin = new Thickness(0, 0, -6, 0) };
-                foreach (var design in saved)
+                foreach (var design in names)
                 {
                     var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 6, 6) };
-                    row.Children.Add(Chip(design.Name, design.Name == _cfg.MediaSavedActive, () =>
-                    {
-                        design.ApplyTo(_cfg);
-                        _changed();
-                        _rebuild();
-                    }, check: true));
-                    var remove = FlatIconButton("\uE711", T($"„{design.Name}“ löschen", $"Delete “{design.Name}”"), () =>
-                    {
-                        saved.Remove(design);
-                        if (_cfg.MediaSavedActive == design.Name) _cfg.MediaSavedActive = "";
-                        _savedChanged?.Invoke();
-                        _changed();
-                        _rebuild();
-                    });
-                    remove.Width = remove.Height = 24;
-                    remove.FontSize = 10;
-                    remove.Margin = new Thickness(2, 0, 0, 0);
-                    row.Children.Add(remove);
+                    row.Children.Add(Chip(design, design == active, () => apply(design), check: true));
+                    var removeButton = FlatIconButton("\uE711", T($"„{design}“ löschen", $"Delete “{design}”"), () => remove(design));
+                    removeButton.Width = removeButton.Height = 24;
+                    removeButton.FontSize = 10;
+                    removeButton.Margin = new Thickness(2, 0, 0, 0);
+                    row.Children.Add(removeButton);
                     chips.Children.Add(row);
                 }
-                panel.Children.Add(new ScrollViewer { MaxHeight = _compact ? 68 : 120, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = chips, Focusable = false, Margin = new Thickness(0, 0, 0, 4) });
+                panel.Children.Add(new ScrollViewer { MaxHeight = compact ? 68 : 120, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = chips, Focusable = false, Margin = new Thickness(0, 0, 0, 4) });
             }
 
-            var name = TextField(_cfg.MediaSavedActive);
+            var name = TextField(active);
             name.MaxLength = 32;
-            InputHint(name, T("Name, z. B. Mein Island", "Name, e.g. My Island"));
-            var save = AccentBtn(T("Als eigenes Design speichern", "Save as own design"));
-            save.Margin = new Thickness(8, 0, 0, 0);
+            InputHint(name, placeholder);
+            var saveButton = AccentBtn(T("Als eigenes Design speichern", "Save as own design"));
+            saveButton.Margin = new Thickness(8, 0, 0, 0);
             void Save()
             {
                 string text = name.Text.Trim();
@@ -503,16 +590,9 @@ namespace KnobFlyout.Settings
                     name.Focus();
                     return;
                 }
-                var entry = SavedMediaDesign.From(_cfg, text);
-                int index = saved.FindIndex(s => string.Equals(s.Name, text, StringComparison.OrdinalIgnoreCase));
-                if (index >= 0) saved[index] = entry;
-                else saved.Add(entry);
-                _cfg.MediaSavedActive = text;
-                _savedChanged?.Invoke();
-                _changed();
-                _rebuild();
+                save(text);
             }
-            save.Click += (_, _) => Save();
+            saveButton.Click += (_, _) => Save();
             name.PreviewKeyDown += (_, e) =>
             {
                 if (e.Key != System.Windows.Input.Key.Enter) return;
@@ -523,11 +603,10 @@ namespace KnobFlyout.Settings
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             saveRow.Children.Add(name);
-            Grid.SetColumn(save, 1);
-            saveRow.Children.Add(save);
+            Grid.SetColumn(saveButton, 1);
+            saveRow.Children.Add(saveButton);
             panel.Children.Add(saveRow);
-            panel.Children.Add(Hint(T("Speichert Aufbau, Deckkraft, Ecken und Farben. Das Design steht danach auch in der Design-Auswahl. Gleicher Name überschreibt.",
-                "Saves the layout, opacity, corners and colors. The design then also appears in the design list. The same name overwrites.")));
+            panel.Children.Add(Hint(hint));
             return panel;
         }
     }

@@ -32,7 +32,8 @@ namespace KnobFlyout.Osd
             var pal = _pal!;
             var hw = _hw = OwnHwColors(HardwareParts.Colors(_light));
             var lcdFont = HardwareParts.LcdFont;
-            var amber = Hex(hw.LcdText);
+            var amber = Role(Config.MediaLayout.ColorDisplay, hw.LcdText);
+            bool glowFollows = _layout.FollowsCover(Config.MediaLayout.ColorDisplay);
             root.Children.Clear();
             root.RowDefinitions.Clear();
             header.Children.Clear();
@@ -59,6 +60,7 @@ namespace KnobFlyout.Osd
             top.Children.Add(_art);
 
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Effect = HardwareParts.AmberGlow(hw) };
+            if (glowFollows) _coverGlows.Add((text, amber, 0.55, 6));
             foreach (var t in new[] { _title, _artist, _appName, _elapsed, _total })
             {
                 t.FontFamily = lcdFont;
@@ -110,6 +112,7 @@ namespace KnobFlyout.Osd
                 VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 1, 0, 0), Effect = HardwareParts.AmberGlow(hw),
             };
             screenTop.Children.Add(_hwStatus);
+            if (glowFollows) _coverGlows.Add((_hwStatus, amber, 0.55, 6));
             screen.Children.Add(screenTop);
 
             // Leiste im Display: Spur + Füllung (Klicken/Ziehen über _seekHost wie gehabt)
@@ -119,7 +122,7 @@ namespace KnobFlyout.Osd
             _seekHost.Children.Add(new Border
             {
                 Height = 4, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false,
-                Background = Hex(Own(Config.MediaLayout.ColorTrack) ?? "#1F" + NormHex(hw.LcdText, "#FFB04A")[1..]),
+                Background = Role(RoleLcdTrack, Own(Config.MediaLayout.ColorTrack) ?? "#1F" + NormHex(hw.LcdText, "#FFB04A")[1..]),
             });
             _hwFill = new Border
             {
@@ -127,10 +130,13 @@ namespace KnobFlyout.Osd
                 Background = amber, Effect = HardwareParts.AmberGlow(hw, 0.7), IsHitTestVisible = false,
             };
             _seekHost.Children.Add(_hwFill);
+            if (glowFollows) _coverGlows.Add((_hwFill, amber, 0.7, 6));
             Grid.SetRow(_seekHost, 0);
             screen.Children.Add(_seekHost);
             _progressBlock = _seekHost;
-            stack.Children.Add(HardwareParts.Lcd(hw, pal.Hi ?? "#00000000", screen, new Thickness(10, 10, 10, 6)));
+            var lcd = HardwareParts.Lcd(hw, pal.Hi ?? "#00000000", screen, new Thickness(10, 10, 10, 6));
+            if (_layout.FollowsCover(Config.MediaLayout.ColorDisplayBg)) lcd.Background = Role(Config.MediaLayout.ColorDisplayBg, hw.Lcd);
+            stack.Children.Add(lcd);
 
             // ── Gerätetasten ──
             var buttons = center.Children.Cast<UIElement>().ToArray(); // Standard: Zurück, −10, Play, +10, Weiter
@@ -141,6 +147,7 @@ namespace KnobFlyout.Osd
                 var inner = (Border)buttons[i];
                 bool play = i == 2;
                 var key = HardwareParts.Key(hw, play ? 58 : 46, 36, out var face);
+                if (_layout.FollowsCover(Config.MediaLayout.ColorButton)) _coverFaces.Add((face, face.Background, Role(Config.MediaLayout.ColorButton, hw.KeyTop)));
                 key.Margin = new Thickness(0, 0, 8, 0);
                 PrepareKeyButton(inner);
                 var content = new Grid();
@@ -167,6 +174,7 @@ namespace KnobFlyout.Osd
             controls.Children.Add(center);
 
             var moreKey = HardwareParts.Key(hw, 36, 36, out var moreFace);
+            if (_layout.FollowsCover(Config.MediaLayout.ColorButton)) _coverFaces.Add((moreFace, moreFace.Background, Role(Config.MediaLayout.ColorButton, hw.KeyTop)));
             PrepareKeyButton(_moreBtn);
             if (_moreBtn.Child is TextBlock dots) dots.FontSize = 13;
             var hover = Hex(pal.Button);

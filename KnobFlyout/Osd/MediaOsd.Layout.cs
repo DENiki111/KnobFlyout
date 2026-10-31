@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using KnobFlyout.Config;
 
@@ -68,6 +69,19 @@ namespace KnobFlyout.Osd
         public static List<(string Key, string Label, string Default)> For(AppConfig cfg)
         {
             string design = cfg.MediaDesign;
+            if (design == "custom")
+            {
+                var d = new AppConfig();
+                return new List<(string, string, string)>
+                {
+                    (MediaLayout.ColorBg, Loc.T("Hintergrund", "Background"), d.MediaCustomBg),
+                    (MediaLayout.ColorFg, Loc.T("Text und Symbole", "Text and icons"), d.MediaCustomFg),
+                    (MediaLayout.ColorSub, Loc.T("Nebentext", "Secondary text"), d.MediaCustomSub),
+                    (MediaLayout.ColorAccent, Loc.T("Akzent (Leiste, Quelle)", "Accent (bar, source)"), d.MediaCustomAccent),
+                    (MediaLayout.ColorButton, Loc.T("Knopf-Fläche", "Button fill"), d.MediaCustomButtonBg),
+                    (MediaLayout.ColorTrack, Loc.T("Leiste (Hintergrund)", "Bar (background)"), d.MediaCustomTrack),
+                };
+            }
             bool win11 = design == "win11", hardware = design == "hardware";
             bool light = MediaOsd.LightFor(cfg);
             var pal = Palette(cfg, light);
@@ -101,14 +115,14 @@ namespace KnobFlyout.Osd
             return list;
         }
 
-        /// <summary>Farbe, die dem Cover folgt, bis man eine feste wählt: die Wellen bei Dynamic Island, alle Farben bei Material You.</summary>
-        public static (string Key, string Toggle, string Label, string Default)? CoverColor(AppConfig cfg)
+        /// <summary>Farbe, die von sich aus dem Titelbild folgt, bis man eine feste wählt: die Wellen bei Dynamic Island, die Grundfarbe bei Material You.</summary>
+        public static (string Key, string Label, string Default)? CoverColor(AppConfig cfg)
         {
             var pal = Palette(cfg, MediaOsd.LightFor(cfg));
             return cfg.MediaDesign switch
             {
-                "island" => (MediaLayout.ColorWave, Loc.T("Wellen in der Farbe des Covers", "Waves in the album art color"), Loc.T("Farbe der Wellen", "Wave color"), pal!.Fg),
-                "material" => (MediaLayout.ColorSeed, Loc.T("Farben aus dem Cover", "Colors from the album art"), Loc.T("Grundfarbe", "Base color"), ColorHex(ThemeHelper.AccentColor())),
+                "island" => (MediaLayout.ColorWave, Loc.T("Wellen", "Waves"), pal!.Fg),
+                "material" => (MediaLayout.ColorSeed, Loc.T("Grundfarbe", "Base color"), ColorHex(ThemeHelper.AccentColor())),
                 _ => null,
             };
         }
@@ -116,6 +130,65 @@ namespace KnobFlyout.Osd
 
     internal sealed partial class MediaOsd
     {
+        // ── Farben, die dem Titelbild folgen: je Verwendung ein veränderlicher Pinsel, ApplyCoverColors färbt sie um ──
+        private const string RoleOnAccent = "on_accent", RoleLcdTrack = "lcd_track";
+        private static readonly Color SampleCoverColor = Color.FromRgb(0xE0, 0x6A, 0x2B); // Vorschau ohne echtes Titelbild
+        private readonly Dictionary<(string Key, string Base), SolidColorBrush> _coverBrushes = new();
+        private readonly List<(UIElement Element, SolidColorBrush Source, double Opacity, double Blur)> _coverGlows = new();
+        private DesignPalette? _basePal;
+        private string _baseCardHex = "";
+        private string? _coverEdgeHex;
+        private string? _coverButtonHex;
+        private readonly List<(Border Face, Brush Design, SolidColorBrush Cover)> _coverFaces = new(); // Flächen mit Verlauf: nur mit Titelbild einfarbig
+        private bool _sampleCover;
+        private bool _coverApplied;
+        private bool _coverAppliedSample;
+        private BitmapSource? _coverAppliedFor;
+
+        /// <summary>Pinsel für diese Farbe; folgt sie dem Titelbild, färbt ApplyCoverColors ihn später um.</summary>
+        private SolidColorBrush Role(string key, string hex)
+        {
+            string owner = key == RoleOnAccent ? MediaLayout.ColorAccent : key == RoleLcdTrack ? MediaLayout.ColorTrack : key;
+            if (!_layout.FollowsCover(owner)) return Hex(hex);
+            if (!_coverBrushes.TryGetValue((key, hex), out var brush)) _coverBrushes[(key, hex)] = brush = Hex(hex);
+            return brush;
+        }
+
+        private static string RoleHex(string key, DesignPalette cover) => key switch
+        {
+            MediaLayout.ColorBg or MediaLayout.ColorDisplayBg => cover.Bg,
+            MediaLayout.ColorFg => cover.Fg,
+            MediaLayout.ColorSub => cover.Sub,
+            MediaLayout.ColorAccent or MediaLayout.ColorDisplay => cover.Fill,
+            MediaLayout.ColorButton => cover.Tile ?? cover.Button,
+            MediaLayout.ColorTrack or RoleLcdTrack => cover.Track,
+            MediaLayout.ColorEdge => cover.OutlineVariant ?? cover.Edge,
+            RoleOnAccent => cover.OnAccent ?? cover.Bg,
+            _ => cover.Fg,
+        };
+
+        /// <summary>Alle Farben, die dem Titelbild folgen, nachziehen; ohne Titelbild wieder wie im Design.</summary>
+        private void ApplyCoverColors(BitmapSource? cover)
+        {
+            if (_layout.Colors == null || !_layout.Colors.ContainsValue(MediaLayout.CoverColor)) return;
+            if (_coverApplied && ReferenceEquals(cover, _coverAppliedFor) && _sampleCover == _coverAppliedSample) return;
+            _coverApplied = true;
+            _coverAppliedFor = cover;
+            _coverAppliedSample = _sampleCover;
+
+            Color? seed = cover != null ? CoverAccent(cover) : _sampleCover ? SampleCoverColor : null;
+            var scheme = seed is { } color ? MaterialColors.Scheme(color, _light) : null;
+            foreach (var ((key, baseHex), brush) in _coverBrushes)
+                brush.Color = UiColor.Brush(scheme != null ? RoleHex(key, scheme) : baseHex).Color;
+            if (_basePal != null) _pal = scheme != null ? _basePal.WithCover(_layout, scheme) : _basePal;
+            if (_layout.FollowsCover(MediaLayout.ColorBg)) _cardHex = scheme != null ? NormHex(scheme.Bg, _baseCardHex) : _baseCardHex;
+            _coverEdgeHex = scheme != null && _layout.FollowsCover(MediaLayout.ColorEdge) ? RoleHex(MediaLayout.ColorEdge, scheme) : null;
+            _coverButtonHex = scheme != null && _layout.FollowsCover(MediaLayout.ColorButton) ? RoleHex(MediaLayout.ColorButton, scheme) : null;
+            foreach (var (face, design, coverBrush) in _coverFaces) face.Background = scheme != null ? coverBrush : design;
+            foreach (var (element, source, opacity, blur) in _coverGlows)
+                element.Effect = HudParts.Glow(source.Color, opacity, blur);
+        }
+
         // Bausteine, die jedes Design beim Aufbau meldet; ApplyLayout hängt sie um.
         private FrameworkElement? _artBlock;   // Cover samt Hülle
         private FrameworkElement? _textBlock;  // Titel und Interpret

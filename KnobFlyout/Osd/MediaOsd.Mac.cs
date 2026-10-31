@@ -84,7 +84,7 @@ namespace KnobFlyout.Osd
 
             _moreBtn.Width = _moreBtn.Height = 24;
             _moreBtn.CornerRadius = new CornerRadius(12);
-            _moreBtn.Background = Hex(pal.Button);
+            _moreBtn.Background = Role(Config.MediaLayout.ColorButton, pal.Button);
             _moreBtn.HorizontalAlignment = HorizontalAlignment.Right;
             _moreBtn.VerticalAlignment = VerticalAlignment.Top;
             if (_moreBtn.Child is TextBlock dots) dots.FontSize = 12;
@@ -103,7 +103,7 @@ namespace KnobFlyout.Osd
             // ── Fortschritt: dünne Leiste, Zeiten darunter (Griff nur beim Überfahren, siehe Konstruktor) ──
             _seekHost.Height = 16;
             _seekHost.Margin = new Thickness(0, 8, 0, 0);
-            _seekFill.Background = Hex(pal.Scrub ?? pal.Fill);
+            _seekFill.Background = Role(Config.MediaLayout.ColorAccent, pal.Scrub ?? pal.Fill);
             _seekThumb.Width = _seekThumb.Height = 12;
             _seekThumb.Fill = Brushes.White;
             _seekThumb.Stroke = Hex("#33000000");
@@ -143,7 +143,7 @@ namespace KnobFlyout.Osd
             _segGrid = new UniformGrid { Rows = 1 };
             _segHost = new Border
             {
-                Background = Hex(pal.Seg ?? pal.Button), CornerRadius = new CornerRadius(7), Padding = new Thickness(2),
+                Background = Role(Config.MediaLayout.ColorButton, pal.Seg ?? pal.Button), CornerRadius = new CornerRadius(7), Padding = new Thickness(2),
                 Margin = new Thickness(0, 10, 0, 0), Child = _segGrid, Visibility = Visibility.Collapsed,
             };
             stack.Children.Add(_segHost);
