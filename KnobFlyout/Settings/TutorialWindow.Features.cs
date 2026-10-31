@@ -464,6 +464,7 @@ namespace KnobFlyout.Settings
         {
             _appsPill = new StatusPill(T("Klick links im Popup auf ⊘ oder ein Logo …", "Click ⊘ or a logo in the popup on the left …"));
             body.Children.Add(_appsPill);
+            body.Children.Add(SwitchCard("\uE7E7", T("Zuweisungs-OSD anzeigen", "Show assignment OSD"), T("Auch unter Einstellungen → Allgemein und Profile & Apps", "Also under Settings → General and Profiles & apps"), Cfg().NewAppPopup, (c, v) => c.NewAppPopup = v));
             var list = new StackPanel();
             void Render()
             {

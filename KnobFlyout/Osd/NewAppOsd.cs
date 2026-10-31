@@ -42,7 +42,7 @@ namespace KnobFlyout.Osd
             bool win11 = cfg.OsdDesign == "win11";
             bool modern = cfg.OsdDesign == "modern" || cfg.OsdDesign == "windows";
             bool flat = win11 || modern; // beide: Farbschema hell/dunkel, flache Knöpfe mit Fluent-Symbolen
-            bool light = flat && ThemeHelper.IsLight(cfg);
+            bool light = flat && OsdDesignColors.Light(cfg);
 
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
@@ -94,7 +94,7 @@ namespace KnobFlyout.Osd
         /// </summary>
         private Border BuildSpec(AppConfig cfg, DesignSpec spec, double alpha, string processName)
         {
-            var pal = spec.Palette(ThemeHelper.IsLight(cfg));
+            var pal = OsdDesignColors.Palette(cfg, spec, OsdDesignColors.Light(cfg));
             var panel = new StackPanel { Margin = new Thickness(16, 13, 16, 0) };
             panel.Children.Add(new TextBlock
             {
@@ -165,12 +165,14 @@ namespace KnobFlyout.Osd
         private void BuildClassic(AppConfig cfg, string processName, bool win11, bool modern, bool flat, bool light, double alpha)
         {
             var canvas = new Canvas { Opacity = _contentAlpha };
+            var own = cfg.OsdColorSet(); // eigene Farben dieses Designs („Eigenes“ hat dafür color_*)
+            string textColor = own.ColorOf(MediaLayout.ColorFg) ?? (light ? "#1b1b1b" : "#ffffff");
             Content = new Border
             {
                 CornerRadius = new CornerRadius(Math.Clamp(cfg.OsdCornerRadius, 0, 30)),
-                Background = UiColor.Brush(win11 ? (light ? "#E9E9EB" : "#2C2C2C")
-                    : modern ? (light ? "#EFEFEF" : "#222222") : cfg.ColorBg, alpha), // modern: wie die ModernFlyouts-Karten
-                BorderBrush = win11 ? UiColor.Brush(light ? "#D0D0D4" : "#404040", alpha) : null,
+                Background = UiColor.Brush(own.ColorOf(MediaLayout.ColorBg) ?? (win11 ? (light ? "#E9E9EB" : "#2C2C2C")
+                    : modern ? (light ? "#EFEFEF" : "#222222") : cfg.ColorBg), alpha), // modern: wie die ModernFlyouts-Karten
+                BorderBrush = win11 ? UiColor.Brush(own.ColorOf(MediaLayout.ColorEdge) ?? (light ? "#D0D0D4" : "#404040"), alpha) : null,
                 BorderThickness = new Thickness(win11 ? 1 : 0),
                 Child = canvas,
             };
@@ -179,13 +181,13 @@ namespace KnobFlyout.Osd
             Place(canvas, new TextBlock
             {
                 Text = (flat ? "" : "🆕 ") + Loc.T("Neue App erkannt", "New app detected"), FontSize = flat ? 12 : 11,
-                Foreground = UiColor.Brush(flat ? (light ? "#5c5c5c" : win11 ? "#c5c5c5" : "#a0a0a0") : cfg.ColorVolText),
+                Foreground = UiColor.Brush(flat ? own.ColorOf(MediaLayout.ColorSub) ?? (light ? "#5c5c5c" : win11 ? "#c5c5c5" : "#a0a0a0") : cfg.ColorVolText),
             }, 12, 8);
 
             Place(canvas, new TextBlock
             {
                 Text = clean.Length > 24 ? clean[..24] + "…" : clean, FontSize = 14, FontWeight = flat ? FontWeights.SemiBold : FontWeights.Bold,
-                Foreground = UiColor.Brush(light ? "#1b1b1b" : "#ffffff"),
+                Foreground = UiColor.Brush(textColor),
             }, 12, 26);
 
             var btns = new StackPanel { Orientation = Orientation.Horizontal };
@@ -198,13 +200,13 @@ namespace KnobFlyout.Osd
             Action exclude = Exclude;
             // Windows 11: schwarz/weiß – neutrale Flächen mit einfarbigen Fluent-Symbolen.
             // ModernFlyouts: gleiche flache Knöpfe, Symbole in der jeweiligen Profilfarbe.
-            string flatBg = win11 ? (light ? "#D6D6DA" : "#3A3A3A") : (light ? "#DADADA" : "#3a3a3a");
+            string flatBg = own.ColorOf(MediaLayout.ColorButton) ?? (win11 ? (light ? "#D6D6DA" : "#3A3A3A") : (light ? "#DADADA" : "#3a3a3a"));
             var profiles = ProfileDefinitions.For(cfg);
             // Bis zu 6 Profile + ⊘: Knöpfe schmaler, damit alle in die Kartenbreite passen.
             int count = profiles.Count + 1;
             double buttonW = Math.Min(flat ? 40 : 34, (W - 24 - 6.0 * (count - 1)) / count);
             btns.Children.Add(flat
-                ? FlatButton(TextIcon("⊘", light ? "#1b1b1b" : "#ffffff", false), flatBg, exclude, buttonW)
+                ? FlatButton(TextIcon("⊘", textColor, false), flatBg, exclude, buttonW)
                 : MakeButton(TextIcon("⊘", "#ffffff", false), "#2a2a3a", exclude, buttonW));
 
             foreach (var p in profiles)
@@ -213,7 +215,7 @@ namespace KnobFlyout.Osd
                 Action assign = () => AssignTo(key);
                 // ModernFlyouts: Logo in Profilfarbe, Win11: schwarz/weiß, Eigenes: Emoji bzw. Logo weiß auf Profilfarbe.
                 FrameworkElement button = flat
-                    ? FlatButton(p.CreateLogo(14, UiColor.Brush(modern ? p.Color : light ? "#1b1b1b" : "#ffffff")), flatBg, assign, buttonW)
+                    ? FlatButton(p.CreateLogo(14, UiColor.Brush(modern ? p.Color : textColor)), flatBg, assign, buttonW)
                     : MakeButton(p.Icon.Length > 0 ? TextIcon(p.Icon, "#ffffff", false) : p.CreateLogo(14, Brushes.White), p.Color, assign, buttonW);
                 // Name und ggf. Zuweisen-Taste als Hinweis
                 string hotkey = cfg.ProfileList.FirstOrDefault(e => e.Key == key)?.AssignHotkey ?? "";

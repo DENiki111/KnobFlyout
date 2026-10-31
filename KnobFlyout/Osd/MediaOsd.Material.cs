@@ -37,6 +37,7 @@ namespace KnobFlyout.Osd
         private bool _m3WaveRunning;
         private BitmapSource? _m3LastCover;
         private Color? _m3Seed;
+        private DesignPalette? _m3CoverScheme; // Farben, die einzeln dem Titelbild folgen (auch bei fester Grundfarbe)
 
         // Veränderliche Pinsel: ein Cover-Wechsel färbt nur um, ohne Neuaufbau
         private readonly SolidColorBrush _m3Seg = new();
@@ -229,8 +230,12 @@ namespace KnobFlyout.Osd
             {
                 _m3LastCover = cover;
                 _m3Seed = Own(Config.MediaLayout.ColorSeed) is { } seed ? Hex(seed).Color : cover != null ? CoverAccent(cover) : Config.ThemeHelper.AccentColor();
+                Color? coverSeed = cover != null ? CoverAccent(cover) : _sampleCover ? SampleCoverColor : null;
+                _m3CoverScheme = coverSeed is { } color ? MaterialColors.Scheme(color, _light) : null;
             }
-            ApplyMaterialColors(MaterialColors.Scheme(_m3Seed.Value, _light).WithColors(_layout), useBackground);
+            var pal = MaterialColors.Scheme(_m3Seed.Value, _light).WithColors(_layout);
+            if (_m3CoverScheme != null) pal = pal.WithCover(_layout, _m3CoverScheme);
+            ApplyMaterialColors(pal, useBackground);
             _art.Visibility = useBackground ? Visibility.Collapsed : Visibility.Visible;
         }
 

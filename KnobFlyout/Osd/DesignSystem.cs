@@ -57,6 +57,25 @@ namespace KnobFlyout.Osd
             return p;
         }
 
+        /// <summary>Farben, die dem Titelbild folgen, aus dem Farbschema des Covers nehmen (MaterialColors.Scheme: Töne passen zueinander und bleiben lesbar).</summary>
+        public DesignPalette WithCover(Config.MediaLayout layout, DesignPalette cover)
+        {
+            var p = this;
+            if (layout.FollowsCover(Config.MediaLayout.ColorBg)) p = p with { Bg = cover.Bg, BgTop = null };
+            if (layout.FollowsCover(Config.MediaLayout.ColorFg)) p = p with { Fg = cover.Fg };
+            if (layout.FollowsCover(Config.MediaLayout.ColorSub)) p = p with { Sub = cover.Sub };
+            if (layout.FollowsCover(Config.MediaLayout.ColorAccent))
+                p = p with { Fill = cover.Fill, Scrub = cover.Fill, SegOn = cover.Fill, SegOnText = cover.OnAccent, OnAccent = cover.OnAccent };
+            if (layout.FollowsCover(Config.MediaLayout.ColorButton))
+            {
+                string button = cover.Tile ?? cover.Button;
+                p = p with { Button = button, Tile = button, Seg = button };
+            }
+            if (layout.FollowsCover(Config.MediaLayout.ColorTrack)) p = p with { Track = cover.Track, OnTrack = cover.OnTrack, OutlineVariant = cover.OutlineVariant };
+            if (layout.FollowsCover(Config.MediaLayout.ColorEdge)) p = p with { Edge = cover.OutlineVariant ?? cover.Edge };
+            return p;
+        }
+
         /// <summary>Lesbare Schrift auf einer Fläche dieser Farbe.</summary>
         private static string OnColor(string hex)
         {

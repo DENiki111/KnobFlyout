@@ -116,13 +116,14 @@ namespace KnobFlyout.Osd
             _contentOpacity = Math.Clamp(cfg.OsdContentOpacity, 20, 100) / 100.0;
             _canvas.Opacity = _contentOpacity;
 
-            bool light = (_modern || _spec != null) && ThemeHelper.IsLight(cfg);
-            _pal = _spec?.Palette(light); // Design-System: alle Farben aus der Palette
-            _fg = UiColor.Brush(_pal?.Fg ?? (light ? (_win11 ? "#1b1b1b" : "#000000") : "#ffffff"));
-            _sub = UiColor.Brush(_pal?.Sub ?? (light ? "#5c5c5c" : _win11 ? "#c5c5c5" : "#a0a0a0"));
-            _trackBrush = UiColor.Brush(_pal?.Track ?? (_win11 ? (light ? "#B4B4B8" : "#5C5C5C") : light ? "#d0d0d0" : "#5a5a63"));
+            var own = cfg.OsdColorSet(); // eigene Farben dieses Designs („Eigenes“ hat dafür color_*)
+            bool light = (_modern || _spec != null) && OsdDesignColors.Light(cfg);
+            _pal = _spec != null ? OsdDesignColors.Palette(cfg, _spec, light) : null; // Design-System: alle Farben aus der Palette
+            _fg = UiColor.Brush(_pal?.Fg ?? own.ColorOf(MediaLayout.ColorFg) ?? (light ? (_win11 ? "#1b1b1b" : "#000000") : "#ffffff"));
+            _sub = UiColor.Brush(_pal?.Sub ?? own.ColorOf(MediaLayout.ColorSub) ?? (light ? "#5c5c5c" : _win11 ? "#c5c5c5" : "#a0a0a0"));
+            _trackBrush = UiColor.Brush(_pal?.Track ?? own.ColorOf(MediaLayout.ColorTrack) ?? (_win11 ? (light ? "#B4B4B8" : "#5C5C5C") : light ? "#d0d0d0" : "#5a5a63"));
             // ModernFlyouts: festes Blau wie im Original; Windows 11: bewusst schwarz/weiß (Füllung = Textfarbe).
-            _accent = _pal != null ? UiColor.Brush(_pal.Fill) : _win11 ? _fg : UiColor.Brush("#3b82f6");
+            _accent = _pal != null ? UiColor.Brush(_pal.Fill) : own.ColorOf(MediaLayout.ColorAccent) is { } ownAccent ? UiColor.Brush(ownAccent) : _win11 ? _fg : UiColor.Brush("#3b82f6");
             _thumbRing = UiColor.Brush(light ? "#E9E9EB" : "#454545");
 
             WindowStyle = WindowStyle.None;
@@ -140,9 +141,9 @@ namespace KnobFlyout.Osd
             Content = _shell = new Border
             {
                 CornerRadius = new CornerRadius(Math.Clamp(cfg.OsdCornerRadius, 0, 30)), // Standard 8 = ModernFlyouts' FlyoutCornerRadius
-                Background = UiColor.Brush(_win11 ? (light ? "#E9E9EB" : "#2C2C2C")
-                    : _modern ? (light ? "#EFEFEF" : "#222222") : cfg.ColorBg, _targetOpacity), // modern: exakt ModernFlyouts' FlyoutBackground
-                BorderBrush = _win11 ? UiColor.Brush(light ? "#D0D0D4" : "#404040", _targetOpacity) : null,
+                Background = UiColor.Brush(own.ColorOf(MediaLayout.ColorBg) ?? (_win11 ? (light ? "#E9E9EB" : "#2C2C2C")
+                    : _modern ? (light ? "#EFEFEF" : "#222222") : cfg.ColorBg), _targetOpacity), // modern: exakt ModernFlyouts' FlyoutBackground
+                BorderBrush = _win11 ? UiColor.Brush(own.ColorOf(MediaLayout.ColorEdge) ?? (light ? "#D0D0D4" : "#404040"), _targetOpacity) : null,
                 BorderThickness = new Thickness(_win11 ? 1 : 0),
                 Child = _canvas,
             };
@@ -156,7 +157,7 @@ namespace KnobFlyout.Osd
                 _shell.Child = null; // Zeichenfläche lösen, damit sie unter die Lichtkante gehängt werden kann
                 _shell.Child = _pal.WithHighlight(_canvas, _spec.OsdRadius - 1); // macOS: Lichtkante innen
                 if (IsHud) SetupHudShell(); // Gaming-HUD: abgeschrägte Fläche statt Rechteck
-                if (IsHardware) Place(HardwareParts.Screws(_w, _h, HardwareParts.Colors(light)), -1, -1); // Hardware: Schrauben
+                if (IsHardware) Place(HardwareParts.Screws(_w, _h, Hw), -1, -1); // Hardware: Schrauben
                 _shell.RenderTransformOrigin = new Point(0.5, 0.5);
                 _shell.RenderTransform = new ScaleTransform(1, 1);
                 _shell.Opacity = 0; // blendet per FadeIn() ein (sonst blitzt die Karte vor der Animation kurz auf)

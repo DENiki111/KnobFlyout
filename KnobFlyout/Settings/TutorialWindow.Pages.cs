@@ -67,7 +67,7 @@ namespace KnobFlyout.Settings
         private StatusPill? _snapPill;
 
         // Unterseite „Eigenes Design“
-        private AppConfig? _designCfg, _designBase; // Arbeitsstand; gespeichert wird nur, was sich geändert hat
+        private DesignDraft? _designDraft; // Entwurf der Unterseite „Design anpassen“: gespeichert wird nur als eigenes Design
         private string _designTab = "template";
         private string _designTarget = "media"; // Farben und Deckkraft: Flyout oder OSD
         private string _appsTab = "running";
@@ -334,9 +334,9 @@ namespace KnobFlyout.Settings
         }
 
         /// <summary>Bühne mit lebendem Flyout und/oder lebender OSD-Karte samt Knöpfen und Beschriftung.</summary>
-        private FrameworkElement StageLive(bool osd = true, bool media = true)
+        private FrameworkElement StageLive(bool osd = true, bool media = true, AppConfig? shown = null)
         {
-            var cfg = Cfg();
+            var cfg = shown ?? Cfg();
             var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
             if (media) panel.Children.Add(LiveFlyout(cfg));
             if (osd)
@@ -1132,7 +1132,7 @@ namespace KnobFlyout.Settings
                 var chosen = look;
                 tile.MouseLeftButtonUp += (_, _) =>
                 {
-                    Update(c => { c.OsdDesign = chosen.Osd; c.MediaDesign = chosen.Media; c.MediaSavedActive = ""; });
+                    Update(c => { c.OsdDesign = chosen.Osd; c.SelectMediaPreset(chosen.Media); c.OsdSavedActive = ""; });
                     RefreshPage();
                 };
                 grid.Children.Add(tile);
@@ -1180,8 +1180,8 @@ namespace KnobFlyout.Settings
         };
 
         private Page DesignPage() => new("#f97316", () => T("Design anpassen", "Customize the design"),
-            () => T($"Du passt „{MediaDesignName(Cfg().MediaDesign)}“ an. Links siehst du sofort das Ergebnis.", $"You are customizing “{MediaDesignName(Cfg().MediaDesign)}”. You see the result on the left right away."),
-            () => StageLive(), BodyDesign)
+            () => T($"Du passt „{MediaDesignName(Cfg().MediaDesign)}“ an. Links siehst du das Ergebnis, gespeichert wird als eigenes Design.", $"You are customizing “{MediaDesignName(Cfg().MediaDesign)}”. You see the result on the left, it is saved as your own design."),
+            () => StageLive(shown: Draft().Cfg), BodyDesign)
         {
             Crumb = () => T("Such dir einen Look aus  ›  Design anpassen", "Pick a look  ›  Customize the design"),
             NextText = () => T("Fertig", "Done"),
@@ -1193,32 +1193,78 @@ namespace KnobFlyout.Settings
             Update(c =>
             {
                 c.OsdDesign = "dark";
-                c.MediaDesign = "custom";
-                c.MediaSavedActive = "";
+                c.OsdSavedActive = "";
+                c.SelectMediaPreset("custom");
             });
             OpenSub(DesignPage());
         }
 
-        /// <summary>Arbeitsstand speichern: nur, was sich hier geändert hat (Profil-Taste, Apps usw. laufen nebenher weiter).</summary>
-        private void SaveDesign()
+        private DesignDraft Draft() => _designDraft ??= new DesignDraft(Cfg());
+
+        /// <summary>Entwurf als eigenes Design speichern und gleich verwenden.</summary>
+        private void SaveDesignDraft(string name)
         {
-            if (_designCfg == null || _designBase == null) return;
+            if (_designDraft == null) return;
             var fresh = Cfg();
-            CopyChangedFields(_designBase, _designCfg, fresh);
+            _designDraft.SaveTo(name, fresh, _designDraft.Cfg);
             ConfigManager.Save(fresh);
-            _designBase = Clone(_designCfg);
+            _designDraft.Rebase();
+            ConfigChanged?.Invoke();
         }
 
-        private void FlushDesign()
+        /// <summary>Unterseite „Design anpassen“ verlassen: bei ungespeichertem Entwurf nachfragen. false = bleiben.</summary>
+        private bool ConfirmLeaveDesign()
         {
-            SaveDesign();
-            _designCfg = _designBase = null;
+            if (_designDraft == null) return true;
+            if (_designDraft.Dirty)
+            {
+                var (choice, name) = DesignSaveDialog.AskDesign(this, _designDraft.SuggestedName(), leaving: true);
+                if (choice == LeaveChoice.Stay) return false;
+                if (choice == LeaveChoice.Save) SaveDesignDraft(name);
+            }
+            _designDraft = null;
+            return true;
+        }
+
+        /// <summary>Eigene Designs in der Einführung: Klick wählt (nach Nachfrage), ✕ löscht, Speichern übernimmt den Entwurf.</summary>
+        private UIElement DesignSavedPanel()
+        {
+            var draft = Draft();
+            var saved = draft.Cfg.MediaSavedDesigns;
+            return MediaDesignEditor.SavedPanel(saved.Select(s => s.Name).ToList(), draft.Cfg.MediaSavedActive,
+                name =>
+                {
+                    if (!ConfirmLeaveDesign()) return;
+                    Update(c => c.MediaSavedDesigns.First(s => s.Name == name).ApplyTo(c));
+                    RefreshPage();
+                },
+                name =>
+                {
+                    Update(c =>
+                    {
+                        c.MediaSavedDesigns.RemoveAll(s => s.Name == name);
+                        if (c.MediaSavedActive == name) c.SelectMediaPreset(c.MediaDesign);
+                    });
+                    saved.RemoveAll(s => s.Name == name);
+                    if (draft.Cfg.MediaSavedActive == name)
+                    {
+                        draft.Cfg.SelectMediaPreset(draft.Cfg.MediaDesign);
+                        draft.Rebase();
+                    }
+                    RefreshPage();
+                },
+                name =>
+                {
+                    SaveDesignDraft(name);
+                    RefreshPage();
+                },
+                true, T("Name, z. B. Mein Island", "Name, e.g. My Island"),
+                T("Änderungen sind ein Entwurf, bis du sie als eigenes Design speicherst. Gleicher Name überschreibt.", "Changes are a draft until you save them as your own design. The same name overwrites."));
         }
 
         private void BodyDesign(StackPanel body)
         {
-            var cfg = _designCfg = Cfg();
-            _designBase = Clone(cfg);
+            var cfg = Draft().Cfg;
             void Changed() => _stageDirty = true;
 
             var tabItems = new[] { ("template", T("Vorlage", "Template")), ("layout", T("Aufbau", "Layout")), ("colors", T("Farben", "Colors")), ("opacity", T("Deckkraft", "Opacity")) };
@@ -1232,34 +1278,25 @@ namespace KnobFlyout.Settings
 
             if (_designTab is "colors" or "opacity")
             {
-                bool osdColors = cfg.OsdDesign == "dark"; // die OSD-Farben wirken nur beim OSD-Design „Eigenes“
-                if (_designTab == "opacity" || osdColors)
+                var target = Segments(new[] { ("media", T("Media-Flyout", "Media flyout")), ("osd", "OSD") }, _designTarget, key =>
                 {
-                    var target = Segments(new[] { ("media", T("Media-Flyout", "Media flyout")), ("osd", "OSD") }, _designTarget, key =>
-                    {
-                        _designTarget = key;
-                        RefreshPage();
-                    });
-                    ((Border)target).Margin = new Thickness(0, 2, 0, 10);
-                    body.Children.Add(target);
-                }
-                if (_designTab == "colors") AddDesignColors(body, cfg, Changed, osdColors && _designTarget == "osd");
+                    _designTarget = key;
+                    RefreshPage();
+                });
+                ((Border)target).Margin = new Thickness(0, 2, 0, 10);
+                body.Children.Add(target);
+                if (_designTab == "colors") AddDesignColors(body, cfg, Changed, _designTarget == "osd");
                 else AddDesignOpacity(body, cfg, Changed);
                 return;
             }
 
-            var editor = new MediaDesignEditor(cfg, _designExpanded, Changed, () =>
-            {
-                SaveDesign();
-                ConfigChanged?.Invoke();
-                RefreshPage();
-            }, compact: true);
+            var editor = new MediaDesignEditor(cfg, _designExpanded, Changed, RefreshPage, compact: true);
             if (_designTab == "template")
             {
                 body.Children.Add(editor.Templates());
                 body.Children.Add(new Border { Height = 10 });
                 body.Children.Add(Heading(T("Eigene Designs", "Your own designs")));
-                body.Children.Add(editor.SavedDesigns());
+                body.Children.Add(DesignSavedPanel());
                 return;
             }
             body.Children.Add(editor.Elements());
@@ -1268,11 +1305,15 @@ namespace KnobFlyout.Settings
 
         private void AddDesignColors(StackPanel body, AppConfig cfg, Action changed, bool osd)
         {
-            string hint = T("Klick auf eine Farbe öffnet den Farbkreis, ↺ setzt sie zurück.", "Click a color to open the color wheel, ↺ resets it.");
-            if (!osd && cfg.MediaDesign != "custom")
+            if (!osd)
             {
                 body.Children.Add(new MediaDesignEditor(cfg, _designExpanded, changed, () => { }, compact: true).DesignColors());
-                body.Children.Add(Hint(hint));
+                return;
+            }
+            if (cfg.OsdDesign != "dark")
+            {
+                body.Children.Add(MediaDesignEditor.OsdColors(cfg, changed, compact: true));
+                body.Children.Add(Hint(T("Klick auf eine Farbe öffnet den Farbkreis, ↺ setzt sie zurück.", "Click a color to open the color wheel, ↺ resets it.")));
                 return;
             }
 
@@ -1281,31 +1322,19 @@ namespace KnobFlyout.Settings
                 grid.Children.Add(MediaDesignEditor.ColorRow(label, value, def, hex => { set(hex); changed(); }));
 
             var grid = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 6) };
-            if (osd)
-            {
-                Add(grid, T("Hintergrund", "Background"), cfg.ColorBg, d.ColorBg, v => cfg.ColorBg = v);
-                Add(grid, T("Rahmen", "Border"), cfg.ColorVolBorder, d.ColorVolBorder, v => cfg.ColorVolBorder = v);
-                Add(grid, T("App-Name", "App name"), cfg.ColorVolText, d.ColorVolText, v => cfg.ColorVolText = v);
-                Add(grid, T("Prozent", "Percent"), cfg.ColorVolPct, d.ColorVolPct, v => cfg.ColorVolPct = v);
-                Add(grid, T("Symbol", "Icon"), cfg.ColorVolIcon, d.ColorVolIcon, v => cfg.ColorVolIcon = v);
-                Add(grid, T("Balken leer", "Bar empty"), cfg.ColorBarBg, d.ColorBarBg, v => cfg.ColorBarBg = v);
-                Add(grid, T("Balken hoch", "Bar high"), cfg.ColorBarHi, d.ColorBarHi, v => cfg.ColorBarHi = v);
-                Add(grid, T("Balken mittel", "Bar medium"), cfg.ColorBarMid, d.ColorBarMid, v => cfg.ColorBarMid = v);
-                Add(grid, T("Balken niedrig", "Bar low"), cfg.ColorBarLo, d.ColorBarLo, v => cfg.ColorBarLo = v);
-                Add(grid, T("Profil-Rahmen", "Profile border"), cfg.ColorProfBorder, d.ColorProfBorder, v => cfg.ColorProfBorder = v);
-                Add(grid, T("Profil-Text", "Profile text"), cfg.ColorProfText, d.ColorProfText, v => cfg.ColorProfText = v);
-            }
-            else
-            {
-                Add(grid, T("Hintergrund", "Background"), cfg.MediaCustomBg, d.MediaCustomBg, v => cfg.MediaCustomBg = v);
-                Add(grid, T("Text und Symbole", "Text and icons"), cfg.MediaCustomFg, d.MediaCustomFg, v => cfg.MediaCustomFg = v);
-                Add(grid, T("Nebentext", "Secondary text"), cfg.MediaCustomSub, d.MediaCustomSub, v => cfg.MediaCustomSub = v);
-                Add(grid, T("Akzent", "Accent"), cfg.MediaCustomAccent, d.MediaCustomAccent, v => cfg.MediaCustomAccent = v);
-                Add(grid, T("Knopf-Fläche", "Button fill"), cfg.MediaCustomButtonBg, d.MediaCustomButtonBg, v => cfg.MediaCustomButtonBg = v);
-                Add(grid, T("Leiste", "Bar"), cfg.MediaCustomTrack, d.MediaCustomTrack, v => cfg.MediaCustomTrack = v);
-            }
+            Add(grid, T("Hintergrund", "Background"), cfg.ColorBg, d.ColorBg, v => cfg.ColorBg = v);
+            Add(grid, T("Rahmen", "Border"), cfg.ColorVolBorder, d.ColorVolBorder, v => cfg.ColorVolBorder = v);
+            Add(grid, T("App-Name", "App name"), cfg.ColorVolText, d.ColorVolText, v => cfg.ColorVolText = v);
+            Add(grid, T("Prozent", "Percent"), cfg.ColorVolPct, d.ColorVolPct, v => cfg.ColorVolPct = v);
+            Add(grid, T("Symbol", "Icon"), cfg.ColorVolIcon, d.ColorVolIcon, v => cfg.ColorVolIcon = v);
+            Add(grid, T("Balken leer", "Bar empty"), cfg.ColorBarBg, d.ColorBarBg, v => cfg.ColorBarBg = v);
+            Add(grid, T("Balken hoch", "Bar high"), cfg.ColorBarHi, d.ColorBarHi, v => cfg.ColorBarHi = v);
+            Add(grid, T("Balken mittel", "Bar medium"), cfg.ColorBarMid, d.ColorBarMid, v => cfg.ColorBarMid = v);
+            Add(grid, T("Balken niedrig", "Bar low"), cfg.ColorBarLo, d.ColorBarLo, v => cfg.ColorBarLo = v);
+            Add(grid, T("Profil-Rahmen", "Profile border"), cfg.ColorProfBorder, d.ColorProfBorder, v => cfg.ColorProfBorder = v);
+            Add(grid, T("Profil-Text", "Profile text"), cfg.ColorProfText, d.ColorProfText, v => cfg.ColorProfText = v);
             body.Children.Add(grid);
-            body.Children.Add(Hint(hint));
+            body.Children.Add(Hint(T("Klick auf eine Farbe öffnet den Farbkreis, ↺ setzt sie zurück.", "Click a color to open the color wheel, ↺ resets it.")));
         }
 
         private void AddDesignOpacity(StackPanel body, AppConfig cfg, Action changed)

@@ -18,9 +18,9 @@ namespace KnobFlyout.Osd
         /// </summary>
         private Border BuildHardware(AppConfig cfg, DesignSpec spec, double alpha, string processName)
         {
-            bool light = ThemeHelper.IsLight(cfg);
-            var pal = spec.Palette(light);
-            var hw = HardwareParts.Colors(light);
+            bool light = OsdDesignColors.Light(cfg);
+            var pal = OsdDesignColors.Palette(cfg, spec, light);
+            var hw = OsdDesignColors.Hw(cfg, light);
             double w = spec.PopupWidth, h = spec.PopupHeight;
             var fg = UiColor.Brush(pal.Fg);
             var sub = UiColor.Brush(pal.Sub);

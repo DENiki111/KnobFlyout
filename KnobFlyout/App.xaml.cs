@@ -83,7 +83,11 @@ namespace KnobFlyout
 
             _tray = new TrayIconManager();
             _tray.SettingsRequested += OpenSettings;
-            _tray.ExitRequested += () => Shutdown();
+            _tray.ExitRequested += () =>
+            {
+                IsExiting = true;
+                Shutdown();
+            };
 
             // Hook-Handler reihen nur ein (Hook-Callback muss sofort zurückkehren).
             _hook = new LowLevelKeyboardHook();
@@ -381,7 +385,11 @@ namespace KnobFlyout
             m.IsVisibleChanged += (_, e) => { if (e.NewValue is true) { Follow(); ResolveOverlap(); } };
             m.DragFinished += ResolveOverlap;
             m.SettingsRequested += OpenSettings;
-            m.ConfigChanged += () => _hook?.ReloadConfig();
+            m.ConfigChanged += () =>
+            {
+                _hook?.ReloadConfig();
+                RefreshKeep(); // „…“-Menü: Daueranzeige an oder aus
+            };
             m.MenuActionRequested += OnMediaMenuAction;
             m.DismissRequested += () => { if (!m.KeepOwnPosition && IsCombinedLayout()) _osd?.HideNow(); };
             return m;
@@ -541,6 +549,7 @@ namespace KnobFlyout
                 var excluded = cfg.Exclude.Select(a => a.ToLowerInvariant()).ToHashSet();
                 var assigned = cfg.Profiles.Values.SelectMany(v => v).Select(a => a.ToLowerInvariant()).ToHashSet();
                 var autoAssigned = new System.Collections.Generic.List<(string Process, string Profile)>();
+                if (!cfg.NewAppPopup) _newAppOsd?.Close(); // gerade abgeschaltet
 
                 foreach (var s in _audio.GetSessions())
                 {
@@ -562,6 +571,7 @@ namespace KnobFlyout
                         continue;
                     }
 
+                    if (!cfg.NewAppPopup) continue; // nicht als gesehen gemerkt: Eingeschaltet fragt das Popup wieder
                     if (_newAppQueue.Any(q => string.Equals(q, s.ProcessName, StringComparison.OrdinalIgnoreCase))) continue;
 
                     _newAppQueue.Enqueue(s.ProcessName);
@@ -588,6 +598,7 @@ namespace KnobFlyout
         {
             // Während der Einführung kein Popup: Die App bleibt eingereiht und kommt beim nächsten Durchlauf danach.
             if (_newAppOsd != null || _tutorial != null) return;
+            if (_newAppQueue.Count > 0 && !ConfigManager.Load().NewAppPopup) _newAppQueue.Clear();
             while (_newAppQueue.Count > 0)
             {
                 var proc = _newAppQueue.Dequeue();
@@ -782,8 +793,18 @@ namespace KnobFlyout
             RefreshKeep();
         }
 
+        /// <summary>Das Programm wird beendet: Fenster fragen nicht mehr nach ungespeicherten Änderungen.</summary>
+        public bool IsExiting { get; private set; }
+
+        protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+        {
+            IsExiting = true;
+            base.OnSessionEnding(e);
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
+            IsExiting = true;
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             _newAppTimer?.Stop();
             _newAppOsd?.Close();

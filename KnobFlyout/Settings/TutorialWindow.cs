@@ -118,10 +118,14 @@ namespace KnobFlyout.Settings
 
             _stageTimer.Tick += (_, _) => FlushStage();
             _stageTimer.Start();
+            Closing += (_, e) =>
+            {
+                if (Application.Current is App { IsExiting: true }) return;
+                if (!ConfirmLeaveDesign()) e.Cancel = true;
+            };
             Closed += (_, _) =>
             {
                 _stageTimer.Stop();
-                FlushDesign();
                 if (_stageDirty) ConfigChanged?.Invoke();
                 _pageTimer?.Stop();
                 DisposeLiveMedia();
@@ -326,7 +330,7 @@ namespace KnobFlyout.Settings
         /// <param name="dir">1 = vorwärts, -1 = zurück (Richtung der Bewegung), 0 = ohne Bewegung.</param>
         public void ShowPage(int index, int dir)
         {
-            if (index < 0 || index >= _pages.Count) return;
+            if (index < 0 || index >= _pages.Count || !ConfirmLeaveDesign()) return;
             _subPages.Clear();
             _index = index;
             ShowCurrent(dir);
@@ -341,7 +345,7 @@ namespace KnobFlyout.Settings
 
         private void CloseSub()
         {
-            if (_subPages.Count == 0) return;
+            if (_subPages.Count == 0 || !ConfirmLeaveDesign()) return;
             _subPages.Pop();
             ShowCurrent(-1);
         }
@@ -349,6 +353,7 @@ namespace KnobFlyout.Settings
         /// <summary>Oberste Unterseite durch eine andere ersetzen (nächste Funktion).</summary>
         private void ReplaceSub(Page page)
         {
+            if (!ConfirmLeaveDesign()) return;
             if (_subPages.Count > 0) _subPages.Pop();
             _subPages.Push(page);
             ShowCurrent(1);
@@ -356,7 +361,6 @@ namespace KnobFlyout.Settings
 
         private void ShowCurrent(int dir)
         {
-            FlushDesign();
             StopPageTimer();
             ClearLiveFields();
             var page = Current;
@@ -401,12 +405,11 @@ namespace KnobFlyout.Settings
             _stageHost.Content = Current.Stage();
         }
 
-        /// <summary>Gebündelte Änderungen übernehmen: speichern, App benachrichtigen, Bühne zeigt den neuen Stand.</summary>
+        /// <summary>Gebündelte Änderungen übernehmen: App benachrichtigen, Bühne zeigt den neuen Stand.</summary>
         private void FlushStage()
         {
             if (!_stageDirty) return;
             _stageDirty = false;
-            SaveDesign();
             ConfigChanged?.Invoke();
             RefreshStage();
         }

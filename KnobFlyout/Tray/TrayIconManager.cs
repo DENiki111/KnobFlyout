@@ -38,6 +38,7 @@ namespace KnobFlyout.Tray
             _menu.Items.Add(_host);
             _icon.ContextMenu = _menu;
             _icon.PreviewTrayContextMenuOpen += (_, _) => _host.Header = BuildMenu();
+            _icon.TrayLeftMouseUp += (_, _) => SettingsRequested?.Invoke();
         }
 
         private static ControlTemplate Template(string type, string content) => (ControlTemplate)System.Windows.Markup.XamlReader.Parse(

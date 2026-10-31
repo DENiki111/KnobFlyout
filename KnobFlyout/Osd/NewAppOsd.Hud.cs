@@ -18,8 +18,8 @@ namespace KnobFlyout.Osd
         /// </summary>
         private Grid BuildHud(AppConfig cfg, DesignSpec spec, double alpha, string processName)
         {
-            bool light = ThemeHelper.IsLight(cfg);
-            var pal = spec.Palette(light);
+            bool light = OsdDesignColors.Light(cfg);
+            var pal = OsdDesignColors.Palette(cfg, spec, light);
             double w = spec.PopupWidth, h = spec.PopupHeight, c = spec.Chamfer;
             var accent = UiColor.Brush(pal.Fill);
 

@@ -72,6 +72,9 @@ namespace KnobFlyout.Config
 
         [JsonPropertyName("seen_apps")] public List<string> SeenApps { get; set; } = new();
 
+        /// <summary>Zuweisungs-OSD: Popup, das bei einer neuen App nach dem Profil fragt. Aus: Die App bleibt ohne Profil, automatisch einsortieren läuft weiter.</summary>
+        [JsonPropertyName("new_app_popup")] public bool NewAppPopup { get; set; } = true;
+
         /// <summary>Neue Apps ohne Rückfrage einsortieren (Profiles/AppClassifier.cs); nicht Erkanntes fragt weiter das Popup.</summary>
         [JsonPropertyName("auto_assign")] public bool AutoAssign { get; set; } = true;
 
@@ -137,6 +140,50 @@ namespace KnobFlyout.Config
         /// <summary>Name des gerade gewählten gespeicherten Designs ("" = keins).</summary>
         [JsonPropertyName("media_saved_active")] public string MediaSavedActive { get; set; } = "";
 
+        /// <summary>Anpassungen aus Versionen, die sie in der Voreinstellung speicherten, sind in eigene Designs umgezogen.</summary>
+        [JsonPropertyName("media_designs_split")] public bool MediaDesignsSplit { get; set; }
+
+        /// <summary>Eigene OSD-Farben je Design (Design → MediaLayout.Color* → Hex); was fehlt, bleibt wie im Design. Das Design „Eigenes“ hat dafür color_*.</summary>
+        [JsonPropertyName("osd_colors")] public Dictionary<string, Dictionary<string, string>> OsdColors { get; set; } = new();
+
+        /// <summary>Unter einem Namen gespeicherte OSD-Designs und das gerade gewählte.</summary>
+        [JsonPropertyName("osd_saved_designs")] public List<SavedOsdDesign> OsdSavedDesigns { get; set; } = new();
+        [JsonPropertyName("osd_saved_active")] public string OsdSavedActive { get; set; } = "";
+
+        /// <summary>Ein Farbprofil gilt beim Auswählen für OSD und Media-Flyout zugleich.</summary>
+        [JsonPropertyName("color_profile_both")] public bool ColorProfileBoth { get; set; } = false;
+
+        private string OsdColorKey => OsdDesign == "windows" ? "modern" : OsdDesign;
+
+        private SavedOsdDesign? ActiveOsdDesign => OsdSavedActive.Length > 0 ? OsdSavedDesigns.Find(s => s.Name == OsdSavedActive && s.Design == OsdDesign) : null;
+
+        /// <summary>Eigene Farben des gewählten OSD-Designs (bei einem eigenen Design dessen), nur zum Lesen (Änderungen über SetOsdColor).</summary>
+        public MediaLayout OsdColorSet() => ActiveOsdDesign is { } own ? new() { Colors = own.Colors }
+            : new() { Colors = OsdColors.TryGetValue(OsdColorKey, out var colors) ? colors : null };
+
+        public void SetOsdColor(string key, string? hex)
+        {
+            var set = OsdColorSet();
+            set.SetColor(key, hex);
+            if (ActiveOsdDesign is { } own) own.Colors = set.Colors;
+            else if (set.Colors == null) OsdColors.Remove(OsdColorKey);
+            else OsdColors[OsdColorKey] = set.Colors;
+        }
+
+        public void ClearOsdColors()
+        {
+            if (ActiveOsdDesign is { } own) own.Colors = null;
+            else OsdColors.Remove(OsdColorKey);
+        }
+
+        /// <summary>Kein eigenes OSD-Design mehr: wieder die Standardfarben des gewählten Designs (wie SelectMediaPreset beim Flyout).</summary>
+        public void SelectOsdPreset()
+        {
+            OsdSavedActive = "";
+            ClearOsdColors();
+            if (OsdDesign == "dark") SavedOsdDesign.ResetCustom(this);
+        }
+
         // Bis 1.3 gab es den Aufbau nur für „Eigenes“, Zeitleiste/±10 s/„…“ galten für alle Designs: werden beim Laden in
         // media_layouts übernommen (EnsureLayouts) und danach nicht mehr geschrieben.
         [JsonPropertyName("media_custom_order"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<string>? OldCustomOrder { get; set; }
@@ -169,9 +216,12 @@ namespace KnobFlyout.Config
 
         /// <summary>
         /// Einträge im "…"-Menü des Media-Flyouts (Reihenfolge egal): "shuffle", "repeat", "switch_source",
-        /// "skip_hotkeys", "pin", "save_position", "next_position", "reset_position", "settings", "close".
+        /// "keep", "skip_hotkeys", "pin", "save_position", "next_position", "reset_position", "settings", "close".
         /// </summary>
-        [JsonPropertyName("media_more_items")] public List<string> MediaMoreItems { get; set; } = new() { "shuffle", "repeat" };
+        [JsonPropertyName("media_more_items")] public List<string> MediaMoreItems { get; set; } = new() { "shuffle", "repeat", "keep" };
+
+        /// <summary>„Dauerhaft anzeigen“ wurde einmalig ins „…“-Menü aufgenommen (danach bleibt es die Wahl des Nutzers).</summary>
+        [JsonPropertyName("media_more_keep_added")] public bool MediaMoreKeepAdded { get; set; }
 
         /// <summary>Hotkeys für ±10 s aktiv (per "…"-Menü schnell umschaltbar, ohne die Tasten zu löschen).</summary>
         [JsonPropertyName("media_skip_hotkeys_enabled")] public bool MediaSkipHotkeysEnabled { get; set; } = true;
@@ -314,17 +364,83 @@ namespace KnobFlyout.Config
         public MediaLayout Layout(string? design = null)
         {
             string key = design ?? MediaDesign;
+            return key == MediaDesign && ActiveMediaDesign is { } own ? own.Layout : PresetLayout(key);
+        }
+
+        private SavedMediaDesign? ActiveMediaDesign => MediaSavedActive.Length > 0 ? MediaSavedDesigns.Find(s => s.Name == MediaSavedActive && s.Design == MediaDesign) : null;
+
+        private MediaLayout PresetLayout(string key)
+        {
             if (!MediaLayouts.TryGetValue(key, out var layout)) MediaLayouts[key] = layout = new MediaLayout();
             return layout;
+        }
+
+        /// <summary>Aufbau des gewählten Designs ersetzen (Vorlage): beim eigenen Design dessen, sonst den der Voreinstellung.</summary>
+        public void SetLayout(MediaLayout layout)
+        {
+            if (ActiveMediaDesign is { } own) own.Layout = layout;
+            else MediaLayouts[MediaDesign] = layout;
+        }
+
+        /// <summary>Voreinstellung wählen: kein eigenes Design mehr aktiv; „Eigenes“ beginnt mit den Standardfarben (seine Farben stehen in den eigenen Designs).</summary>
+        public void SelectMediaPreset(string design)
+        {
+            MediaDesign = design;
+            MediaSavedActive = "";
+            if (design == "custom") ResetCustomColors();
+        }
+
+        private void ResetCustomColors()
+        {
+            var d = new AppConfig();
+            MediaCustomBg = d.MediaCustomBg;
+            MediaCustomFg = d.MediaCustomFg;
+            MediaCustomSub = d.MediaCustomSub;
+            MediaCustomAccent = d.MediaCustomAccent;
+            MediaCustomButtonBg = d.MediaCustomButtonBg;
+            MediaCustomTrack = d.MediaCustomTrack;
+        }
+
+        /// <summary>Einmalig: Anpassungen, die frühere Versionen in der Voreinstellung speicherten, werden zu eigenen Designs. Das Aussehen bleibt gleich.</summary>
+        private void SplitOwnDesigns(IEnumerable<string> designs)
+        {
+            if (MediaDesignsSplit) return;
+            MediaDesignsSplit = true;
+            var d = new AppConfig();
+            bool customColors = MediaCustomBg != d.MediaCustomBg || MediaCustomFg != d.MediaCustomFg || MediaCustomSub != d.MediaCustomSub
+                || MediaCustomAccent != d.MediaCustomAccent || MediaCustomButtonBg != d.MediaCustomButtonBg || MediaCustomTrack != d.MediaCustomTrack;
+            foreach (var key in designs)
+            {
+                var layout = PresetLayout(key);
+                bool flats = key == "custom" && customColors;
+                if (layout.OnlyContent && !flats) continue;
+                if (key == MediaDesign && ActiveMediaDesign is { } active)
+                    active.Layout = layout.Clone(); // zuletzt galt, was hier stand
+                else
+                {
+                    string shown = key switch
+                    {
+                        "modernflyouts" => "ModernFlyouts",
+                        "win11" => "Windows 11",
+                        "custom" => Loc.T("Eigenes", "Custom"),
+                        _ => global::KnobFlyout.Osd.Designs.Get(key)?.Name ?? key,
+                    };
+                    string name = shown + Loc.T(" (bisher)", " (before)");
+                    if (!MediaSavedDesigns.Any(s => s.Name == name)) MediaSavedDesigns.Add(SavedMediaDesign.From(this, name, key, layout));
+                    if (key == MediaDesign && ActiveMediaDesign == null) MediaSavedActive = name;
+                }
+                MediaLayouts[key] = layout.ContentOnly();
+                if (key == "custom" && !(MediaDesign == "custom" && ActiveMediaDesign != null)) ResetCustomColors();
+            }
         }
 
         /// <summary>Beim Laden: je Design ein Aufbau; Werte aus älteren Versionen übernehmen.</summary>
         public void EnsureLayouts()
         {
             var designs = new[] { "modernflyouts", "win11", "custom" }.Concat(global::KnobFlyout.Osd.Designs.All.Select(d => d.Key)).ToList();
-            foreach (var key in designs) Layout(key);
+            foreach (var key in designs) PresetLayout(key);
 
-            var custom = Layout("custom");
+            var custom = PresetLayout("custom");
             if (OldCustomOrder != null && !OldCustomOrder.SequenceEqual(new[] { "app", "info", "progress", "sources", "controls" })) custom.Order = OldCustomOrder;
             if (OldCustomShowApp == false) custom.Set(MediaLayout.App, false);
             if (OldCustomShowTimes == false) custom.Set(MediaLayout.Times, false);
@@ -343,7 +459,7 @@ namespace KnobFlyout.Config
             if (OldCustomTitleSize is { } titleSize && titleSize != 14) custom.TitleSize = titleSize;
             foreach (var key in designs)
             {
-                var layout = Layout(key);
+                var layout = PresetLayout(key);
                 if (OldShowProgress == false) layout.Set(MediaLayout.Progress, false);
                 if (OldSkipButtons == false) layout.Set(MediaLayout.Skip, false);
                 if (OldShowMore == false) layout.Set(MediaLayout.More, false);
@@ -353,6 +469,12 @@ namespace KnobFlyout.Config
             OldCustomCover = OldCustomButtons = OldCustomButtonsAlign = OldCustomMorePos = null;
             OldCustomCoverSize = OldCustomButtonSize = OldCustomTitleSize = null;
             OldShowProgress = OldSkipButtons = OldShowMore = null;
+            SplitOwnDesigns(designs);
+            if (!MediaMoreKeepAdded)
+            {
+                MediaMoreKeepAdded = true;
+                if (!MediaMoreItems.Contains("keep")) MediaMoreItems.Add("keep");
+            }
         }
 
         /// <summary>Entspricht cfg.get(f"profile_color_{key}", color) – jetzt aus profile_list.</summary>
