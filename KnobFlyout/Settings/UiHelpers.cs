@@ -111,6 +111,8 @@ namespace KnobFlyout.Settings
             Child = child,
         };
 
+        private const double CardMinTextWidth = 120; // schmaler wird der Text nicht: Das Bedienelement rutscht darunter
+
         /// <summary>Kopfzeile einer Karte: Symbol links, Titel + Beschreibung, Bedienelement rechts.</summary>
         private static Grid CardHeader(string glyph, string title, string? description, UIElement? control)
         {
@@ -139,6 +141,23 @@ namespace KnobFlyout.Settings
                 if (fe.HorizontalAlignment == HorizontalAlignment.Stretch) fe.HorizontalAlignment = HorizontalAlignment.Right;
                 Grid.SetColumn(fe, 2);
                 grid.Children.Add(fe);
+
+                grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                var alignment = fe.HorizontalAlignment;
+                var margin = fe.Margin;
+                grid.SizeChanged += (_, e) =>
+                {
+                    if (!e.WidthChanged) return;
+                    fe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    bool below = e.NewSize.Width - grid.ColumnDefinitions[0].Width.Value - text.Margin.Right - fe.DesiredSize.Width < CardMinTextWidth;
+                    if (below == (Grid.GetRow(fe) == 1)) return;
+                    Grid.SetRow(fe, below ? 1 : 0);
+                    Grid.SetColumn(fe, below ? 1 : 2);
+                    Grid.SetColumnSpan(fe, below ? 2 : 1);
+                    fe.HorizontalAlignment = below ? HorizontalAlignment.Left : alignment;
+                    fe.Margin = below ? new Thickness(margin.Left, 8, margin.Right, 0) : margin;
+                };
             }
             return grid;
         }

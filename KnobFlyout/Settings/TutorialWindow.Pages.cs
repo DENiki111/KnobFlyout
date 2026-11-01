@@ -56,7 +56,7 @@ namespace KnobFlyout.Settings
         private Border? _draftPreview;
         private UniformGrid? _profileTiles;
 
-        // Seite „Apps zuweisen“
+        // Seiten „Automatisch einsortieren“ und „Apps selbst einsortieren“
         private ContentControl? _appsPopupHost;
         private string? _appsPopupApp;
         private StatusPill? _appsPill;
@@ -70,7 +70,6 @@ namespace KnobFlyout.Settings
         private DesignDraft? _designDraft; // Entwurf der Unterseite „Design anpassen“: gespeichert wird nur als eigenes Design
         private string _designTab = "template";
         private string _designTarget = "media"; // Farben und Deckkraft: Flyout oder OSD
-        private string _appsTab = "running";
         private readonly HashSet<string> _designExpanded = new();
 
         private void ClearStageFields()
@@ -212,21 +211,25 @@ namespace KnobFlyout.Settings
                     () => T("Drehen ändert die Lautstärke, Drücken schaltet stumm. Die Lautstärke-Tasten einer Tastatur funktionieren genauso.",
                         "Turning changes the volume, pressing mutes. The volume keys on a keyboard work just the same."),
                     StageKnob, BodyKnob),
+                new("#8b5cf6", () => T("Die Profil-Taste", "The profile key"),
+                    () => T("Dein Knopf regelt immer ein Profil, also eine Gruppe von Apps. Mit dieser Taste wechselst du zum nächsten, auch mitten im Spiel.",
+                        "Your knob always controls one profile, a group of apps. This key switches to the next one, even in the middle of a game."),
+                    StageHotkey, BodyHotkey),
                 new("#a855f7", () => T("Profile: Gruppen von Apps", "Profiles: groups of apps"),
                     () => T("Der Knopf regelt nur die Apps des aktiven Profils. So drehst du zum Beispiel das Spiel leiser, während Discord gleich laut bleibt.",
                         "The knob only controls the apps in the active profile. For example, you can turn the game down while Discord stays as loud as it is."),
                     StageProfiles, BodyProfiles),
-                new("#8b5cf6", () => T("Die Profil-Taste", "The profile key"),
-                    () => T("Mit einer Taste wechselst du zum nächsten Profil, auch mitten im Spiel. Du siehst sofort, welches jetzt aktiv ist.",
-                        "One key switches to the next profile, even in the middle of a game. You see right away which one is active."),
-                    StageHotkey, BodyHotkey),
                 new("#ec4899", () => T("Eigene Profile", "Your own profiles"),
                     () => T("Bis zu 6 Profile, jedes mit eigenem Namen, Logo und eigener Farbe. Auch die vorgefertigten kannst du ändern oder löschen.",
                         "Up to 6 profiles, each with its own name, logo and color. You can change or delete the ready-made ones too."),
                     StageCustom, BodyCustom),
-                new("#22c55e", () => T("Apps zuweisen", "Assign apps"),
-                    () => T("Spielt eine neue App Ton ab, fragt KnobFlyout, zu welchem Profil sie gehört. Oder es sortiert Spiele, Browser, Musik und Chat-Apps gleich selbst ein.",
-                        "When a new app plays sound, KnobFlyout asks which profile it belongs to. Or it sorts games, browsers, music and chat apps by itself."),
+                new("#22c55e", () => T("Automatisch einsortieren", "Sort automatically"),
+                    () => T("KnobFlyout erkennt Spiele, Browser, Musik- und Chat-Apps und legt neue von selbst ins passende Profil. Du bestimmst nur, welche Art wohin gehört.",
+                        "KnobFlyout recognizes games, browsers, music and chat apps and puts new ones in the right profile by itself. You only decide which kind goes where."),
+                    StageAuto, BodyAuto),
+                new("#10b981", () => T("Apps selbst einsortieren", "Sort apps yourself"),
+                    () => T("Jede App gehört zu genau einem Profil, und der Knopf regelt sie nur, wenn dieses Profil aktiv ist. Was nicht von selbst einsortiert wird, legst du hier fest.",
+                        "Each app belongs to exactly one profile, and the knob only controls it while that profile is active. Anything that isn't sorted by itself, you set here."),
                     StageApps, BodyApps),
                 new("#14b8a6", () => T("Media-Flyout", "Media flyout"),
                     () => T("Zeigt bei jedem Titelwechsel, was gerade läuft: für Spotify, Browser und jede App, die Medien an Windows meldet.",
@@ -249,7 +252,7 @@ namespace KnobFlyout.Settings
                         "KnobFlyout now runs in the notification area of the taskbar. Right-click the knob icon to open the settings."),
                     StageDone, BodyDone),
             };
-            _appsIndex = 5;
+            _appsIndex = 6;
             return pages;
         }
 
@@ -472,7 +475,7 @@ namespace KnobFlyout.Settings
                 "Knob not responding? While a window started as administrator is in the foreground, Windows doesn't pass its keys on to KnobFlyout.")));
         }
 
-        // ── 3 · Profile ─────────────────────────────────────────────────────
+        // ── 4 · Profile ─────────────────────────────────────────────────────
 
         private FrameworkElement StageProfiles()
         {
@@ -566,7 +569,7 @@ namespace KnobFlyout.Settings
                 Toggle(cfg.SkipEmptyProfiles, v => Update(c => c.SkipEmptyProfiles = v))));
         }
 
-        // ── 4 · Profil-Taste ────────────────────────────────────────────────
+        // ── 3 · Profil-Taste ────────────────────────────────────────────────
 
         private FrameworkElement StageHotkey()
         {
@@ -614,7 +617,7 @@ namespace KnobFlyout.Settings
                     RefreshStage();
                 }, allowClear: false, format: FormatHotkey, width: 176)));
             body.Children.Add(new Border { Height = 10 });
-            body.Children.Add(Feature("\uE893", T("Kurz drücken", "Tap"), T("Wechselt zum nächsten Profil. Die Reihenfolge legst du im nächsten Schritt fest.", "Switches to the next profile. You set the order in the next step.")));
+            body.Children.Add(Feature("\uE893", T("Kurz drücken", "Tap"), T("Wechselt zum nächsten Profil. Die Reihenfolge legst du gleich bei den eigenen Profilen fest.", "Switches to the next profile. You set the order in a moment under your own profiles.")));
             body.Children.Add(Feature("\uE81D", T("Lange halten", "Hold"), T("Springt zur nächsten gespeicherten Position. Das kommt bei den Snap-Punkten.", "Jumps to the next saved position. That comes up with the snap points.")));
         }
 
@@ -918,7 +921,76 @@ namespace KnobFlyout.Settings
                     : T("Klick auf ein Profil bearbeitet es, ✕ löscht es, auch die vorgefertigten. Mindestens eins bleibt.", "Click a profile to edit it, ✕ deletes it, even the ready-made ones. At least one stays.")));
         }
 
-        // ── 6 · Apps zuweisen ───────────────────────────────────────────────
+        // ── 6 · Automatisch einsortieren ────────────────────────────────────
+
+        /// <summary>Welche Art von App wohin kommt, als Überblick; folgt der Auswahl rechts.</summary>
+        private FrameworkElement StageAuto()
+        {
+            var cfg = Cfg();
+            var defs = ProfileDefinitions.For(cfg);
+            var panel = new StackPanel { Width = 350, Opacity = cfg.AutoAssign ? 1 : 0.45 };
+            foreach (var (category, glyph, label) in new[]
+            {
+                (AppClassifier.Games, "\uE7FC", T("Spiele", "Games")),
+                (AppClassifier.Browsers, "\uE774", T("Browser und Video", "Browsers and video")),
+                (AppClassifier.Music, "\uE8D6", T("Musik", "Music")),
+                (AppClassifier.Comms, "\uE720", T("Kommunikation", "Communication")),
+            })
+            {
+                string key = cfg.AutoAssignMap.TryGetValue(category, out var mapped) ? mapped : AppClassifier.DefaultProfile(category);
+                var profile = defs.FirstOrDefault(p => p.Key == key);
+
+                var row = new Grid();
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var kind = new StackPanel { Orientation = Orientation.Horizontal };
+                kind.Children.Add(new TextBlock { Text = glyph, FontFamily = IconFont, FontSize = 16, Foreground = Fg, Width = 26, VerticalAlignment = VerticalAlignment.Center });
+                kind.Children.Add(new TextBlock { Text = label, FontSize = 13, Foreground = Fg, TextWrapping = TextWrapping.Wrap, MaxWidth = 112, VerticalAlignment = VerticalAlignment.Center });
+                row.Children.Add(kind);
+
+                var arrow = new TextBlock { Text = "\uE72A", FontFamily = IconFont, FontSize = 12, Foreground = SubFg, VerticalAlignment = VerticalAlignment.Center }; // Forward
+                Grid.SetColumn(arrow, 1);
+                row.Children.Add(arrow);
+
+                var target = new StackPanel { Orientation = Orientation.Horizontal };
+                if (profile != null)
+                    target.Children.Add(new Border
+                    {
+                        Width = 30, Height = 30, CornerRadius = new CornerRadius(8), Background = UiColor.Brush(profile.Color), Margin = new Thickness(0, 0, 9, 0),
+                        Child = profile.CreateLogo(15, Brushes.White),
+                    });
+                target.Children.Add(new TextBlock
+                {
+                    Text = profile?.Name ?? T("Nachfragen", "Ask"), FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = Fg,
+                    TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 92, VerticalAlignment = VerticalAlignment.Center,
+                });
+                Grid.SetColumn(target, 2);
+                row.Children.Add(target);
+
+                panel.Children.Add(new Border
+                {
+                    Background = CardBg, BorderBrush = CardBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10),
+                    Padding = new Thickness(14, 9, 12, 9), Margin = new Thickness(0, 0, 0, 7), MinHeight = 50, Child = row, Effect = Soft(),
+                });
+            }
+            return OnStage(panel, cfg.AutoAssign
+                ? T("So landen neue Apps von selbst im richtigen Profil.", "This is how new apps end up in the right profile by themselves.")
+                : T("Aus: Neue Apps sortierst du selbst ein.", "Off: you sort new apps yourself."));
+        }
+
+        private void BodyAuto(StackPanel body)
+        {
+            _appsPill = new StatusPill(T("Probier es aus: Starte eine App, die noch in keinem Profil ist …", "Try it: start an app that isn't in a profile yet …"));
+            body.Children.Add(_appsPill);
+            AddAutoAssignCards(body);
+            body.Children.Add(new Border { Height = 8 });
+            body.Children.Add(Note(T("Gilt nur für neue Apps, zugewiesene bleiben, wo sie sind. Bei „Nachfragen“ und bei allem, was KnobFlyout nicht kennt, entscheidest du selbst.",
+                "Only applies to new apps, assigned ones stay where they are. With “Ask” and anything KnobFlyout doesn't know, you decide yourself.")));
+        }
+
+        // ── 7 · Apps selbst einsortieren ────────────────────────────────────
 
         private FrameworkElement StageApps()
         {
@@ -983,27 +1055,21 @@ namespace KnobFlyout.Settings
         {
             _appsPill = new StatusPill(T("Probier es aus: Klick links im Popup auf ein Logo …", "Try it: click a logo in the popup on the left …"));
             body.Children.Add(_appsPill);
-            var tabs = Segments(new[] { ("running", T("Spielen gerade Ton ab", "Playing sound now")), ("auto", T("Automatisch einsortieren", "Sort automatically")) }, _appsTab, key =>
-            {
-                _appsTab = key;
-                RefreshPage();
-            });
-            ((Border)tabs).Margin = new Thickness(0, 0, 0, 10);
-            body.Children.Add(tabs);
-            if (_appsTab == "auto") AddAutoAssignCards(body);
+            body.Children.Add(Feature("\uE7E7", T("Neue App: das Popup links", "New app: the popup on the left"),
+                T("Spielt eine unbekannte App Ton ab, fragt es nach dem Profil. Ein Klick auf ein Logo legt sie dort ab. Ohne Klick fragt es später wieder.",
+                    "When an unknown app plays sound, it asks for the profile. Clicking a logo puts the app there. Without a click it asks again later.")));
+            body.Children.Add(Feature("\uE733", T("⊘ = ignorieren", "⊘ = ignore"),
+                T("Der Knopf regelt diese App dann nie mehr und das Popup fragt nicht mehr nach.", "The knob then never controls this app and the popup stops asking.")));
+            body.Children.Add(Heading(T("Spielen gerade Ton ab: Logo anklicken zum Einsortieren oder Umziehen", "Playing sound now: click a logo to sort or move")));
             var list = new StackPanel();
             var card = new Border
             {
                 Background = CardBg, BorderBrush = CardBorder, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(6), MinHeight = 74, Child = new ScrollViewer { MaxHeight = 180, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = list, Focusable = false },
+                Padding = new Thickness(6), MinHeight = 74, Child = new ScrollViewer { MaxHeight = 130, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = list, Focusable = false },
             };
-            if (_appsTab != "auto")
-            {
-                body.Children.Add(card);
-                body.Children.Add(new Border { Height = 10 });
-                body.Children.Add(Note(T("⊘ ignoriert eine App dauerhaft. Alle Apps findest du später unter Einstellungen → Profile & Apps.",
-                    "⊘ ignores an app for good. You'll find all apps later under Settings → Profiles & apps.")));
-            }
+            body.Children.Add(card);
+            body.Children.Add(new Border { Height = 8 });
+            body.Children.Add(Hint(T("Später ändern: Einstellungen → Profile & Apps", "Change later: Settings → Profiles & apps")));
 
             string shown = "\0";
             void Render(bool force)
@@ -1047,6 +1113,7 @@ namespace KnobFlyout.Settings
             {
                 Update(c => c.AutoAssignMap[category] = key);
                 AutoAssignRequested?.Invoke();
+                RefreshStage();
             });
             var rowsCard = new Border
             {
@@ -1054,12 +1121,13 @@ namespace KnobFlyout.Settings
                 Padding = new Thickness(14, 8, 14, 8), Margin = new Thickness(0, 0, 0, 3), Child = rows,
                 Visibility = cfg.AutoAssign ? Visibility.Visible : Visibility.Collapsed,
             };
-            body.Children.Add(SettingCard("\uE8CB", T("Automatisch einsortieren", "Sort automatically"), T("Unbekannte Apps fragt weiter das Popup", "The popup still asks about unknown apps"),
+            body.Children.Add(SettingCard("\uE8CB", T("Automatisch einsortieren", "Sort automatically"), null,
                 Toggle(cfg.AutoAssign, on =>
                 {
                     Update(c => c.AutoAssign = on);
                     rowsCard.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
                     if (on) AutoAssignRequested?.Invoke();
+                    RefreshStage();
                 })));
             body.Children.Add(rowsCard);
         }
@@ -1074,7 +1142,7 @@ namespace KnobFlyout.Settings
             RenderAppsPopup();
         }
 
-        // ── 7 · Media-Flyout ────────────────────────────────────────────────
+        // ── 8 · Media-Flyout ────────────────────────────────────────────────
 
         private FrameworkElement StageMedia() => StageLive(osd: false);
 
@@ -1090,7 +1158,7 @@ namespace KnobFlyout.Settings
                 Toggle(Cfg().MediaEnabled, v => Update(c => c.MediaEnabled = v))));
         }
 
-        // ── 8 · Look ────────────────────────────────────────────────────────
+        // ── 9 · Look ────────────────────────────────────────────────────────
 
         /// <summary>Zusammenpassende Designs für OSD und Flyout; „Eigenes“ öffnet die Unterseite.</summary>
         private static IEnumerable<(string Osd, string Media, string Name)> Looks()
@@ -1357,7 +1425,7 @@ namespace KnobFlyout.Settings
                 Toggle(cfg.MediaArtBackground, v => { cfg.MediaArtBackground = v; changed(); })));
         }
 
-        // ── 9 · Position ────────────────────────────────────────────────────
+        // ── 10 · Position ────────────────────────────────────────────────────
 
         private FrameworkElement StagePosition()
         {
@@ -1460,7 +1528,7 @@ namespace KnobFlyout.Settings
                 "The OSD and flyout always stay on screen, keep clear of the taskbar and don't overlap. For several monitors, use the dropdown on the left.")));
         }
 
-        // ── 10 · Snap-Punkte ────────────────────────────────────────────────
+        // ── 11 · Snap-Punkte ────────────────────────────────────────────────
 
         /// <summary>Alle Bildschirme maßstäblich: wo OSD und Flyout gerade stehen und wo die gespeicherten Plätze liegen.</summary>
         private FrameworkElement StageSnap()
@@ -1652,7 +1720,7 @@ namespace KnobFlyout.Settings
             });
         }
 
-        // ── 11 · Fertig ─────────────────────────────────────────────────────
+        // ── 12 · Fertig ─────────────────────────────────────────────────────
 
         private FrameworkElement StageDone()
         {

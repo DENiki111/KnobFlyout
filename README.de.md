@@ -73,7 +73,7 @@ Hinweise:
 
 Beim ersten Start öffnet sich eine kurze Einführung (das Neue-App-Popup wartet, bis sie zu ist). Sie erklärt Knopf, Profile und Funktionen und richtet sie direkt mit dir ein. Die Vorschauen sind live: Sie reagieren auf deinen Knopf (oder die Knöpfe − und + darunter) und zeigen, was wirklich läuft, und ihre Knöpfe wirken wirklich. Was du dort änderst, gilt sofort.
 
-Die Schritte: Drehen und drücken · Profile · Profil-Taste · eigene Profile (auch die vorgefertigten lassen sich ändern und löschen) · Apps zuweisen (oder automatisch einsortieren) · Media-Flyout · Look (direkt in der Einführung anpassbar: Vorlage, Aufbau, Farben, Deckkraft) · Platz auf dem Bildschirm · Snap-Punkte.
+Die Schritte: Drehen und drücken · Profil-Taste · Profile · eigene Profile (auch die vorgefertigten lassen sich ändern und löschen) · automatisch einsortieren · Apps selbst einsortieren · Media-Flyout · Look (direkt in der Einführung anpassbar: Vorlage, Aufbau, Farben, Deckkraft) · Platz auf dem Bildschirm · Snap-Punkte.
 
 Am Schluss wählst du: **Zum Programm** oder **Alle Funktionen anzeigen**, eine Übersicht über alles, was KnobFlyout kann. Jede Funktion ist dort erklärt und lässt sich gleich ausprobieren und einstellen.
 

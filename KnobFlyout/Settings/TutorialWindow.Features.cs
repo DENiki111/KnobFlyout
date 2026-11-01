@@ -73,7 +73,7 @@ namespace KnobFlyout.Settings
                 var chip = Chip(group, group == _catalogGroup, () =>
                 {
                     _catalogGroup = chosen;
-                    RefreshPage();
+                    RefreshBody();
                 });
                 chip.Margin = new Thickness(0, 0, 6, 6);
                 chips.Children.Add(chip);
@@ -187,19 +187,7 @@ namespace KnobFlyout.Settings
                         "Give each profile a key. When the new-app popup shows up, pressing that key assigns the app without touching the mouse, even in a game. Outside the popup the key stays free."),
                     () => T("Neue Apps zuweisen, ohne die Maus anzufassen", "Assign new apps without touching the mouse"),
                     StageApps, BodyAssignKeys),
-                Item(Profiles, "\uE8CB", "#22c55e", () => T("Apps automatisch einsortieren", "Sort apps automatically"),
-                    () => T("KnobFlyout erkennt Spiele (Steam, Epic, GOG, Xbox, die Spieleliste von Windows), Browser und Video-Player, Musik-Apps und Chat-Apps und legt sie ohne Nachfrage ins passende Profil. Was es nicht kennt, fragt wie gewohnt das Popup.",
-                        "KnobFlyout recognizes games (Steam, Epic, GOG, Xbox, the Windows game list), browsers and video players, music apps and chat apps and puts them in the right profile without asking. Anything it doesn't know is still asked about in the popup."),
-                    () => T("Spiele, Browser, Musik und Chat-Apps ohne Nachfrage", "Games, browsers, music and chat apps without asking"),
-                    StageApps, body =>
-                    {
-                        _appsPill = new StatusPill(T("Schalte es ein und starte eine App …", "Turn it on and start an app …"));
-                        body.Children.Add(_appsPill);
-                        AddAutoAssignCards(body);
-                        body.Children.Add(new Border { Height = 6 });
-                        body.Children.Add(Hint(T("Gilt nur für neue Apps. Bereits zugewiesene bleiben, wo sie sind; ändern kannst du alles unter Einstellungen → Profile & Apps.",
-                            "Only applies to new apps. Assigned ones stay where they are; you can change everything under Settings → Profiles & apps.")));
-                    }),
+                Step(Profiles, "\uE8CB", 5, () => T("Spiele, Browser, Musik und Chat-Apps ohne Nachfrage", "Games, browsers, music and chat apps without asking")),
                 Item(Profiles, "\uE733", "#64748b", () => T("Neue und ignorierte Apps", "New and ignored apps"),
                     () => T("Spielt eine unbekannte App Ton ab, fragt das Popup nach. Ohne Antwort verschwindet es nach 12 Sekunden und fragt später wieder. ⊘ ignoriert eine App dauerhaft.",
                         "When an unknown app plays sound, the popup asks. Without an answer it disappears after 12 seconds and asks again later. ⊘ ignores an app for good."),
@@ -306,12 +294,12 @@ namespace KnobFlyout.Settings
                     }),
 
                 // ── Aussehen ──
-                Step(Looks, "\uE790", 7, () => T("8 Designs für OSD und Flyout, hell oder dunkel", "8 designs for OSD and flyout, light or dark")),
+                Step(Looks, "\uE790", 8, () => T("8 Designs für OSD und Flyout, hell oder dunkel", "8 designs for OSD and flyout, light or dark")),
                 new FeatureItem(Looks, "\uE70F", () => T("Jedes Design anpassen, Vorlagen, eigene Designs speichern", "Customize any design, templates, save your own designs"), DesignPage()),
 
                 // ── Platz ──
-                Step(Place, "\uE8A9", 8, () => T("9 Plätze je Bildschirm, getrennt oder zusammen", "9 places per monitor, separate or together")),
-                Step(Place, "\uE81D", 9, () => T("Gespeicherte Plätze, Einrasten, Wechseln per Taste", "Saved places, snapping, switching by key")),
+                Step(Place, "\uE8A9", 9, () => T("9 Plätze je Bildschirm, getrennt oder zusammen", "9 places per monitor, separate or together")),
+                Step(Place, "\uE81D", 10, () => T("Gespeicherte Plätze, Einrasten, Wechseln per Taste", "Saved places, snapping, switching by key")),
                 Item(Place, "\uE7F4", "#6366f1", () => T("Mehrere Bildschirme", "Several monitors"),
                     () => T("OSD und Flyout können auf verschiedenen Bildschirmen stehen. Ändert sich die Auflösung oder ein Bildschirm kommt dazu, rechnet KnobFlyout eigene Positionen von selbst um.",
                         "The OSD and flyout can be on different monitors. If the resolution changes or a monitor is added, KnobFlyout converts your own positions by itself."),

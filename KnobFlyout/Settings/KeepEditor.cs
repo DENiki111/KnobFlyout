@@ -159,8 +159,7 @@ namespace KnobFlyout.Settings
             var grid = new Grid { Margin = new Thickness(0, 8, 0, 0) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var hint = Hint(T("Kachel wählen oder das stehende Flyout mit der Maus ziehen. Es hängt dann nicht am OSD, das OSD weicht ihm aus.",
-                "Pick a tile or drag the flyout with the mouse. It is then not attached to the OSD, and the OSD moves out of its way."));
+            var hint = Hint(T("Kachel wählen oder das Flyout mit der Maus ziehen.", "Pick a tile or drag the flyout with the mouse."));
             hint.Margin = new Thickness(0, 4, 16, 0);
             grid.Children.Add(hint);
             Grid.SetColumn(picker, 1);

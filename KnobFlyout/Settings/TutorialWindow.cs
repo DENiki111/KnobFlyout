@@ -398,6 +398,9 @@ namespace KnobFlyout.Settings
             _bodyScroll.ScrollToVerticalOffset(offset);
         }
 
+        /// <summary>Nur die rechte Seite neu aufbauen: Die Bühne läuft ungestört weiter.</summary>
+        private void RefreshBody() => _bodyHost.Content = BuildBody(Current);
+
         /// <summary>Nur die Bühne neu aufbauen: Bedienelemente rechts behalten Fokus und Popups.</summary>
         private void RefreshStage()
         {

@@ -112,16 +112,14 @@ namespace KnobFlyout.Settings
                 head.Children.Add(toggle);
             }
 
-            string glyph, title, desc;
+            string glyph, title;
+            string? desc = null;
             StackPanel? body = new StackPanel();
             switch (key)
             {
                 case "app":
                     glyph = "\uE71D"; // AllApps
                     title = T("App-Zeile", "App row");
-                    desc = Design == "island" ? T("Logo am Cover und Name hinter dem Interpreten", "Logo on the album art and name after the artist")
-                        : Design == "hardware" ? T("Name der App im Display", "Name of the app on the display")
-                        : T("Name und Symbol der App, die gerade spielt", "Name and icon of the app that is playing");
                     Switch(MediaLayout.App);
                     if (Design == "custom")
                         body.Children.Add(OptionRow(T("„…“-Knopf rechts in dieser Zeile (statt bei den Knöpfen)", "“…” button on the right of this row (instead of with the buttons)"),
@@ -131,13 +129,11 @@ namespace KnobFlyout.Settings
                 case "info":
                     glyph = "\uE8D6"; // Audio
                     title = T("Titel und Cover", "Title and album art");
-                    desc = T("Titel, Interpret und Cover", "Title, artist and album art");
                     AddInfoOptions(body);
                     break;
                 case "progress":
                     glyph = "\uE823"; // Recent
                     title = T("Zeitleiste", "Timeline");
-                    desc = T("Zeigt, wie weit der Titel ist · zum Springen anklicken oder ziehen", "Shows how far the track is · click or drag to jump");
                     Switch(MediaLayout.Progress);
                     body.Children.Add(OptionRow(T("Zeiten", "Times"),
                         Toggle(layout.Shows(MediaLayout.Times), Set<bool>(v => layout.Set(MediaLayout.Times, v)))));
@@ -145,7 +141,7 @@ namespace KnobFlyout.Settings
                 case "sources":
                     glyph = "\uE8AB"; // Switch
                     title = T("Quellen-Leiste", "Sources bar");
-                    desc = T("Im Betrieb nur sichtbar, wenn mehrere Apps gleichzeitig Medien melden", "In use only visible when several apps report media at once");
+                    desc = T("Nur sichtbar, wenn mehrere Apps Medien melden", "Only visible when several apps report media");
                     Switch(MediaLayout.Sources);
                     body.Children.Add(OptionRow(T("Pause-Zeichen neben spielenden Quellen", "Pause symbol next to playing sources"),
                         Toggle(layout.Shows(MediaLayout.SourcePause), Set<bool>(v => layout.Set(MediaLayout.SourcePause, v)))));
@@ -153,7 +149,6 @@ namespace KnobFlyout.Settings
                 default: // "controls"
                     glyph = "\uE768"; // Play
                     title = T("Knöpfe", "Buttons");
-                    desc = T("Zurück, ±10 s, Play/Pause, Weiter und „…“", "Previous, ±10 s, play/pause, next and “…”");
                     AddButtonOptions(body);
                     break;
             }
@@ -238,8 +233,6 @@ namespace KnobFlyout.Settings
             if (Design != "custom") // beim eigenen Design steht das bei der App-Zeile
                 body.Children.Add(OptionRow(T("„…“-Knopf oben rechts (statt bei den Knöpfen)", "“…” button at the top right (instead of with the buttons)"),
                     Toggle((layout.MorePos ?? info.MorePos) == "top", Set<bool>(v => layout.MorePos = v ? "top" : "controls"))));
-            if (!_compact)
-                body.Children.Add(Hint(T("Einträge im „…“-Menü: Seite „Media-Flyout“ → Inhalt.", "Items in the “…” menu: “Media flyout” page → Content.")));
         }
 
         /// <summary>Kachel für ein einzelnes Element (Symbol + Name): an = Akzentfarbe mit Häkchen, aus = grau; Klick schaltet um.</summary>
@@ -394,8 +387,7 @@ namespace KnobFlyout.Settings
 
             var panel = new StackPanel();
             panel.Children.Add(fields);
-            panel.Children.Add(Hint(T("Klick auf eine Farbe öffnet den Farbkreis · Bild-Knopf: Farbe kommt aus dem Titelbild, ohne Titelbild wie im Design · ↺ setzt zurück.",
-                "Click a color to open the color wheel · Picture button: the color comes from the album art, without album art as in the design · ↺ resets it.")));
+            panel.Children.Add(Hint(T("Bild-Knopf: Farbe aus dem Titelbild", "Picture button: color from the album art")));
             return panel;
         }
 
@@ -552,8 +544,7 @@ namespace KnobFlyout.Settings
                     Done();
                 },
                 _compact, T("Name, z. B. Mein Island", "Name, e.g. My Island"),
-                T("Speichert Aufbau, Deckkraft, Ecken und Farben. Das Design steht danach auch unter „Eigene Designs“ auf der Seite „Media-Flyout“. Gleicher Name überschreibt.",
-                    "Saves the layout, opacity, corners and colors. The design then also appears under “Your own designs” on the “Media flyout” page. The same name overwrites."));
+                T("Gleicher Name überschreibt.", "The same name overwrites."));
         }
 
         /// <summary>Eigene Designs als Pillen (Klick wendet an, ✕ löscht) und das Speichern des aktuellen Stands unter einem Namen; für Flyout und OSD.</summary>

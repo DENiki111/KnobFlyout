@@ -1062,6 +1062,8 @@ namespace KnobFlyout.Osd
             return content;
         }
 
+        private static MediaInfo? _lastLive; // zuletzt gezeigte echte Wiedergabe: Beim Neuaufbau der Vorschau blitzt nicht das Beispiel auf
+
         /// <summary>
         /// Echtes Flyout für die Bühne der Einführung und „Design anpassen“: zeigt, was gerade läuft, und seine Knöpfe, Leiste und Quellen
         /// wirken wirklich (ohne Wiedergabe das Beispiel). Das Fenster bleibt unsichtbar; dispose beendet alles.
@@ -1069,9 +1071,12 @@ namespace KnobFlyout.Osd
         /// </summary>
         public static FrameworkElement CreateLive(AppConfig cfg, MediaController media, Action<bool>? hasMedia, out Action dispose)
         {
-            var w = new MediaOsd(media, cfg) { _live = true, _alwaysSources = true, _sampleCover = true };
-            w.UpdateFrom(SampleInfo());
+            var last = media.HasSession ? _lastLive : null;
+            var w = new MediaOsd(media, cfg) { _live = true, _alwaysSources = true, _sampleCover = last == null };
+            w.UpdateFrom(last ?? SampleInfo());
             bool closed = false;
+            var content = (FrameworkElement)w.Content;
+            if (media.HasSession && last == null) content.Opacity = 0; // gleich kommt die echte Wiedergabe: das Beispiel gar nicht erst zeigen
 
             async void Refresh()
             {
@@ -1079,6 +1084,7 @@ namespace KnobFlyout.Osd
                 {
                     var info = media.HasSession ? await media.GetInfoAsync() : null;
                     if (closed) return;
+                    _lastLive = info;
                     if (info != null)
                     {
                         w._sampleCover = false;
@@ -1089,6 +1095,10 @@ namespace KnobFlyout.Osd
                 catch (Exception ex)
                 {
                     Logger.Error($"Flyout-Vorschau: {ex.Message}");
+                }
+                finally
+                {
+                    content.Opacity = 1;
                 }
             }
             Action changed = () => w.Dispatcher.BeginInvoke(new Action(Refresh));
@@ -1107,7 +1117,6 @@ namespace KnobFlyout.Osd
                 w._tickTimer.Stop();
                 try { w.Close(); } catch { }
             };
-            var content = (FrameworkElement)w.Content;
             w.Content = null;
             content.Width = W;
             return content;

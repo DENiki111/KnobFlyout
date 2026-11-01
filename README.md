@@ -73,7 +73,7 @@ Notes:
 
 On the first start, a short introduction opens (the new-app popup waits until it is closed). It explains the knob, profiles and features and sets them up with you right away. The previews are live: they react to your knob (or the − / + buttons below them) and show what's really playing, and their buttons really work. Everything you change there applies immediately.
 
-The steps: turn and press · profiles · the profile key · your own profiles (the ready-made ones can be changed and deleted too) · assign apps (or sort them automatically) · media flyout · pick a look (customize it right in the introduction: template, layout, colors, opacity) · place on screen · snap points.
+The steps: turn and press · the profile key · profiles · your own profiles (the ready-made ones can be changed and deleted too) · sort automatically · sort apps yourself · media flyout · pick a look (customize it right in the introduction: template, layout, colors, opacity) · place on screen · snap points.
 
 At the end you choose: **Go to the program** or **Show all features**, an overview of everything KnobFlyout can do, where each feature is explained and can be tried and set up right away.
 
