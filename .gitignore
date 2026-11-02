@@ -12,5 +12,8 @@ dist/
 config.json
 *.log
 
+# Interne Projektnotizen
+CLAUDE.md
+
 # Pakete
 *.zip

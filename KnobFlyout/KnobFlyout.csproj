@@ -18,6 +18,8 @@
     <ApplicationIcon>app.ico</ApplicationIcon>
     <Platforms>AnyCPU;x64</Platforms>
     <LangVersion>latest</LangVersion>
+    <!-- Release-Builds enthalten keinen lokalen Pfad des Build-Rechners -->
+    <PathMap Condition="'$(Configuration)'=='Release'">$(MSBuildProjectDirectory)=KnobFlyout</PathMap>
   </PropertyGroup>
 
   <ItemGroup>
