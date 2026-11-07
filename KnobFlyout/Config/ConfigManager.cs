@@ -28,6 +28,24 @@ namespace KnobFlyout.Config
         private static bool _diskUnreadable;
         private static string? _lastError;
 
+        /// <summary>
+        /// Hat sich config.json seit dem gemerkten Stand geändert (Zeitstempel + Größe)? Merkt sich den neuen Stand.
+        /// Für regelmäßige Abfragen: Lesen und Parsen nur, wenn wirklich etwas gespeichert wurde.
+        /// </summary>
+        public static bool ChangedSince(ref long stamp)
+        {
+            long now;
+            try
+            {
+                var fi = new FileInfo(ConfigFile);
+                now = fi.Exists ? fi.LastWriteTimeUtc.Ticks ^ (fi.Length << 40) : 0;
+            }
+            catch { return true; } // im Zweifel neu lesen
+            if (now == stamp && now != 0) return false;
+            stamp = now;
+            return true;
+        }
+
         public static AppConfig Load()
         {
             lock (Lock)

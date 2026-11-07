@@ -135,6 +135,7 @@ namespace KnobFlyout.Osd
         private readonly Border _moreBtn;
         private readonly Border _skipBackBtn;
         private readonly Border _skipFwdBtn;
+        private readonly int _skipSec; // Skip-Weite (media_skip_seconds), steht auf den ±-Knöpfen
         private readonly Border _prevBtn;
         private readonly Border _playBtn;
         private readonly Border _nextBtn;
@@ -170,6 +171,7 @@ namespace KnobFlyout.Osd
             _custom = cfg.MediaDesign == "custom";
             _spec = Designs.Get(cfg.MediaDesign); // Design-System (z. B. Dynamic Island)
             _styleKey = StyleKey(cfg);
+            _skipSec = cfg.SkipSeconds();
             var layout = _layout = cfg.Layout();
             // Eigenes Design: Farben aus der Config; hell/dunkel (Hover, Quellen-Pills, Menü) nach dem Hintergrund.
             string customBg = NormHex(cfg.MediaCustomBg, "#222222");
@@ -410,10 +412,12 @@ namespace KnobFlyout.Osd
             _prevBtn = MakeButton(_spec != null ? "\uF8AC" : "\uE892", 38, false, () => { _media.Previous(); ResetHideTimer(); }, out _);
             center.Children.Add(_prevBtn);
             _skipBackBtn = MakeButton("\uED3C", 34, false, () => SkipLocal(-1), out _);
+            if (_spec == null) ClassicSkipIcon(_skipBackBtn, "\uE777"); // Design-System: eigene Beschriftung beim Anordnen
             center.Children.Add(_skipBackBtn);
             _playBtn = MakeButton("\uE768", 46, true, () => { _media.TogglePlayPause(); ResetHideTimer(); }, out _playPauseGlyph);
             center.Children.Add(_playBtn);
             _skipFwdBtn = MakeButton("\uED3D", 34, false, () => SkipLocal(+1), out _);
+            if (_spec == null) ClassicSkipIcon(_skipFwdBtn, "\uE72C");
             center.Children.Add(_skipFwdBtn);
             _nextBtn = MakeButton(_spec != null ? "\uF8AD" : "\uE893", 38, false, () => { _media.Next(); ResetHideTimer(); }, out _);
             center.Children.Add(_nextBtn);
@@ -424,6 +428,7 @@ namespace KnobFlyout.Osd
             else if (IsMaterial) ArrangeMaterial(root, header, left, appRow, controls, center);
             else if (IsHud) ArrangeHud(root, header, left, appRow, controls, center);
             else if (IsHardware) ArrangeHardware(root, header, left, appRow, controls, center);
+            else if (IsKnob) ArrangeKnob(root, header, left, appRow, controls, center);
             else if (_spec != null) ArrangeSpec(root, header, left, appRow, controls, center);
             if (!_custom) ApplyLayout(layout, cfg.MediaDesign, root, header, left, appRow, controls, center);
 
@@ -449,6 +454,12 @@ namespace KnobFlyout.Osd
             // Ziehen nur im "separate"-Modus; Buttons verarbeiten ihr MouseDown selbst
             // (e.Handled), lösen dadurch dieses Drag nicht aus.
             MouseLeftButtonDown += OnMouseDown;
+            MouseRightButtonUp += (_, e) =>
+            {
+                if (_previewCfg != null || !ConfigManager.Load().MediaRightClickMenu) return; // nur das echte Flyout
+                e.Handled = true;
+                ShowMoreMenu(atMouse: true);
+            };
             MouseLeftButtonUp += OnMouseUp;
             MouseMove += OnMouseMove;
 
@@ -513,7 +524,7 @@ namespace KnobFlyout.Osd
         /// <summary>True, wenn sich Farbschema, Media-Design oder eine Einstellung des eigenen Designs seit dem Aufbau dieses Fensters geändert hat (dann neu aufbauen).</summary>
         public bool StyleChanged => StyleKey(ConfigManager.Load()) != _styleKey;
 
-        private static string StyleKey(AppConfig c) => string.Join("|", c.MediaDesign, ThemeHelper.IsLight(c),
+        private static string StyleKey(AppConfig c) => string.Join("|", c.MediaDesign, ThemeHelper.IsLight(c), c.SkipSeconds(),
             System.Text.Json.JsonSerializer.Serialize(c.Layout()),
             c.MediaDesign == "custom" ? string.Join(",", c.MediaCustomBg, c.MediaCustomFg, c.MediaCustomSub, c.MediaCustomAccent, c.MediaCustomButtonBg, c.MediaCustomTrack) : "");
 
@@ -775,8 +786,8 @@ namespace KnobFlyout.Osd
             var buttons = center.Children.Cast<UIElement>().ToArray(); // Standard: Zurück, −10, Play, +10, Weiter
             center.Children.Clear();
             foreach (int i in new[] { 1, 0, 2, 4, 3 }) center.Children.Add(buttons[i]);
-            SpecSkipLabel(_skipBackBtn, "−10");
-            SpecSkipLabel(_skipFwdBtn, "+10");
+            SpecSkipLabel(_skipBackBtn, SkipText(-1));
+            SpecSkipLabel(_skipFwdBtn, SkipText(+1));
             controls.Margin = new Thickness(0, 6, 0, 0);
             Grid.SetRow(controls, 0);
             controls.Children.Add(center);
@@ -797,7 +808,32 @@ namespace KnobFlyout.Osd
             stack.Children.Add(_sourcesRow);
         }
 
-        /// <summary>±10-s-Knopf als Text „−10“/„+10“ (es gibt kein Fluent-Symbol für +10; ED3D zeigt „30“).</summary>
+        /// <summary>Beschriftung der ±-Knöpfe mit der Skip-Weite: „−10“ bzw. „+10“.</summary>
+        private string SkipText(int direction) => (direction < 0 ? "−" : "+") + _skipSec;
+
+        /// <summary>
+        /// Ältere Designs: Kreispfeil mit der Skip-Weite in der Mitte (Fluent hat nur „10 zurück“ ED3C und „30 vor“ ED3D,
+        /// beide fest). Farbe wie die übrigen Knöpfe.
+        /// </summary>
+        private void ClassicSkipIcon(Border button, string arrow)
+        {
+            double size = button.Width;
+            var g = new Grid();
+            g.Children.Add(new TextBlock
+            {
+                Text = arrow, FontFamily = IconFont, FontSize = size * 0.6, Foreground = _fgBrush,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            });
+            g.Children.Add(new TextBlock
+            {
+                Text = _skipSec.ToString(), FontFamily = new FontFamily("Segoe UI"), FontSize = Math.Max(7, size * 0.24), FontWeight = FontWeights.Bold,
+                Foreground = _fgBrush, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 1, 0, 0),
+            });
+            button.Child = g;
+        }
+
+        /// <summary>±-Knopf als Text „−10“/„+10“ (es gibt kein Fluent-Symbol für +10; ED3D zeigt „30“).</summary>
         private void SpecSkipLabel(Border button, string text)
         {
             if (button.Child is not TextBlock t) return;
@@ -1031,6 +1067,7 @@ namespace KnobFlyout.Osd
             CancelFadeOut(); // neue Meldung während des Verblassens: wieder voll sichtbar
             bool appearing = !IsVisible;
             if (appearing) Show();
+            BringToTop();
             if (appearing && _spec != null) AppearSpec();
             UpdateWave(_playing);
             ResetHideTimer();
@@ -1071,8 +1108,30 @@ namespace KnobFlyout.Osd
         /// </summary>
         public static FrameworkElement CreateLive(AppConfig cfg, MediaController media, Action<bool>? hasMedia, out Action dispose)
         {
+            var w = StartLive(cfg, media, true, hasMedia, out dispose);
+            var content = (FrameworkElement)w.Content;
+            w.Content = null;
+            content.Width = W;
+            return content;
+        }
+
+        /// <summary>
+        /// Flyout für „Auf dem Bildschirm“ in „Design anpassen“: Fenster mit dem Entwurf, das sich nie ausblendet und sich nicht verschieben lässt.
+        /// Mit media zeigt es die echte Wiedergabe (Knöpfe wirken), sonst das Beispiel. Anzeigen und Platzieren macht der Aufrufer; dispose schließt.
+        /// </summary>
+        public static MediaOsd CreateScreen(AppConfig cfg, MediaController? media, out Action dispose)
+        {
+            if (media != null) return StartLive(cfg, media, false, null, out dispose);
+            var test = CreateTest(cfg);
+            dispose = () => { try { test.Close(); } catch { } };
+            return test;
+        }
+
+        /// <summary>Flyout-Fenster, das der echten Wiedergabe folgt (Inhalt hängt noch im Fenster).</summary>
+        private static MediaOsd StartLive(AppConfig cfg, MediaController media, bool alwaysSources, Action<bool>? hasMedia, out Action dispose)
+        {
             var last = media.HasSession ? _lastLive : null;
-            var w = new MediaOsd(media, cfg) { _live = true, _alwaysSources = true, _sampleCover = last == null };
+            var w = new MediaOsd(media, cfg) { _live = true, _alwaysSources = alwaysSources, _sampleCover = last == null };
             w.UpdateFrom(last ?? SampleInfo());
             bool closed = false;
             var content = (FrameworkElement)w.Content;
@@ -1117,9 +1176,7 @@ namespace KnobFlyout.Osd
                 w._tickTimer.Stop();
                 try { w.Close(); } catch { }
             };
-            w.Content = null;
-            content.Width = W;
-            return content;
+            return w;
         }
 
         /// <summary>"Testen" in den Einstellungen: Flyout mit Beispieldaten (noch nicht angezeigt, siehe ShowTestAt).</summary>
@@ -1228,6 +1285,7 @@ namespace KnobFlyout.Osd
 
         private void OnTick(object? sender, EventArgs e)
         {
+            if (_previewCfg == null && ++_topTicks % 4 == 0) BringToTop(); // stehendes Flyout: Ein Spiel kann sich inzwischen davorgesetzt haben
             if (!_hasTimeline || !_showProgress || _seeking) return;
 
             // Alle 2 Sekunden die echte Position nachlesen (falls in der App selbst gesprungen wurde).
@@ -1293,7 +1351,7 @@ namespace KnobFlyout.Osd
         /// <summary>±10 s: Anzeige sofort mitziehen (ohne auf die Quelle zu warten) und den Sprung auslösen.</summary>
         private void SkipLocal(int direction)
         {
-            var delta = TimeSpan.FromSeconds(MediaController.SkipSeconds * direction);
+            var delta = TimeSpan.FromSeconds(_skipSec * direction);
             if (_hasTimeline)
             {
                 var target = Estimate() + delta;
@@ -1336,7 +1394,8 @@ namespace KnobFlyout.Osd
         }
 
         // ── "…"-Menü: Inhalt laut cfg.media_more_items (Zufall, Wiederholen, ±10-s-Hotkeys, Einstellungen) ──
-        private void ShowMoreMenu()
+        /// <param name="atMouse">An der Maus statt am „…“-Knopf (Rechtsklick aufs Flyout).</param>
+        private void ShowMoreMenu(bool atMouse = false)
         {
             if (_menuPopup != null) _menuPopup.IsOpen = false;
 
@@ -1389,15 +1448,39 @@ namespace KnobFlyout.Osd
                 });
             }
 
-            if (items.Contains("skip_hotkeys") || items.Contains("pin"))
+            if (items.Contains("bridge"))
+            {
+                // Browser-Erweiterung (YouTube-Player usw.) an oder aus
+                Group();
+                Row(Loc.T("Browser-Erweiterung", "Browser extension"), "\uE774", cfg.YoutubeBridge, true, () => // Globe
+                {
+                    var c = ConfigManager.Load();
+                    c.YoutubeBridge = !c.YoutubeBridge;
+                    ConfigManager.Save(c);
+                    ConfigChanged?.Invoke();
+                });
+            }
+
+            if (items.Contains("skip_hotkeys") || items.Contains("skip_playing") || items.Contains("pin"))
             {
                 Group();
                 if (items.Contains("skip_hotkeys"))
                 {
-                    Row(Loc.T("Hotkeys ±10 s", "±10 s hotkeys"), null, cfg.MediaSkipHotkeysEnabled, true, () =>
+                    Row(Loc.T($"Hotkeys ±{cfg.SkipSeconds()} s", $"±{cfg.SkipSeconds()} s hotkeys"), null, cfg.MediaSkipHotkeysEnabled, true, () =>
                     {
                         var c = ConfigManager.Load();
                         c.MediaSkipHotkeysEnabled = !c.MediaSkipHotkeysEnabled;
+                        ConfigManager.Save(c);
+                        ConfigChanged?.Invoke();
+                    });
+                }
+                if (items.Contains("skip_playing"))
+                {
+                    // Aus: Skip-Hotkeys wirken immer, auch wenn gerade nichts spielt
+                    Row(Loc.T("Skip nur bei Wiedergabe", "Skip only while playing"), null, cfg.MediaSkipOnlyPlaying, true, () =>
+                    {
+                        var c = ConfigManager.Load();
+                        c.MediaSkipOnlyPlaying = !c.MediaSkipOnlyPlaying;
                         ConfigManager.Save(c);
                         ConfigChanged?.Invoke();
                     });
@@ -1439,7 +1522,7 @@ namespace KnobFlyout.Osd
             // Eigenes Popup statt ContextMenu: gleiche Farben, Rundung und Rand wie das Flyout.
             _menuPopup = new Popup
             {
-                PlacementTarget = _moreBtn, Placement = PlacementMode.Top,
+                PlacementTarget = atMouse ? this : _moreBtn, Placement = atMouse ? PlacementMode.MousePoint : PlacementMode.Top,
                 AllowsTransparency = true, StaysOpen = false, PopupAnimation = PopupAnimation.Fade,
                 Child = menu.Build(),
             };
@@ -1623,6 +1706,7 @@ namespace KnobFlyout.Osd
 
         private void OnMouseDown(object sender, MouseButtonEventArgs e)
         {
+            if (_previewCfg != null) return; // Vorschau/Test: nicht verschieben, nicht wegklicken, nichts speichern
             var cfg = ConfigManager.Load();
             _clickDismiss = cfg.ClickToDismiss;
             _pressed = true;
@@ -1728,6 +1812,26 @@ namespace KnobFlyout.Osd
             _hideTimer.Stop();
             _hideTimer.Start();
         }
+
+        /// <summary>
+        /// Topmost allein reicht nicht: Ein Spiel, das sich selbst auf „immer oben“ setzt, liegt danach vor einem schon
+        /// sichtbaren Flyout. Das offene „…“-Menü bleibt über dem Flyout.
+        /// </summary>
+        private void BringToTop()
+        {
+            if (_menuPopup?.IsOpen == true) return;
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero) SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+        }
+
+        private int _topTicks;
+        private static readonly IntPtr HWND_TOPMOST = new(-1);
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOACTIVATE = 0x0010;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
 
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TOOLWINDOW = 0x80;

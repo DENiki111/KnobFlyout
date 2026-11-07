@@ -41,7 +41,8 @@ namespace KnobFlyout.Settings
         };
 
         public void OnSkipKey(int dir) =>
-            _skipPill?.Done(dir > 0 ? T("Klappt: 10 Sekunden vor", "Works: 10 seconds forward") : T("Klappt: 10 Sekunden zurück", "Works: 10 seconds back"));
+            _skipPill?.Done(dir > 0 ? T($"Klappt: {Cfg().SkipSeconds()} Sekunden vor", $"Works: {Cfg().SkipSeconds()} seconds forward")
+                : T($"Klappt: {Cfg().SkipSeconds()} Sekunden zurück", $"Works: {Cfg().SkipSeconds()} seconds back"));
 
         public void OnMediaGesture(string what) =>
             _gesturePill?.Done(what == "next" ? T("Klappt: nächster Titel", "Works: next track") : T("Klappt: Quelle gewechselt", "Works: source switched"));
@@ -49,8 +50,8 @@ namespace KnobFlyout.Settings
         // ── Übersicht ───────────────────────────────────────────────────────
 
         private Page CatalogPage() => new("#3b82f6", () => T("Alle Funktionen", "All features"),
-            () => T("Alles, was KnobFlyout kann. Klick auf eine Funktion erklärt sie, und du kannst sie gleich ausprobieren und einstellen.",
-                "Everything KnobFlyout can do. Click a feature to see it explained and to try and set it up right away."),
+            () => T("Alles, was KnobFlyout kann. Klick auf eine Funktion zum Ausprobieren und Einstellen.",
+                "Everything KnobFlyout can do. Click a feature to try and set it up."),
             () => StageLive(), BodyCatalog)
         {
             Crumb = () => T("Alle Funktionen", "All features"),
@@ -83,8 +84,8 @@ namespace KnobFlyout.Settings
             var rows = new StackPanel();
             if (_catalogGroup == settings)
             {
-                rows.Children.Add(LinkRow("\uE765", T("Alle Tastenkürzel", "All shortcuts"), T("Alle Tasten und Zeiten an einem Ort", "All keys and times in one place"), "hotkeys"));
-                rows.Children.Add(LinkRow("\uE713", T("Alle Einstellungen", "All settings"), T("Einführung schließen und dort weitermachen", "Close the introduction and continue there"), "general"));
+                rows.Children.Add(LinkRow("\uE765", T("Alle Hotkeys", "All shortcuts"), T("Alle Hotkeys und Zeiten an einem Ort", "All keys and times in one place"), "hotkeys"));
+                rows.Children.Add(LinkRow("\uE713", T("Alle Einstellungen", "All settings"), T("Tutorial schließen und dort weitermachen", "Close the introduction and continue there"), "general"));
             }
             else
             {
@@ -137,19 +138,19 @@ namespace KnobFlyout.Settings
                 new(group, glyph, brief, new Page(hue, title, lead, stage, body));
 
             // Schritt der Einführung noch einmal als Funktion
-            FeatureItem Step(Func<string> group, string glyph, int page, Func<string> brief) => new(group, glyph, brief, _pages[page]);
+            FeatureItem Step(Func<string> group, string glyph, int page, Func<string> brief) => new(group, glyph, brief, _allPages[page]);
 
             return new List<FeatureItem>
             {
                 // ── Lautstärke ──
                 Item(Volume, "\uE767", "#0ea5e9", () => T("Drehen, drücken, Schrittweite", "Turn, press, step size"),
-                    () => T("Eine Raste am Knopf ändert die Lautstärke um die Schrittweite, Drücken schaltet stumm. Spotify über die API hat eine eigene Schrittweite.",
-                        "One notch changes the volume by the step size, pressing mutes. Spotify via the API has its own step size."),
+                    () => T("Ein Klick ändert die Lautstärke um die Schrittweite. Spotify über die API hat eine eigene.",
+                        "One notch changes the volume by the step size. Spotify via the API has its own."),
                     () => T("Wie fein der Knopf regelt", "How finely the knob controls"),
                     () => StageLive(media: false), BodyKnobSteps),
                 Item(Volume, "\uE8AB", "#a855f7", () => T("Welche Apps der Knopf regelt", "Which apps the knob controls"),
-                    () => T("Nur die Apps des aktiven Profils, die gerade Ton abspielen, oder alle Apps des Profils, auch wenn sie still sind.",
-                        "Only the apps in the active profile that are playing sound, or all apps in the profile, even when they're silent."),
+                    () => T("Nur Apps des aktiven Profils, die gerade spielen, oder alle Apps des Profils.",
+                        "Only apps in the active profile that are playing, or all apps in the profile."),
                     () => T("Nur Apps mit Ton oder alle, leere Profile überspringen", "Only apps playing sound or all, skip empty profiles"),
                     StageProfiles, body =>
                     {
@@ -158,46 +159,46 @@ namespace KnobFlyout.Settings
                         AddProfileModeCards(body);
                     }),
                 Item(Volume, "\uE8D6", "#22c55e", () => T("Spotify direkt regeln", "Control Spotify directly"),
-                    () => T("Ohne API regelt KnobFlyout Spotify wie jede App im Windows-Mixer. Mit der Spotify-API bewegt sich stattdessen Spotifys eigener Regler, auch in der App.",
-                        "Without the API, KnobFlyout controls Spotify like any app in the Windows mixer. With the Spotify API, Spotify's own slider moves instead, in the app too."),
+                    () => T("Mit der Spotify-API bewegt der Knopf Spotifys eigenen Regler statt des Windows-Mixers.",
+                        "With the Spotify API the knob moves Spotify's own slider instead of the Windows mixer."),
                     () => T("Spotifys eigener Regler über die Web-API", "Spotify's own slider via the Web API"),
                     () => StageLive(media: false), body =>
                     {
-                        body.Children.Add(Feature("\uE8D6", T("Was du brauchst", "What you need"), T("Spotify Premium und eine kostenlose App im Spotify-Developer-Dashboard. Die Einstellungen führen dich Schritt für Schritt durch.", "Spotify Premium and a free app in the Spotify Developer Dashboard. The settings walk you through it step by step.")));
+                        body.Children.Add(Feature("\uE8D6", T("Was du brauchst", "What you need"), T("Braucht Spotify Premium und eine kostenlose App im Developer-Dashboard. Die Einstellungen führen dich durch.", "Needs Spotify Premium and a free app in the developer dashboard. The settings guide you.")));
                         AddLink(body, "\uE8D6", T("Spotify einrichten", "Set up Spotify"), T("Öffnet die Einstellungen auf der Seite „Spotify“", "Opens the settings on the “Spotify” page"), "spotify");
                     }),
-                Item(Volume, "\uE714", "#ef4444", () => T("YouTube im Browser regeln", "Control YouTube in the browser"),
-                    () => T("Mit der Browser-Erweiterung regelt der Knopf den Player von YouTube statt des ganzen Browsers. Andere Tabs bleiben gleich laut.",
-                        "With the browser extension, the knob controls the YouTube player instead of the whole browser. Other tabs stay as loud as they are."),
+                Item(Volume, "\uE714", "#ef4444", () => T("Videos im Browser regeln", "Control videos in the browser"),
+                    () => T("Mit dem Browser-Addon regelt der Knopf nur den Video-Player (YouTube, Twitch, TikTok, Instagram, Netflix, Prime Video, Disney+, Crunchyroll, Joyn, VOE, Jellyfin), andere Tabs bleiben gleich.",
+                        "With the browser add-on the knob controls only the video player (YouTube, Twitch, TikTok, Instagram, Netflix, Prime Video, Disney+, Crunchyroll, Joyn, VOE, Jellyfin), other tabs stay the same."),
                     () => T("Nur das Video statt den ganzen Browser", "Just the video instead of the whole browser"),
                     () => StageLive(media: false), body =>
                     {
-                        body.Children.Add(SettingCard("\uE714", T("Lautstärke im YouTube-Player regeln", "Control volume in the YouTube player"), T("Firefox, Chrome und Opera", "Firefox, Chrome and Opera"),
+                        body.Children.Add(SettingCard("\uE714", T("Lautstärke im Video-Player regeln", "Control volume in the video player"), T("Firefox, Chrome und Opera", "Firefox, Chrome and Opera"),
                             Toggle(Cfg().YoutubeBridge, v => Update(c => c.YoutubeBridge = v))));
                         body.Children.Add(new Border { Height = 6 });
-                        body.Children.Add(Note(T("Spielt kein YouTube-Video, regelt der Knopf wie gewohnt den Browser. Die Erweiterung installierst du einmalig.",
-                            "If no YouTube video is playing, the knob controls the browser as usual. You install the extension once.")));
-                        AddLink(body, "\uE714", T("Erweiterung einrichten", "Set up the extension"), T("Öffnet die Einstellungen auf der Seite „YouTube“", "Opens the settings on the “YouTube” page"), "youtube");
+                        body.Children.Add(Note(T("Ohne laufendes Video regelt der Knopf wie gewohnt den Browser.",
+                            "Without a playing video the knob controls the browser as usual.")));
+                        AddLink(body, "\uE714", T("Erweiterung einrichten", "Set up the extension"), T("Öffnet die Einstellungen auf der Seite „Browser-Addon“", "Opens the settings on the “Browser add-on” page"), "youtube");
                     }),
 
                 // ── Profile und Apps ──
                 Step(Profiles, "\uE716", 4, () => T("Name, Logo, Farbe, anlegen und löschen", "Name, logo, color, create and delete")),
-                Item(Profiles, "\uE765", "#22c55e", () => T("Zuweisen per Taste", "Assign by key"),
-                    () => T("Gib jedem Profil eine Taste. Erscheint das Neue-App-Popup, weist ein Druck auf diese Taste die App zu, ohne die Maus anzufassen, auch im Spiel. Außerhalb des Popups bleibt die Taste frei.",
-                        "Give each profile a key. When the new-app popup shows up, pressing that key assigns the app without touching the mouse, even in a game. Outside the popup the key stays free."),
+                Item(Profiles, "\uE765", "#22c55e", () => T("Zuweisen per Hotkey", "Assign by key"),
+                    () => T("Jedes Profil bekommt einen Hotkey. Im Popup für neue Apps weist er die App zu, auch im Spiel ohne Maus. Sonst bleibt die Taste frei.",
+                        "Each profile gets a key. In the new-app popup it assigns the app, even in a game without the mouse. Otherwise the key stays free."),
                     () => T("Neue Apps zuweisen, ohne die Maus anzufassen", "Assign new apps without touching the mouse"),
                     StageApps, BodyAssignKeys),
                 Step(Profiles, "\uE8CB", 5, () => T("Spiele, Browser, Musik und Chat-Apps ohne Nachfrage", "Games, browsers, music and chat apps without asking")),
                 Item(Profiles, "\uE733", "#64748b", () => T("Neue und ignorierte Apps", "New and ignored apps"),
-                    () => T("Spielt eine unbekannte App Ton ab, fragt das Popup nach. Ohne Antwort verschwindet es nach 12 Sekunden und fragt später wieder. ⊘ ignoriert eine App dauerhaft.",
-                        "When an unknown app plays sound, the popup asks. Without an answer it disappears after 12 seconds and asks again later. ⊘ ignores an app for good."),
+                    () => T("Bei unbekannten Apps fragt ein Popup. Ohne Antwort fragt es später wieder, ⊘ ignoriert die App für immer.",
+                        "A popup asks about unknown apps. Without an answer it asks again later, ⊘ ignores the app for good."),
                     () => T("Popup bei neuen Apps, Apps dauerhaft ignorieren", "Popup for new apps, ignore apps for good"),
                     StageApps, BodyExcluded),
 
                 // ── Tasten ──
                 Item(Keys, "\uE72E", "#eab308", () => T("Feststelltasten", "Lock keys"),
-                    () => T("Feststelltaste, Num Lock und Rollen zeigen im OSD, ob sie gerade an oder aus sind.",
-                        "Caps Lock, Num Lock and Scroll Lock show in the OSD whether they are on or off."),
+                    () => T("Das OSD zeigt, ob Feststell-, Num- und Rollen-Taste an oder aus sind.",
+                        "The OSD shows whether Caps, Num and Scroll Lock are on or off."),
                     () => T("Caps, Num und Scroll Lock im OSD", "Caps, Num and Scroll Lock in the OSD"),
                     StageLock, body =>
                     {
@@ -205,21 +206,21 @@ namespace KnobFlyout.Settings
                         body.Children.Add(_lockPill);
                         body.Children.Add(SwitchCard("\uE72E", T("Feststelltasten anzeigen", "Show lock keys"), T("Auch unter Einstellungen → Allgemein", "Also under Settings → General"), Cfg().LockKeysOsd, (c, v) => c.LockKeysOsd = v));
                     }),
-                Item(Keys, "\uE893", "#14b8a6", () => T("Vor- und Zurückspulen", "Skip forward and back"),
-                    () => T("Zwei eigene Tasten springen im laufenden Titel 10 Sekunden vor oder zurück, in jeder App, die das zulässt.",
-                        "Two keys of your own jump 10 seconds forward or back in the current track, in any app that allows it."),
-                    () => T("Zwei Tasten für ±10 Sekunden", "Two keys for ±10 seconds"),
+                Item(Keys, "\uE893", "#14b8a6", () => T("Skip vor und zurück", "Skip forward and back"),
+                    () => T($"Zwei Hotkeys springen im Titel {Cfg().SkipSeconds()} Sekunden vor oder zurück (einstellbar).",
+                        $"Two keys jump {Cfg().SkipSeconds()} seconds forward or back in the track (adjustable)."),
+                    () => T($"Zwei Hotkeys für ±{Cfg().SkipSeconds()} Sekunden", $"Two keys for ±{Cfg().SkipSeconds()} seconds"),
                     () => StageLive(osd: false), BodySkipKeys),
                 Item(Keys, "\uE8AB", "#14b8a6", () => T("Mediengesten", "Media gestures"),
-                    () => T("Zweimal schnell drücken oder lange halten: Damit springst du zum nächsten Titel oder wechselst die Quelle. Das geht mit der Play/Pause-Taste oder einer eigenen.",
-                        "Press twice quickly or hold: that jumps to the next track or switches the source. It works with the Play/Pause key or one of your own."),
+                    () => T("Zweimal drücken oder halten: nächster Titel oder andere Quelle, mit Play/Pause oder eigener Taste.",
+                        "Press twice or hold: next track or another source, with Play/Pause or a key of your own."),
                     () => T("Nächster Titel und Quelle wechseln per Geste", "Next track and switch source by gesture"),
                     () => StageLive(osd: false), BodyGestures),
 
                 // ── OSD ──
                 Item(Osd, "\uE7F4", "#3b82f6", () => T("OSD: anzeigen und wegklicken", "OSD: show and dismiss"),
-                    () => T("Das OSD erscheint beim Drehen und Profilwechsel und verschwindet von selbst. Wie lange, stellst du hier ein. Dreh ruhig am Knopf, um es zu sehen.",
-                        "The OSD appears when you turn the knob or switch profiles and disappears on its own. You set how long here. Turn your knob to see it."),
+                    () => T("Das OSD erscheint beim Drehen und verschwindet von selbst. Wie lange, stellst du hier ein.",
+                        "The OSD appears when you turn and disappears by itself. You set how long here."),
                     () => T("Ein/Aus, Anzeigedauer, per Klick ausblenden", "On/off, duration, click to dismiss"),
                     () => StageLive(media: false), body =>
                     {
@@ -229,8 +230,8 @@ namespace KnobFlyout.Settings
                         body.Children.Add(SwitchCard("\uE8BB", T("Per Klick ausblenden", "Click to dismiss"), T("Klick auf OSD oder Flyout blendet es sofort aus", "Clicking the OSD or flyout hides it right away"), cfg.ClickToDismiss, (c, v) => c.ClickToDismiss = v));
                     }),
                 Item(Osd, "\uE706", "#6366f1", () => T("Deckkraft", "Opacity"),
-                    () => T("Hintergrund sowie Text und Symbole lassen sich getrennt einstellen, bei allen Designs. Ganz ohne Hintergrund bleiben nur Text und Symbole sichtbar.",
-                        "The background and the text and icons can be set separately, in every design. With no background at all, only text and icons remain."),
+                    () => T("Hintergrund und Text getrennt einstellbar. Bei 0 % bleiben nur Text und Symbole.",
+                        "Background and text set separately. At 0 % only text and icons remain."),
                     () => T("Hintergrund und Text getrennt, für OSD und Flyout", "Background and text separately, for OSD and flyout"),
                     () => StageLive(), body =>
                     {
@@ -247,66 +248,58 @@ namespace KnobFlyout.Settings
 
                 // ── Media-Flyout ──
                 Item(Flyout, "\uE8D6", "#14b8a6", () => T("Flyout: Inhalt und Dauer", "Flyout: content and duration"),
-                    () => T("Lege fest, ob und wie lange das Flyout erscheint und was es zeigt. Links siehst du jede Änderung sofort.",
-                        "Decide whether and how long the flyout appears and what it shows. You see every change on the left right away."),
-                    () => T("Ein/Aus, Dauer, Zeitleiste, ±10-s-Knöpfe", "On/off, duration, timeline, ±10 s buttons"),
+                    () => T("Ob, wie lange und was das Flyout zeigt. Links siehst du es sofort.",
+                        "Whether, how long and what the flyout shows. You see it on the left right away."),
+                    () => T("Ein/Aus, Dauer, Zeitleiste, Skip-Knöpfe", "On/off, duration, timeline, skip buttons"),
                     () => StageLive(osd: false), body =>
                     {
                         var cfg = Cfg();
                         body.Children.Add(SwitchCard("\uE8D6", T("Media-Flyout anzeigen", "Show media flyout"), null, cfg.MediaEnabled, (c, v) => c.MediaEnabled = v));
                         body.Children.Add(SliderCard("\uE916", T("Anzeigedauer", "Duration"), null, 2, 30, Math.Clamp(cfg.MediaDurationMs / 1000.0, 2, 30), "0' s'", (c, v) => c.MediaDurationMs = v * 1000));
                         body.Children.Add(SwitchCard("\uE823", T("Zeitleiste", "Timeline"), null, cfg.MediaShowProgress, (c, v) => c.MediaShowProgress = v));
-                        body.Children.Add(SwitchCard("\uE893", T("±10-s-Knöpfe", "±10 s buttons"), null, cfg.MediaSkipButtons, (c, v) => c.MediaSkipButtons = v));
+                        body.Children.Add(SwitchCard("\uE893", T("Skip-Knöpfe", "Skip buttons"), null, cfg.MediaSkipButtons, (c, v) => c.MediaSkipButtons = v));
                     }),
                 Item(Flyout, "\uE718", "#14b8a6", () => T("Flyout dauerhaft anzeigen", "Keep the flyout on screen"),
-                    () => T("Bei Programmen deiner Wahl bleibt das Flyout stehen, zum Beispiel solange Spotify spielt. Spielt ein anderes Programm los, zeigt es das kurz an und verschwindet.",
-                        "For programs you choose, the flyout stays on screen, for example while Spotify is playing. If another program starts playing, it shows that briefly and disappears."),
+                    () => T("Das Flyout bleibt stehen, solange ein Programm deiner Wahl spielt, etwa Spotify.",
+                        "The flyout stays while a program of your choice plays, Spotify for example."),
                     () => T("Zum Beispiel, solange Spotify spielt", "For example while Spotify is playing"),
                     () => StageLive(osd: false), BodyKeep),
                 Item(Flyout, "\uE712", "#14b8a6", () => T("Das „…“-Menü", "The “…” menu"),
-                    () => T("Der „…“-Knopf öffnet ein Menü direkt im Flyout. Welche Einträge es zeigt, wählst du selbst. Klick links darauf, um es auszuprobieren.",
-                        "The “…” button opens a menu right in the flyout. You choose which items it shows. Click it on the left to try it."),
+                    () => T("„…“ öffnet ein Menü im Flyout, die Einträge wählst du selbst. Probier es links aus.",
+                        "“…” opens a menu in the flyout, you choose the items. Try it on the left."),
                     () => T("Zufall, Wiederholen, Position speichern und mehr", "Shuffle, repeat, save position and more"),
                     () => StageLive(osd: false), BodyMoreMenu),
-                Item(Flyout, "\uE91B", "#14b8a6", () => T("Cover als Hintergrund", "Album art background"),
-                    () => T("Das Cover füllt das ganze Flyout als unscharfer Hintergrund. Unschärfe und Abdunkelung stellst du selbst ein. Am besten siehst du es, wenn gerade Musik läuft.",
-                        "The album art fills the whole flyout as a blurred background. You set the blur and dimming yourself. It's easiest to see while music is playing."),
-                    () => T("Unscharfes Cover hinter dem Flyout", "Blurred album art behind the flyout"),
-                    () => StageLive(osd: false), body =>
-                    {
-                        var cfg = Cfg();
-                        body.Children.Add(SwitchCard("\uE91B", T("Cover als Hintergrund", "Album art background"), null, cfg.MediaArtBackground, (c, v) => c.MediaArtBackground = v));
-                        body.Children.Add(SliderCard("\uE706", T("Unschärfe", "Blur"), null, 0, 60, Math.Clamp(cfg.MediaArtBlur, 0, 60), "0", (c, v) => c.MediaArtBlur = v));
-                        body.Children.Add(SliderCard("\uE706", T("Abdunkelung", "Dimming"), null, 0, 100, Math.Clamp(cfg.MediaArtDim, 0, 100), "0' %'", (c, v) => c.MediaArtDim = v));
-                    }),
                 Item(Flyout, "\uE8AB", "#14b8a6", () => T("Mehrere Quellen", "Several sources"),
-                    () => T("Spielen mehrere Apps gleichzeitig, zeigt das Flyout für jede einen Eintrag. Ein Klick wechselt dorthin und pausiert die vorherige, der kleine Punkt pausiert eine Quelle, ohne zu wechseln.",
-                        "When several apps play at once, the flyout shows an entry for each. A click switches there and pauses the previous one, the small dot pauses a source without switching."),
+                    () => T("Spielen mehrere Apps, hat jede einen Eintrag im Flyout. Klick wechselt dorthin, der Punkt pausiert nur.",
+                        "If several apps play, each gets an entry in the flyout. Click to switch, the dot only pauses."),
                     () => T("Zwischen Apps umschalten, die gerade spielen", "Switch between apps that are playing"),
                     () => StageLive(osd: false), body =>
                     {
                         var cfg = Cfg();
-                        body.Children.Add(SwitchCard("\uE8AB", T("Quellen-Leiste anzeigen", "Show sources bar"), null, cfg.MediaShowSources, (c, v) => c.MediaShowSources = v));
+                        body.Children.Add(SwitchCard("\uE8AB", T("Quellen anzeigen", "Show sources bar"), null, cfg.MediaShowSources, (c, v) => c.MediaShowSources = v));
                         body.Children.Add(SwitchCard("\uE769", T("Pause-Zeichen neben spielenden Quellen", "Pause symbol next to playing sources"), null, cfg.MediaShowSourcePause, (c, v) => c.MediaShowSourcePause = v));
                         body.Children.Add(new Border { Height = 6 });
-                        body.Children.Add(Note(T("Zum Ausprobieren: Starte in zwei Apps gleichzeitig etwas, zum Beispiel Spotify und ein Video im Browser. Links stehen dann beide in der Quellen-Leiste. Im Betrieb erscheint sie nur, wenn mehrere Apps spielen.",
-                            "To try it: start something in two apps at once, for example Spotify and a video in the browser. Both then appear in the sources bar on the left. In use it only appears when several apps are playing.")));
+                        body.Children.Add(Note(T("Zum Ausprobieren in zwei Apps gleichzeitig etwas starten, etwa Spotify und ein Video.",
+                            "To try it, start something in two apps at once, like Spotify and a video.")));
                     }),
 
                 // ── Aussehen ──
                 Step(Looks, "\uE790", 8, () => T("8 Designs für OSD und Flyout, hell oder dunkel", "8 designs for OSD and flyout, light or dark")),
-                new FeatureItem(Looks, "\uE70F", () => T("Jedes Design anpassen, Vorlagen, eigene Designs speichern", "Customize any design, templates, save your own designs"), DesignPage()),
+                new FeatureItem(Looks, "\uE70F", () => T("OSD und Flyout anpassen: Aufbau, Farben, Cover als Hintergrund", "Customize OSD and flyout: layout, colors, album art background"), DesignPage()),
 
                 // ── Platz ──
                 Step(Place, "\uE8A9", 9, () => T("9 Plätze je Bildschirm, getrennt oder zusammen", "9 places per monitor, separate or together")),
-                Step(Place, "\uE81D", 10, () => T("Gespeicherte Plätze, Einrasten, Wechseln per Taste", "Saved places, snapping, switching by key")),
+                Item(Place, "\uE81D", "#0ea5e9", () => T("Snap-Punkte", "Snap points"),
+                    () => T("Mehrere Plätze speichern und per Hotkey wechseln.", "Save several places and switch with a key."),
+                    () => T("Gespeicherte Plätze, Einrasten, Wechseln per Hotkey", "Saved places, snapping, switching by key"),
+                    StageSnap, BodySnap),
                 Item(Place, "\uE7F4", "#6366f1", () => T("Mehrere Bildschirme", "Several monitors"),
-                    () => T("OSD und Flyout können auf verschiedenen Bildschirmen stehen. Ändert sich die Auflösung oder ein Bildschirm kommt dazu, rechnet KnobFlyout eigene Positionen von selbst um.",
-                        "The OSD and flyout can be on different monitors. If the resolution changes or a monitor is added, KnobFlyout converts your own positions by itself."),
+                    () => T("OSD und Flyout können auf verschiedenen Bildschirmen stehen. Ändert sich die Auflösung, passen sich die Plätze an.",
+                        "The OSD and flyout can be on different monitors. If the resolution changes, the places adapt."),
                     () => T("Eigener Bildschirm je Anzeige, Positionen passen sich an", "A monitor of its own for each, positions adapt"),
                     StageSnap, body =>
                     {
-                        body.Children.Add(Feature("\uE7F4", T("Bildschirm wählen", "Choose a monitor"), T("Im Schritt „Wo soll es erscheinen?“ hat jede Auswahl ein eigenes Dropdown.", "In the step “Where should it appear?” each choice has its own dropdown.")));
+                        body.Children.Add(Feature("\uE7F4", T("Bildschirm wählen", "Choose a monitor"), T("Im Schritt „Wo soll es erscheinen?“ wählt das Dropdown den Bildschirm.", "In the step “Where should it appear?” the dropdown picks the monitor.")));
                         var reset = Btn(T("Position zurücksetzen", "Reset position"));
                         reset.Margin = new Thickness(0);
                         reset.Click += (_, _) =>
@@ -320,8 +313,8 @@ namespace KnobFlyout.Settings
 
                 // ── Programm ──
                 Item(Program, "\uE7E8", "#3b82f6", () => T("Start und Infobereich", "Startup and notification area"),
-                    () => T("KnobFlyout läuft unsichtbar im Infobereich der Taskleiste. Mit Windows starten kannst du hier oder im Task-Manager unter „Autostart-Apps“ ein- und ausschalten.",
-                        "KnobFlyout runs invisibly in the notification area of the taskbar. You can turn starting with Windows on and off here or in Task Manager under “Startup apps”."),
+                    () => T("KnobFlyout läuft im Infobereich der Taskleiste. Mit Windows starten schaltest du hier.",
+                        "KnobFlyout runs in the notification area. Turn starting with Windows on or off here."),
                     () => T("Autostart, Tray-Symbol, Beenden", "Autostart, tray icon, exit"),
                     StageDone, body =>
                     {
@@ -334,9 +327,9 @@ namespace KnobFlyout.Settings
                         body.Children.Add(new Border { Height = 8 });
                         body.Children.Add(Feature("\uE713", T("Rechtsklick aufs Symbol", "Right-click the icon"), T("Öffnet die Einstellungen oder beendet KnobFlyout.", "Opens the settings or exits KnobFlyout.")));
                     }),
-                Item(Program, "\uE774", "#3b82f6", () => T("Sprache und Farbschema", "Language and color scheme"),
-                    () => T("Deutsch oder Englisch, hell, dunkel oder wie Windows. OSD und Flyout folgen dem Farbschema.",
-                        "German or English, light, dark or like Windows. The OSD and flyout follow the color scheme."),
+                Item(Program, "\uE774", "#3b82f6", () => T("Sprache und Theme", "Language and color scheme"),
+                    () => T("Deutsch oder Englisch, hell, dunkel oder wie Windows.",
+                        "German or English, light, dark or like Windows."),
                     () => T("Deutsch oder Englisch, hell oder dunkel", "German or English, light or dark"),
                     () => StageLive(), body =>
                     {
@@ -350,7 +343,7 @@ namespace KnobFlyout.Settings
                             Dispatcher.BeginInvoke(new Action(Rebuild));
                         };
                         body.Children.Add(SettingCard("\uE774", T("Sprache", "Language"), null, lang));
-                        body.Children.Add(SettingCard("\uE790", T("Farbschema", "Color scheme"), null, ThemeChoice(cfg.Theme)));
+                        body.Children.Add(SettingCard("\uE790", T("Theme", "Color scheme"), null, ThemeChoice(cfg.Theme)));
                     }),
                 Item(Program, "\uE897", "#64748b", () => T("Wenn etwas nicht klappt", "If something doesn't work"),
                     () => T("Die häufigsten Gründe und was hilft.", "The most common reasons and what helps."),
@@ -369,7 +362,7 @@ namespace KnobFlyout.Settings
                         };
                         body.Children.Add(SettingCard("\uE72C", T("Position", "Position"), null, reset));
                         body.Children.Add(new Border { Height = 6 });
-                        body.Children.Add(Hint(T("Diese Einführung findest du jederzeit unter Einstellungen → Allgemein → Hilfe.", "You can find this introduction any time under Settings → General → Help.")));
+                        body.Children.Add(Hint(T("Dieses Tutorial findest du jederzeit unter Einstellungen → Allgemein → Hilfe.", "You can find this introduction any time under Settings → General → Help.")));
                     }),
             };
         }
@@ -423,7 +416,7 @@ namespace KnobFlyout.Settings
             var cfg = Cfg();
             _knobPill = new StatusPill(T("Probier es aus: Dreh am Knopf oder nimm − und + …", "Try it: turn your knob or use − and + …"));
             body.Children.Add(_knobPill);
-            body.Children.Add(SettingCard("\uE767", T("Schrittweite", "Step size"), T("Pro Raste", "Per notch"),
+            body.Children.Add(SettingCard("\uE767", T("Schrittweite", "Step size"), T("Pro Klick", "Per notch"),
                 SliderControl(1, 15, cfg.Step, "0' %'", v => Update(c => c.Step = (int)v, notify: false), tick: 1, width: 120)));
             body.Children.Add(SettingCard("\uE8D6", T("Schrittweite Spotify", "Spotify step size"), T("Nur über die Spotify-API", "Only via the Spotify API"),
                 SliderControl(1, 15, cfg.StepSpotify, "0' %'", v => Update(c => c.StepSpotify = (int)v, notify: false), tick: 1, width: 120)));
@@ -498,13 +491,13 @@ namespace KnobFlyout.Settings
         private void BodySkipKeys(StackPanel body)
         {
             var cfg = Cfg();
-            _skipPill = new StatusPill(T("Leg zwei Tasten fest und probier sie aus …", "Set two keys and try them …"));
+            _skipPill = new StatusPill(T("Leg zwei Hotkeys fest und probier sie aus, während etwas spielt …", "Set two keys and try them while something plays …"));
             body.Children.Add(_skipPill);
-            body.Children.Add(SettingCard("\uE765", T("10 s vorspulen", "Skip forward 10 s"), null,
+            body.Children.Add(SettingCard("\uE765", T("Skip vor", "Skip forward"), null,
                 HotkeyCapture(cfg.MediaSkipForwardHotkey, v => Update(c => c.MediaSkipForwardHotkey = v), format: FormatHotkey, width: 176)));
-            body.Children.Add(SettingCard("\uE765", T("10 s zurückspulen", "Skip back 10 s"), null,
+            body.Children.Add(SettingCard("\uE765", T("Skip zurück", "Skip back"), null,
                 HotkeyCapture(cfg.MediaSkipBackHotkey, v => Update(c => c.MediaSkipBackHotkey = v), format: FormatHotkey, width: 176)));
-            body.Children.Add(SettingCard("\uE765", T("Spul-Tasten aktiv", "Skip keys enabled"), T("Aus = beide ruhen, bleiben aber gespeichert", "Off = both pause but stay saved"),
+            body.Children.Add(SettingCard("\uE765", T("Skip-Hotkeys aktiv", "Skip keys enabled"), T("Aus = beide ruhen, bleiben aber gespeichert", "Off = both pause but stay saved"),
                 Toggle(cfg.MediaSkipHotkeysEnabled, v => Update(c => c.MediaSkipHotkeysEnabled = v))));
         }
 
@@ -543,13 +536,15 @@ namespace KnobFlyout.Settings
             foreach (var (key, label) in options)
             {
                 string item = key;
-                rows.Children.Add(OptionRow(label, Toggle(cfg.MediaMoreItems.Contains(item), on => Live(c =>
+                var row = OptionRow(label, Toggle(cfg.MediaMoreItems.Contains(item), on => Live(c =>
                 {
                     c.MediaMoreItems.Remove(item);
                     if (on) c.MediaMoreItems.Add(item);
                     // Feste Reihenfolge wie im Menü, unabhängig von der Klick-Reihenfolge.
                     c.MediaMoreItems = options.Select(o => o.Key).Where(c.MediaMoreItems.Contains).ToList();
-                }))));
+                })));
+                row.Margin = new Thickness(0, 1, 0, 1); // 13 Einträge: enger, damit die Seite ohne Scrollen passt
+                rows.Children.Add(row);
             }
             body.Children.Add(new Border
             {

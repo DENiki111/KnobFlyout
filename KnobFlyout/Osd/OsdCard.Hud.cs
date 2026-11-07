@@ -101,6 +101,16 @@ namespace KnobFlyout.Osd
             _hudSegGlow = HudParts.Glow(_accent.Color, _hudGlow, 6);
             front.Effect = _hudSegGlow; // nur die leuchtenden Segmente (die übrigen sind durchsichtig)
             Place(segs, left, 38);
+
+            Part(OsdCardLayout.Value, numHost);
+            Part(OsdCardLayout.Icon, _glyph);
+            Part(OsdCardLayout.Name, _lapp, _hudTag);
+            PartMade(OsdCardLayout.Bar, () =>
+            {
+                Detach(segs);
+                segs.Width = double.NaN;
+                return segs;
+            });
         }
 
         private void UpdateHud(string clean, int pct, bool muted)
@@ -139,21 +149,21 @@ namespace KnobFlyout.Osd
             logo.VerticalAlignment = VerticalAlignment.Center;
             badge.Children.Add(logo);
             Cell(row, badge, 0);
-            Cell(row, HudText(HudParts.Caps(def?.Name ?? "Profile"), 21, _fg, FontWeights.Bold), 1);
+            var name = HudText(HudParts.Caps(def?.Name ?? "Profile"), 21, _fg, FontWeights.Bold);
+            Cell(row, name, 1);
+            Part(OsdCardLayout.Icon, badge);
+            Part(OsdCardLayout.Name, name);
         }
 
         /// <summary>Feststelltasten: Schloss · NAME · Status-Schild „AN“ (grün leuchtend) bzw. „AUS“.</summary>
         private void BuildLockKeyHud(string name, bool on)
         {
-            string label = name switch
-            {
-                "CapsLock" => Loc.T("Feststelltaste", "Caps Lock"),
-                "NumLock" => Loc.T("Nummernblock", "Num Lock"),
-                _ => Loc.T("Rollen", "Scroll Lock"),
-            };
+            string label = LockKeyName(_cfg, name);
             var row = HudRow(GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto);
-            Cell(row, HudIcon(on ? LockGlyph : UnlockGlyph, on ? _fg : _sub), 0);
-            Cell(row, HudText(HudParts.Caps(label), 17, _fg, FontWeights.Bold), 1);
+            var icon = HudIcon(on ? LockGlyph : UnlockGlyph, on ? _fg : _sub);
+            Cell(row, icon, 0);
+            var title = HudText(HudParts.Caps(label), 17, _fg, FontWeights.Bold);
+            Cell(row, title, 1);
 
             var pal = _pal!;
             var col = UiColor.Brush(on ? pal.On : pal.Sub);
@@ -164,13 +174,17 @@ namespace KnobFlyout.Osd
             if (on) text.Effect = HudParts.Glow(col.Color, _hudGlow);
             status.Children.Add(text);
             Cell(row, status, 2);
+            Part(OsdCardLayout.Icon, icon);
+            Part(OsdCardLayout.Name, title);
+            Part(OsdCardLayout.State, status);
         }
 
         /// <summary>Positionswechsel: Stecknadel · „POSITION“ über „02/03“ (Zahl leuchtend) · Mini-Segmente (bis 8).</summary>
         private void BuildSnapInfoHud(int index, int total)
         {
             var row = HudRow(GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto);
-            Cell(row, HudIcon("\uE707", _fg), 0); // MapPin
+            var icon = HudIcon("\uE707", _fg); // MapPin
+            Cell(row, icon, 0);
             var block = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             block.Children.Add(HudText(HudParts.Caps("Position"), 11, _sub, FontWeights.SemiBold));
             var nums = new StackPanel { Orientation = Orientation.Horizontal };
@@ -183,6 +197,8 @@ namespace KnobFlyout.Osd
             nums.Children.Add(of);
             block.Children.Add(nums);
             Cell(row, block, 1);
+            Part(OsdCardLayout.Icon, icon);
+            Part(OsdCardLayout.Name, block);
             if (total > 8) return;
             var segs = HudParts.Segments(total, 10, 4, _trackBrush, out var front, out var frontGrid);
             segs.Width = total * 16;
@@ -190,6 +206,7 @@ namespace KnobFlyout.Osd
             front[index].Fill = _accent;
             frontGrid.Effect = HudParts.Glow(_accent.Color, _hudGlow, 6);
             Cell(row, segs, 2);
+            Part(OsdCardLayout.Bar, segs);
         }
 
         private Grid HudRow(params GridLength[] columns)

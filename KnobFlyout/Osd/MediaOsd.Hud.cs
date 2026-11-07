@@ -217,8 +217,8 @@ namespace KnobFlyout.Osd
             if (buttons[4] is Border { Child: TextBlock next }) next.FontSize = 16;
             _playPauseGlyph.FontSize = 18;
             _playPauseGlyph.Foreground = Role(RoleOnAccent, pal.OnAccent ?? pal.Bg);
-            HudSkipLabel(_skipBackBtn, "−10");
-            HudSkipLabel(_skipFwdBtn, "+10");
+            HudSkipLabel(_skipBackBtn, SkipText(-1));
+            HudSkipLabel(_skipFwdBtn, SkipText(+1));
             controls.Margin = new Thickness(0, 12, 0, 0);
             Grid.SetRow(controls, 0);
             controls.Children.Add(center);

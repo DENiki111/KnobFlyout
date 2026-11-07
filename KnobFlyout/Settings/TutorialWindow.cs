@@ -38,7 +38,8 @@ namespace KnobFlyout.Settings
             public Func<string>? BackText { get; init; }
         }
 
-        private readonly List<Page> _pages;
+        private List<Page> _pages;          // gezeigte Schritte (Lite-Modus: nur die passenden)
+        private List<Page> _allPages = new(); // alle Schritte (Alle Funktionen greift darauf zu)
         private int _index;
         private readonly Stack<Page> _subPages = new(); // geöffnete Unterseiten; _index bleibt dabei stehen
         private Page Current => _subPages.Count > 0 ? _subPages.Peek() : _pages[_index];
@@ -71,6 +72,9 @@ namespace KnobFlyout.Settings
 
         /// <summary>„Öffnen“ auf der letzten Seite: diese Einstellungs-Seite soll nach dem Schließen aufgehen.</summary>
         public string? RequestedSettingsPage { get; private set; }
+
+        /// <summary>Am Ende „Tour durch die Einstellungen“ gewählt: danach die Einstellungen mit der Tour öffnen.</summary>
+        public bool RequestedTour { get; private set; }
 
         public int PageCount => _pages.Count;
 
@@ -111,7 +115,8 @@ namespace KnobFlyout.Settings
             MaxHeight = SystemParameters.WorkArea.Height;
             SourceInitialized += (_, _) => ApplyDarkTitleBar(this);
 
-            _pages = BuildPages();
+            _allPages = BuildPages();
+            _pages = ShownPages();
             Update(c => c.TutorialStarted = true, notify: false);
             BuildShell();
             ShowPage(0, 0);
@@ -142,7 +147,7 @@ namespace KnobFlyout.Settings
             SetTheme(ThemeHelper.IsLight(Cfg()));
             ApplyControlTheme(this);
             ApplyDarkTitleBar(this);
-            Title = T("KnobFlyout – Einführung", "KnobFlyout – Introduction");
+            Title = T("KnobFlyout – Tutorial", "KnobFlyout – Introduction");
             Background = ContentBg;
 
             var root = new Grid { Width = DesignW, Height = DesignH, Background = ContentBg };
@@ -210,7 +215,7 @@ namespace KnobFlyout.Settings
             {
                 Content = T("Überspringen", "Skip"), Background = Brushes.Transparent, BorderThickness = new Thickness(0), Foreground = SubFg,
                 FontSize = 13, Padding = new Thickness(8, 3, 8, 3), Margin = new Thickness(0, 0, -8, 0), Cursor = System.Windows.Input.Cursors.Hand,
-                IsCancel = true, ToolTip = T("Einführung schließen (Esc)", "Close the introduction (Esc)"),
+                IsCancel = true, ToolTip = T("Tutorial schließen (Esc)", "Close the introduction (Esc)"),
             };
             _skip.Click += (_, _) => Close();
             DockPanel.SetDock(_skip, Dock.Right);
@@ -270,8 +275,8 @@ namespace KnobFlyout.Settings
                 Content = T("Nicht mehr anzeigen", "Don't show again"), Foreground = SubFg, FontSize = 13, IsChecked = Cfg().TutorialHidden,
                 VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left,
                 Cursor = System.Windows.Input.Cursors.Hand,
-                ToolTip = T("Sonst erscheint die Einführung wieder, wenn du die Einstellungen öffnest. Wieder aufrufen: Einstellungen → Allgemein → Einführung.",
-                    "Otherwise the introduction comes back when you open the settings. To see it again: Settings → General → Introduction."),
+                ToolTip = T("Sonst kommt sie mit den Einstellungen wieder. Später: Einstellungen → Allgemein.",
+                    "Otherwise it comes back with the settings. Later: Settings → General."),
             };
             if (CheckTemplate() is { } template) hide.Template = template;
             hide.Checked += (_, _) => Update(c => c.TutorialHidden = true, notify: false);
@@ -376,6 +381,7 @@ namespace KnobFlyout.Settings
             _back.Content = page.BackText?.Invoke() ?? T("Zurück", "Back");
             _next.Visibility = last ? Visibility.Collapsed : Visibility.Visible; // letzte Seite: Auswahl im Textbereich
             _next.Content = page.NextText?.Invoke() ?? T("Weiter", "Next");
+            _next.IsEnabled = true;
 
             _stageHost.Content = page.Stage();
             _bodyHost.Content = BuildBody(page);
@@ -516,6 +522,8 @@ namespace KnobFlyout.Settings
         private void Rebuild()
         {
             Loc.Apply(Cfg());
+            _pages = ShownPages(); // Voll/Lite gewechselt
+            _index = Math.Clamp(_index, 0, _pages.Count - 1);
             BuildShell();
             foreach (var (seg, page) in _segments.Zip(_pages))
                 if (seg.Parent is FrameworkElement hit) hit.ToolTip = page.Title();

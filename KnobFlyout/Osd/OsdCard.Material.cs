@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
+using KnobFlyout.Config;
 using KnobFlyout.Profiles;
 
 namespace KnobFlyout.Osd
@@ -75,6 +76,22 @@ namespace KnobFlyout.Osd
             Place(slider, left, 32);
             SetM3SliderColor(false);
             LayoutM3Slider(0);
+
+            Part(OsdCardLayout.Icon, _m3IconBox);
+            Part(OsdCardLayout.Name, _lapp);
+            PartMade(OsdCardLayout.Bar, () =>
+            {
+                Detach(slider);
+                slider.Width = double.NaN;
+                slider.SizeChanged += (_, e) =>
+                {
+                    _m3Width = e.NewSize.Width;
+                    Canvas.SetLeft(_m3Stop, _m3Width - 10);
+                    LayoutM3Slider((double)GetValue(M3PosProperty));
+                };
+                return slider;
+            });
+            Part(OsdCardLayout.Value, _lpct);
         }
 
         private void UpdateMaterial(string clean, int pct, bool muted)
@@ -141,23 +158,26 @@ namespace KnobFlyout.Osd
             var name = M3Text(def?.Name ?? "Profile", 16, _fg, FontWeights.SemiBold);
             name.Margin = new Thickness(14, 0, 0, 0);
             Cell(row, name, 1);
+            Part(OsdCardLayout.Icon, cookie);
+            Part(OsdCardLayout.Name, name);
         }
 
         /// <summary>Feststelltasten: Schloss im Container (an: Primär-Container) · Name + „An“/„Aus“ · M3-Schalter.</summary>
         private void BuildLockKeyMaterial(string name, bool on)
         {
             var pal = _pal!;
-            string label = name switch
-            {
-                "CapsLock" => Loc.T("Feststelltaste", "Caps Lock"),
-                "NumLock" => Loc.T("Nummernblock", "Num Lock"),
-                _ => Loc.T("Rollen", "Scroll Lock"),
-            };
+            string label = LockKeyName(_cfg, name);
             var row = M3Row(GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto);
-            Cell(row, on ? M3IconBox(LockGlyph, pal.Container ?? pal.Track, pal.OnContainer ?? pal.Fg)
-                         : M3IconBox(UnlockGlyph, pal.Tile ?? pal.Off, pal.Sub), 0);
-            Cell(row, M3Title(label, on ? Loc.T("An", "On") : Loc.T("Aus", "Off")), 1);
-            Cell(row, M3Switch(on), 2);
+            var icon = on ? M3IconBox(LockGlyph, pal.Container ?? pal.Track, pal.OnContainer ?? pal.Fg)
+                          : M3IconBox(UnlockGlyph, pal.Tile ?? pal.Off, pal.Sub);
+            Cell(row, icon, 0);
+            var title = M3Title(label, on ? Loc.T("An", "On") : Loc.T("Aus", "Off"));
+            Cell(row, title, 1);
+            var state = M3Switch(on);
+            Cell(row, state, 2);
+            Part(OsdCardLayout.Icon, icon);
+            Part(OsdCardLayout.Name, title);
+            Part(OsdCardLayout.State, state);
         }
 
         /// <summary>Positionswechsel: Stecknadel im Container · „Position n“ + „von N“ · Seitenanzeige (bis 8).</summary>
@@ -165,8 +185,12 @@ namespace KnobFlyout.Osd
         {
             var pal = _pal!;
             var row = M3Row(GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto);
-            Cell(row, M3IconBox("\uE707", pal.Container ?? pal.Track, pal.OnContainer ?? pal.Fg), 0); // MapPin
-            Cell(row, M3Title($"Position {index + 1}", Loc.T($"von {total}", $"of {total}")), 1);
+            var icon = M3IconBox("\uE707", pal.Container ?? pal.Track, pal.OnContainer ?? pal.Fg); // MapPin
+            Cell(row, icon, 0);
+            var title = M3Title($"Position {index + 1}", Loc.T($"von {total}", $"of {total}"));
+            Cell(row, title, 1);
+            Part(OsdCardLayout.Icon, icon);
+            Part(OsdCardLayout.Name, title);
             if (total > 8) return;
             var dots = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             for (int i = 0; i < total; i++)
@@ -177,6 +201,7 @@ namespace KnobFlyout.Osd
                     Background = i == index ? _accent : UiColor.Brush(pal.OutlineVariant ?? pal.Track),
                 });
             Cell(row, dots, 2);
+            Part(OsdCardLayout.Bar, dots);
         }
 
         /// <summary>M3-Schalter: an = Spur in Primärfarbe, großer Griff mit Häkchen; aus = Umriss, kleiner Griff.</summary>

@@ -34,6 +34,8 @@ namespace KnobFlyout.Audio
         public const string Chrome = "chrome";
         public const string Opera = "opera";
         public static readonly string[] Browsers = { Firefox, Chrome, Opera };
+        /// <summary>Webseiten, die die Erweiterung erkennt (Namen wie in sites.js), einzeln abschaltbar über bridge_sites_off.</summary>
+        public static readonly string[] Sites = { "YouTube", "Twitch", "TikTok", "Instagram", "Netflix", "Prime Video", "Disney+", "Crunchyroll", "Joyn", "VOE", "Jellyfin" };
         private const string WsGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
         private sealed class Tab
@@ -42,6 +44,7 @@ namespace KnobFlyout.Audio
             public bool Muted;
             public bool Playing;
             public string Title = "";
+            public string Site = "YouTube"; // Erweiterung 1.0.x kennt nur YouTube und schickt keine Seite
             public DateTime PlayingSince;
             public int LastRid;     // zuletzt gesendeter Befehl
             public int AnsweredRid; // zuletzt beantworteter Befehl
@@ -64,6 +67,8 @@ namespace KnobFlyout.Audio
         private TcpListener? _listener;
         private CancellationTokenSource? _cts;
         private int _rid;
+        private readonly Dictionary<int, TaskCompletionSource<(double Pos, double Dur)?>> _seeks = new(); // offene Sprünge je rid
+        private HashSet<string> _sitesOff = new(StringComparer.OrdinalIgnoreCase);
 
         public bool IsListening { get { lock (_lock) return _listener != null; } }
 
@@ -90,6 +95,7 @@ namespace KnobFlyout.Audio
         /// <summary>Server je nach youtube_bridge starten oder stoppen (beim Start und nach jedem Speichern).</summary>
         public void Apply(AppConfig cfg)
         {
+            lock (_lock) _sitesOff = new HashSet<string>(cfg.BridgeSitesOff ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
             if (cfg.YoutubeBridge) Start();
             else Stop();
         }
@@ -99,6 +105,12 @@ namespace KnobFlyout.Audio
         {
             if (!cfg.YoutubeBridge) return false;
             lock (_lock) return PlayingTabLocked(browser) != null;
+        }
+
+        /// <summary>Seite des Players, den der Knopf in diesem Browser gerade regelt (YouTube, Crunchyroll, Twitch, VOE, Jellyfin) – Name fürs OSD.</summary>
+        public string? PlayingSite(string browser)
+        {
+            lock (_lock) return PlayingTabLocked(browser)?.Tab.Site;
         }
 
         /// <summary>Neuer Wert sofort aus dem Cache (fürs OSD), der Befehl an den Tab geht asynchron raus.</summary>
@@ -128,7 +140,60 @@ namespace KnobFlyout.Audio
             }
         }
 
-        /// <summary>Spielen mehrere Tabs dieses Browsers, gewinnt der zuletzt gestartete.</summary>
+        /// <summary>
+        /// Springt im Video dieses Browsers um seconds Sekunden. Tab: Titel passt zur Windows-Wiedergabe (title),
+        /// sonst der spielende Tab, wenn Windows „spielt“ meldet. Liefert neue Position und Dauer, oder null, wenn
+        /// die Erweiterung aus/nicht verbunden ist, kein passendes Video kennt, die Seite nicht springen kann
+        /// (Livestream, Netflix, Erweiterung vor 1.2) oder nicht innerhalb von timeoutMs antwortet – dann springt
+        /// KnobFlyout über Windows.
+        /// </summary>
+        public async Task<(double Pos, double Dur)?> SeekAsync(string browser, double seconds, string? title, bool playing, int timeoutMs = 700)
+        {
+            int rid;
+            TaskCompletionSource<(double Pos, double Dur)?> tcs;
+            lock (_lock)
+            {
+                if (_listener == null) return null;
+                var pick = TabForTitleLocked(browser, title) ?? (playing ? PlayingTabLocked(browser) : null);
+                if (pick == null) return null;
+                var (conn, id, t) = pick.Value;
+                tcs = new TaskCompletionSource<(double Pos, double Dur)?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                rid = SendLocked(conn, id, t, "seek", Math.Round(seconds, 3));
+                _seeks[rid] = tcs;
+            }
+            var done = await Task.WhenAny(tcs.Task, Task.Delay(timeoutMs)).ConfigureAwait(false);
+            lock (_lock) _seeks.Remove(rid);
+            if (done != tcs.Task)
+            {
+                Logger.Info($"Browser-Bridge {DisplayName(browser)}: Skip ohne Antwort nach {timeoutMs} ms, springe über Windows");
+                return null;
+            }
+            return tcs.Task.Result;
+        }
+
+        /// <summary>Tab, dessen Titel zur Windows-Wiedergabe passt (gleich oder einer enthält den anderen); spielende zuerst, dann der zuletzt gestartete.</summary>
+        private (Connection Conn, int Id, Tab Tab)? TabForTitleLocked(string browser, string? title)
+        {
+            title = title?.Trim();
+            if (string.IsNullOrEmpty(title) || title.Length < 3) return null;
+            (Connection Conn, int Id, Tab Tab)? best = null;
+            foreach (var c in _conns)
+            {
+                if (c.Browser != browser) continue;
+                foreach (var (id, t) in c.Tabs)
+                {
+                    if (_sitesOff.Contains(t.Site) || t.Title.Trim().Length < 3) continue;
+                    bool match = t.Title.Contains(title, StringComparison.OrdinalIgnoreCase) || title.Contains(t.Title.Trim(), StringComparison.OrdinalIgnoreCase);
+                    if (!match) continue;
+                    if (best == null || (t.Playing && !best.Value.Tab.Playing)
+                        || (t.Playing == best.Value.Tab.Playing && t.PlayingSince > best.Value.Tab.PlayingSince))
+                        best = (c, id, t);
+                }
+            }
+            return best;
+        }
+
+        /// <summary>Spielen mehrere Tabs dieses Browsers, gewinnt der zuletzt gestartete. Abgeschaltete Webseiten zählen nicht.</summary>
         private (Connection Conn, int Id, Tab Tab)? PlayingTabLocked(string browser)
         {
             (Connection Conn, int Id, Tab Tab)? best = null;
@@ -136,16 +201,17 @@ namespace KnobFlyout.Audio
             {
                 if (c.Browser != browser) continue;
                 foreach (var (id, t) in c.Tabs)
-                    if (t.Playing && (best == null || t.PlayingSince > best.Value.Tab.PlayingSince))
+                    if (t.Playing && !_sitesOff.Contains(t.Site) && (best == null || t.PlayingSince > best.Value.Tab.PlayingSince))
                         best = (c, id, t);
             }
             return best;
         }
 
-        private void SendLocked(Connection conn, int tabId, Tab t, string op, object value)
+        private int SendLocked(Connection conn, int tabId, Tab t, string op, object value)
         {
             t.LastRid = ++_rid;
             conn.Outbox.Writer.TryWrite(JsonSerializer.Serialize(new { type = "cmd", rid = t.LastRid, tabId, op, value }));
+            return t.LastRid;
         }
 
         private void Start()
@@ -335,6 +401,13 @@ namespace KnobFlyout.Audio
                 return;
             }
             string name = DisplayName(conn.Browser);
+            if (type == "unknown")
+            {
+                // Testphase: Video auf einer Seite, die die Erweiterung nicht kennt (z. B. neue VOE-Adresse)
+                Logger.Info($"Browser-Bridge {name}: Video auf nicht erkannter Seite {(r.TryGetProperty("host", out var h) ? h.GetString() : "?")}"
+                            + (r.TryGetProperty("frame", out var fr) && fr.ValueKind == JsonValueKind.True ? " (iframe)" : ""));
+                return;
+            }
             if (!r.TryGetProperty("tabId", out var tid) || !tid.TryGetInt32(out int tabId)) return;
             if (type == "error")
             {
@@ -345,6 +418,20 @@ namespace KnobFlyout.Audio
             string? note = null; // Protokoll erst nach dem Lock schreiben
             lock (_lock)
             {
+                // Antwort auf einen Sprung: „seeked“ + neue Position/Dauer; fehlt „seeked“ (Erweiterung vor 1.2) oder
+                // ist es false (Livestream, Netflix), springt KnobFlyout über Windows
+                if (type == "res" && r.TryGetProperty("rid", out var sr) && sr.TryGetInt32(out int seekRid) && _seeks.Remove(seekRid, out var seek))
+                {
+                    bool seeked = r.TryGetProperty("seeked", out var sk) && sk.ValueKind == JsonValueKind.True
+                                  && r.TryGetProperty("pos", out var sp) && sp.TryGetDouble(out _);
+                    if (seeked)
+                        seek.TrySetResult((r.GetProperty("pos").GetDouble(), r.TryGetProperty("dur", out var sd) && sd.TryGetDouble(out double dur) ? dur : 0));
+                    else
+                    {
+                        seek.TrySetResult(null);
+                        note = "Skip auf dieser Seite nicht möglich, springe über Windows";
+                    }
+                }
                 var tabs = conn.Tabs;
                 if (type == "gone" || (type == "res" && !(r.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True)))
                 {
@@ -352,12 +439,10 @@ namespace KnobFlyout.Audio
                 }
                 else if (type == "state" || type == "res")
                 {
-                    if (!tabs.TryGetValue(tabId, out var t))
-                    {
-                        tabs[tabId] = t = new Tab();
-                        note = $"Tab {tabId} mit YouTube-Player gefunden";
-                    }
-                    note = Apply(r, type, t, tabId) ?? note;
+                    bool isNew = !tabs.TryGetValue(tabId, out var t);
+                    if (isNew) tabs[tabId] = t = new Tab();
+                    note = Apply(r, type, t!, tabId);
+                    if (isNew) note = $"Tab {tabId} mit {t!.Site}-Player gefunden" + (note == null ? "" : "; " + note);
                 }
             }
             if (note != null) Logger.Info($"YT-Bridge {name}: {note}");
@@ -380,9 +465,10 @@ namespace KnobFlyout.Audio
                 if (r.TryGetProperty("muted", out var mu)) t.Muted = mu.ValueKind == JsonValueKind.True;
             }
             if (r.TryGetProperty("title", out var ti) && ti.ValueKind == JsonValueKind.String) t.Title = ti.GetString() ?? "";
+            if (r.TryGetProperty("site", out var si) && si.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(si.GetString())) t.Site = si.GetString()!;
             bool playing = r.TryGetProperty("playing", out var pl) && pl.ValueKind == JsonValueKind.True;
             string? note = playing == t.Playing ? null
-                : $"Tab {tabId} {(playing ? "spielt" : "pausiert")}: {t.Title} (Lautstärke {t.Volume}{(t.Muted ? ", stumm" : "")})";
+                : $"Tab {tabId} {(playing ? "spielt" : "pausiert")} ({t.Site}): {t.Title} (Lautstärke {t.Volume}{(t.Muted ? ", stumm" : "")})";
             if (playing && !t.Playing) t.PlayingSince = DateTime.UtcNow;
             t.Playing = playing;
             return note;

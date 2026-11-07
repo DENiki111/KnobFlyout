@@ -79,8 +79,8 @@ namespace KnobFlyout.Settings
                 Background = Brushes.Transparent, CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(6, 5, 4, 5), Margin = new Thickness(0, 0, 0, 1),
             };
-            row.MouseEnter += (_, _) => row.Background = HoverBg;
-            row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+            row.MouseEnter += (_, _) => Motion.Fade(row, HoverBg);
+            row.MouseLeave += (_, _) => Motion.Fade(row, Brushes.Transparent);
 
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
@@ -159,8 +159,8 @@ namespace KnobFlyout.Settings
             };
             if (!selected)
             {
-                seg.MouseEnter += (_, _) => seg.Background = HoverBg;
-                seg.MouseLeave += (_, _) => seg.Background = Brushes.Transparent;
+                seg.MouseEnter += (_, _) => Motion.Fade(seg, HoverBg);
+                seg.MouseLeave += (_, _) => Motion.Fade(seg, Brushes.Transparent);
             }
             seg.MouseLeftButtonUp += (_, e) => { onClick(); e.Handled = true; };
             return seg;

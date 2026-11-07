@@ -15,6 +15,11 @@ namespace KnobFlyout.Input
         public const int VK_VOLUME_MUTE = 0xAD;
         public const int VK_VOLUME_DOWN = 0xAE;
         public const int VK_VOLUME_UP = 0xAF;
+        public const uint KEYEVENTF_EXTENDEDKEY = 0x1;
+        public const uint KEYEVENTF_KEYUP = 0x2;
+
+        [DllImport("user32.dll")]
+        public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
         public const int VK_CAPITAL = 0x14;
         public const int VK_NUMLOCK = 0x90;
         public const int VK_SCROLL = 0x91;

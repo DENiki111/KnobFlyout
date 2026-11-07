@@ -40,17 +40,21 @@ namespace KnobFlyout.Settings
         /// <summary>Name fürs Speichern: das gerade bearbeitete eigene Design, sonst „Mein …“ ohne Dopplung.</summary>
         public string SuggestedName()
         {
-            if (Cfg.MediaSavedActive.Length > 0) return Cfg.MediaSavedActive;
-            string design = Cfg.MediaDesign switch
+            bool osd = OsdKey != _osd && MediaKey == _media; // nur das OSD geändert: nach dem OSD-Design benennen
+            string active = osd ? Cfg.OsdSavedActive : Cfg.MediaSavedActive;
+            if (active.Length > 0) return active;
+            string design = (osd ? Cfg.OsdDesign : Cfg.MediaDesign) switch
             {
-                "modernflyouts" => "ModernFlyouts",
+                "modernflyouts" or "modern" or "windows" => "ModernFlyouts",
                 "win11" => "Windows 11",
-                "custom" => T("Eigenes", "Custom"),
+                "custom" or "dark" => T("Eigenes", "Custom"),
                 var key => Designs.Get(key)?.Name ?? key,
             };
             string first = T($"Mein {design}", $"My {design}");
             string name = first;
-            for (int i = 2; Cfg.MediaSavedDesigns.Any(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase)); i++) name = $"{first} {i}";
+            bool Taken(string n) => osd ? Cfg.OsdSavedDesigns.Any(s => string.Equals(s.Name, n, StringComparison.OrdinalIgnoreCase))
+                : Cfg.MediaSavedDesigns.Any(s => string.Equals(s.Name, n, StringComparison.OrdinalIgnoreCase));
+            for (int i = 2; Taken(name); i++) name = $"{first} {i}";
             return name;
         }
 
@@ -103,11 +107,30 @@ namespace KnobFlyout.Settings
             return (choice, name.Text.Trim());
         }
 
+        /// <summary>Rückfrage vor dem Löschen eines Farbprofils bzw. eigenen Designs. true = löschen.</summary>
+        public static bool ConfirmDelete(Window? owner, string name, bool design) => Show(owner, T("KnobFlyout – Löschen", "KnobFlyout – Delete"),
+            T("Wirklich löschen?", "Really delete?"),
+            design ? T($"Das eigene Design „{name}“ wird gelöscht.", $"Your own design “{name}” will be deleted.")
+                   : T($"Das Farbprofil „{name}“ wird gelöscht.", $"The color profile “{name}” will be deleted."),
+            null, null, T("Löschen", "Delete")) == LeaveChoice.Save;
+
+        /// <summary>Name für ein neues Farbprofil; null = abgebrochen.</summary>
+        public static string? AskProfileName(Window? owner)
+        {
+            var name = TextField("");
+            name.MaxLength = 32;
+            name.Margin = new Thickness(0, 0, 0, 16);
+            var choice = Show(owner, T("KnobFlyout – Farbprofil speichern", "KnobFlyout – Save color profile"), T("Als Farbprofil speichern", "Save as color profile"),
+                T("Die Farben stehen danach bei OSD und Flyout unter „Farbprofil“. Ein vorhandener Name wird überschrieben.",
+                  "The colors are then listed under “Color profile” for the OSD and the flyout. An existing name is overwritten."), name, null);
+            return choice == LeaveChoice.Save && name.Text.Trim().Length > 0 ? name.Text.Trim() : null;
+        }
+
         public static LeaveChoice AskSettings(Window? owner) => Show(owner, T("KnobFlyout – Einstellungen speichern", "KnobFlyout – Save settings"),
             T("Änderungen speichern?", "Save your changes?"), T("Du hast Einstellungen geändert, die noch nicht gespeichert sind.", "You changed settings that haven't been saved yet."),
             null, T("Ohne Speichern schließen", "Close without saving"));
 
-        private static LeaveChoice Show(Window? owner, string title, string heading, string text, TextBox? input, string? discardText)
+        private static LeaveChoice Show(Window? owner, string title, string heading, string text, TextBox? input, string? discardText, string? saveText = null)
         {
             var result = LeaveChoice.Stay;
             var window = new Window
@@ -130,7 +153,7 @@ namespace KnobFlyout.Settings
                 window.Close();
             }
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-            var save = AccentBtn(T("Speichern", "Save"));
+            var save = AccentBtn(saveText ?? T("Speichern", "Save"));
             save.IsDefault = true;
             save.Tag = "save";
             save.Click += (_, _) =>

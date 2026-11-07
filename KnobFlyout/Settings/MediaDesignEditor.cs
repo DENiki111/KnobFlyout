@@ -140,7 +140,7 @@ namespace KnobFlyout.Settings
                     break;
                 case "sources":
                     glyph = "\uE8AB"; // Switch
-                    title = T("Quellen-Leiste", "Sources bar");
+                    title = T("Quellen", "Sources bar");
                     desc = T("Nur sichtbar, wenn mehrere Apps Medien melden", "Only visible when several apps report media");
                     Switch(MediaLayout.Sources);
                     body.Children.Add(OptionRow(T("Pause-Zeichen neben spielenden Quellen", "Pause symbol next to playing sources"),
@@ -204,7 +204,7 @@ namespace KnobFlyout.Settings
             var template = Base;
             var tiles = new WrapPanel();
             tiles.Children.Add(ElementTile("\uE892", T("Zurück", "Previous"), layout.Shows(MediaLayout.Prev), Set<bool>(v => layout.Set(MediaLayout.Prev, v)))); // Previous
-            tiles.Children.Add(ElementTile("\uED3C", "±10 s", layout.Shows(MediaLayout.Skip), Set<bool>(v => layout.Set(MediaLayout.Skip, v))));                 // SkipBack10
+            tiles.Children.Add(ElementTile("\uED3C", T("Skip ±", "Skip ±"), layout.Shows(MediaLayout.Skip), Set<bool>(v => layout.Set(MediaLayout.Skip, v))));                 // SkipBack10
             tiles.Children.Add(ElementTile("\uE768", "Play/Pause", layout.Shows(MediaLayout.Play), Set<bool>(v => layout.Set(MediaLayout.Play, v))));            // Play
             tiles.Children.Add(ElementTile("\uE893", T("Weiter", "Next"), layout.Shows(MediaLayout.Next), Set<bool>(v => layout.Set(MediaLayout.Next, v))));     // Next
             tiles.Children.Add(ElementTile("\uE712", T("„…“-Menü", "“…” menu"), layout.Shows(MediaLayout.More), Set<bool>(v => layout.Set(MediaLayout.More, v)))); // More
@@ -331,8 +331,8 @@ namespace KnobFlyout.Settings
                     Cursor = System.Windows.Input.Cursors.Hand, Child = content,
                     ToolTip = T("Als Startpunkt übernehmen", "Use as starting point"),
                 };
-                tile.MouseEnter += (_, _) => tile.Background = HoverBg;
-                tile.MouseLeave += (_, _) => tile.Background = CardBg;
+                tile.MouseEnter += (_, _) => Motion.Fade(tile, HoverBg);
+                tile.MouseLeave += (_, _) => Motion.Fade(tile, CardBg);
                 tile.MouseLeftButtonUp += (_, _) =>
                 {
                     ApplyTemplate(_cfg, key);
@@ -387,21 +387,23 @@ namespace KnobFlyout.Settings
 
             var panel = new StackPanel();
             panel.Children.Add(fields);
-            panel.Children.Add(Hint(T("Bild-Knopf: Farbe aus dem Titelbild", "Picture button: color from the album art")));
+            panel.Children.Add(Hint(T("Bild-Knopf: Farbe aus dem Cover", "Picture button: color from the album art")));
             return panel;
         }
 
         /// <summary>Eigene Farben des gewählten OSD-Designs (ohne „aus dem Titelbild“, das OSD kennt kein Cover). Wert des Designs oder ↺ = keine eigene Farbe.</summary>
-        public static UIElement OsdColors(AppConfig cfg, Action changed, bool compact)
+        public static UIElement OsdColors(AppConfig cfg, Action changed, bool compact, Dictionary<string, TextBox>? boxes = null)
         {
             Panel fields = compact ? new UniformGrid { Columns = 2 } : new StackPanel();
             foreach (var (key, label, def) in OsdDesignColors.For(cfg))
             {
-                fields.Children.Add(ColorRow(label, cfg.OsdColorSet().ColorOf(key) ?? def, def, hex =>
+                var row = ColorRow(label, cfg.OsdColorSet().ColorOf(key) ?? def, def, hex =>
                 {
                     cfg.SetOsdColor(key, string.Equals(hex, def, StringComparison.OrdinalIgnoreCase) ? null : hex);
                     changed();
-                }, !compact));
+                }, !compact);
+                if (boxes != null && row.Tag is TextBox box) boxes[ColorProfiles.Prefix + key] = box;
+                fields.Children.Add(row);
             }
             return fields;
         }
@@ -444,7 +446,7 @@ namespace KnobFlyout.Settings
             {
                 Width = 26, Height = 26, CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1), Margin = new Thickness(4, 0, 0, 0), Child = coverIcon,
                 Cursor = System.Windows.Input.Cursors.Hand, VerticalAlignment = VerticalAlignment.Center, Visibility = cover ? Visibility.Visible : Visibility.Collapsed,
-                ToolTip = T("Farbe aus dem Titelbild", "Color from the album art"),
+                ToolTip = T("Farbe aus dem Cover", "Color from the album art"),
             };
             TextBox? box = null;
             void Show()
@@ -558,7 +560,11 @@ namespace KnobFlyout.Settings
                 {
                     var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 6, 6) };
                     row.Children.Add(Chip(design, design == active, () => apply(design), check: true));
-                    var removeButton = FlatIconButton("\uE711", T($"„{design}“ löschen", $"Delete “{design}”"), () => remove(design));
+                    Button? removeButton = null;
+                    removeButton = FlatIconButton("\uE711", T($"„{design}“ löschen", $"Delete “{design}”"), () =>
+                    {
+                        if (DesignSaveDialog.ConfirmDelete(Window.GetWindow(removeButton!), design, design: true)) remove(design);
+                    });
                     removeButton.Width = removeButton.Height = 24;
                     removeButton.FontSize = 10;
                     removeButton.Margin = new Thickness(2, 0, 0, 0);

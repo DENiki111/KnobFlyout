@@ -68,6 +68,7 @@ namespace KnobFlyout.Osd
         private readonly double _w;
         private readonly double _h;
         private readonly double _darkBarW;
+        private double _trackLeft, _trackW;      // Lautstärke-Leiste der älteren Designs (eigener Aufbau: eigene Zeichenfläche ab 0)
         private readonly double _targetOpacity;  // Hintergrund (win_alpha)
         private readonly double _contentOpacity; // Text, Symbole, Leisten (osd_content_opacity) = Deckkraft von _canvas
         private readonly Canvas _canvas = new();
@@ -203,28 +204,34 @@ namespace KnobFlyout.Osd
         public static OsdCard CreateVolume(AppConfig cfg, string name)
         {
             var card = new OsdCard(cfg);
+            int built = card._canvas.Children.Count;
             if (card.IsMac) card.BuildVolumeMac();
             else if (card.IsMaterial) card.BuildVolumeMaterial();
             else if (card.IsHud) card.BuildVolumeHud();
             else if (card.IsHardware) card.BuildVolumeHardware();
+            else if (card.IsKnob) card.BuildVolumeKnob();
             else if (card._spec != null) card.BuildVolumeIsland();
             else if (card._win11) card.BuildVolumeWin11();
             else if (card._modern) card.BuildVolumeModern();
             else card.BuildVolume(name);
+            card.ApplyLayout(OsdCardLayout.Volume, built);
             return card;
         }
 
         public static OsdCard CreateProfile(AppConfig cfg)
         {
             var card = new OsdCard(cfg);
+            int built = card._canvas.Children.Count;
             if (card.IsMac) card.BuildProfileMac();
             else if (card.IsMaterial) card.BuildProfileMaterial();
             else if (card.IsHud) card.BuildProfileHud();
             else if (card.IsHardware) card.BuildProfileHardware();
+            else if (card.IsKnob) card.BuildProfileKnob();
             else if (card._spec != null) card.BuildProfileIsland();
             else if (card._win11) card.BuildProfileWin11();
             else if (card._modern) card.BuildProfileModern();
             else card.BuildProfile();
+            card.ApplyLayout(OsdCardLayout.Profile, built);
             return card;
         }
 
@@ -232,13 +239,16 @@ namespace KnobFlyout.Osd
         public static OsdCard CreateLockKey(AppConfig cfg, string name, bool on)
         {
             var card = new OsdCard(cfg);
+            int built = card._canvas.Children.Count;
             if (card.IsMac) card.BuildLockKeyMac(name, on);
             else if (card.IsMaterial) card.BuildLockKeyMaterial(name, on);
             else if (card.IsHud) card.BuildLockKeyHud(name, on);
             else if (card.IsHardware) card.BuildLockKeyHardware(name, on);
+            else if (card.IsKnob) card.BuildLockKeyKnob(name, on);
             else if (card._spec != null) card.BuildLockKeyIsland(name, on);
             else if (card._modern) card.BuildLockKeyClean(name, on); // modern + Win11: schlicht wie Windows
             else card.BuildLockKey(name, on);
+            card.ApplyLayout(OsdCardLayout.LockKey, built);
             return card;
         }
 
@@ -246,19 +256,22 @@ namespace KnobFlyout.Osd
         public static OsdCard CreateSnapInfo(AppConfig cfg, int index, int total)
         {
             var card = new OsdCard(cfg);
+            int built = card._canvas.Children.Count;
             if (card.IsMac) card.BuildSnapInfoMac(index, total);
             else if (card.IsMaterial) card.BuildSnapInfoMaterial(index, total);
             else if (card.IsHud) card.BuildSnapInfoHud(index, total);
             else if (card.IsHardware) card.BuildSnapInfoHardware(index, total);
+            else if (card.IsKnob) card.BuildSnapInfoKnob(index, total);
             else if (card._spec != null) card.BuildSnapInfoIsland(index, total);
             else if (card._win11) card.BuildSnapInfoWin11(index, total);
             else if (card._modern) card.BuildSnapInfoModern(index, total);
             else card.BuildSnapInfo(index, total);
+            card.ApplyLayout(OsdCardLayout.Snap, built);
             return card;
         }
 
         /// <summary>"Testen" in den Einstellungen: Beispiel-Lautstärkekarte kurz an der Stelle at zeigen.</summary>
-        public static void ShowTest(AppConfig cfg, Point at, int ms = 3000)
+        public static OsdCard ShowTest(AppConfig cfg, Point at, int ms = 3000)
         {
             var card = CreateVolume(cfg, "spotify.exe");
             card.UpdateVolume("spotify.exe", 64, false);
@@ -273,6 +286,7 @@ namespace KnobFlyout.Osd
                 try { card.CloseAnimated(); } catch { }
             };
             timer.Start();
+            return card;
         }
 
         /// <summary>Feststelltasten-Karte mit echtem Namen und Zustand für die Einführung.</summary>
@@ -468,6 +482,10 @@ namespace KnobFlyout.Osd
             _lpct.Margin = new Thickness(14, 0, 0, 0);
             System.Windows.Documents.Typography.SetNumeralAlignment(_lpct, FontNumeralAlignment.Tabular);
             Cell(row, _lpct, 3);
+            Part(OsdCardLayout.Icon, _glyph);
+            Part(OsdCardLayout.Name, _lapp);
+            Part(OsdCardLayout.Bar, bar);
+            Part(OsdCardLayout.Value, _lpct);
         }
 
         private void UpdateIsland(string clean, int pct, bool muted)
@@ -510,30 +528,33 @@ namespace KnobFlyout.Osd
             var host = new Grid { Width = _w - 2, Height = _h - 2 };
             host.Children.Add(panel);
             Place(host, 0, 0);
+            Part(OsdCardLayout.Icon, logo);
+            Part(OsdCardLayout.Name, name);
         }
 
         /// <summary>Feststelltasten: Schloss · Name · „AN“ (grün) / „AUS“.</summary>
         private void BuildLockKeyIsland(string name, bool on)
         {
-            string label = name switch
-            {
-                "CapsLock" => Loc.T("Feststelltaste", "Caps Lock"),
-                "NumLock" => Loc.T("Nummernblock", "Num Lock"),
-                _ => Loc.T("Rollen", "Scroll Lock"),
-            };
+            string label = LockKeyName(_cfg, name);
             var row = IslandRow(new GridLength(26), new GridLength(1, GridUnitType.Star), GridLength.Auto);
-            Cell(row, IslandGlyph(on ? LockGlyph : UnlockGlyph, 20, _fg), 0);
+            var icon = IslandGlyph(on ? LockGlyph : UnlockGlyph, 20, _fg);
+            Cell(row, icon, 0);
             var title = IslandText(label, 16, _fg);
             title.Margin = new Thickness(12, 0, 8, 0);
             Cell(row, title, 1);
-            Cell(row, on ? IslandChip(Loc.T("AN", "ON"), _pal!.On, _pal.OnText) : IslandChip(Loc.T("AUS", "OFF"), _pal!.Off, _pal.OffText), 2);
+            var chip = on ? IslandChip(Loc.T("AN", "ON"), _pal!.On, _pal.OnText) : IslandChip(Loc.T("AUS", "OFF"), _pal!.Off, _pal.OffText);
+            Cell(row, chip, 2);
+            Part(OsdCardLayout.Icon, icon);
+            Part(OsdCardLayout.Name, title);
+            Part(OsdCardLayout.State, chip);
         }
 
         /// <summary>Positionswechsel: Stecknadel · „Position n“ · Punkte (aktueller Punkt gefüllt), ab 9 Punkten als Zahl.</summary>
         private void BuildSnapInfoIsland(int index, int total)
         {
             var row = IslandRow(new GridLength(26), new GridLength(1, GridUnitType.Star), GridLength.Auto);
-            Cell(row, IslandGlyph("\uE707", 20, _fg), 0); // MapPin
+            var icon = IslandGlyph("\uE707", 20, _fg); // MapPin
+            Cell(row, icon, 0);
             var title = IslandText($"Position {index + 1}", 16, _fg);
             title.Margin = new Thickness(12, 0, 8, 0);
             Cell(row, title, 1);
@@ -552,6 +573,9 @@ namespace KnobFlyout.Osd
             }
             else right = IslandText($"{index + 1} / {total}", 14, _sub, bold: false);
             Cell(row, right, 2);
+            Part(OsdCardLayout.Icon, icon);
+            Part(OsdCardLayout.Name, title);
+            Part(OsdCardLayout.Bar, right);
         }
 
         // ── Volume-Karte Dark (entspricht _make_vol_card_dark) ────────────────
@@ -571,13 +595,15 @@ namespace KnobFlyout.Osd
             };
             Place(_lpct, _w - 95, 10);
 
+            _trackW = _darkBarW;
             _barBg = new Rectangle { Width = _darkBarW, Height = 7, Fill = UiColor.Brush(_cfg.ColorBarBg) };
             Place(_barBg, 12, 32);
             _barFill = new Rectangle { Width = 0, Height = 7, Fill = Brushes.Transparent };
             Place(_barFill, 12, 32);
 
+            // Profil-Symbole in Zellen zu je 30 px (gleiche Stellen wie früher einzeln gesetzt)
             string current = GetAppProfile(name);
-            double px = 12;
+            var profiles = new StackPanel { Orientation = Orientation.Horizontal };
             foreach (var p in ProfileDefinitions.For(_cfg))
             {
                 var brush = UiColor.Brush(current == p.Key ? p.Color : "#252540");
@@ -586,9 +612,25 @@ namespace KnobFlyout.Osd
                     ? new TextBlock { Text = p.Icon, FontFamily = UiFont, FontSize = Pt(11), Foreground = brush }
                     : p.CreateLogo(Pt(11), brush);
                 if (p.Image != null && current != p.Key) icon.Opacity = 0.35; // Bild nicht einfärbbar → abgeblendet
-                Place(icon, px, CardH - 25);
-                px += 30;
+                icon.HorizontalAlignment = HorizontalAlignment.Left;
+                icon.VerticalAlignment = VerticalAlignment.Top;
+                profiles.Children.Add(new Grid { Width = 30, Children = { icon } });
             }
+            Place(profiles, 12, CardH - 25);
+
+            Part(OsdCardLayout.Name, _lapp);
+            Part(OsdCardLayout.Value, _lpct);
+            PartMade(OsdCardLayout.Bar, () =>
+            {
+                var host = new Grid { Height = 7 };
+                _barBg = new Rectangle { Height = 7, Fill = UiColor.Brush(_cfg.ColorBarBg) };
+                _barFill = new Rectangle { Width = 0, Height = 7, Fill = Brushes.Transparent, HorizontalAlignment = HorizontalAlignment.Left };
+                host.Children.Add(_barBg);
+                host.Children.Add(_barFill);
+                Track(host, w => _trackW = w);
+                return host;
+            });
+            Part(OsdCardLayout.Profiles, profiles);
         }
 
         // ── Volume-Karte Modern (ModernFlyouts-Layout: Icon – Slider – Zahl in einer Reihe) ──
@@ -624,10 +666,18 @@ namespace KnobFlyout.Osd
             };
             valueHost.Children.Add(_lpct);
             Place(valueHost, _w - 48, 22);
+
+            _trackLeft = TrackLeft;
+            _trackW = ModernTrackW;
+            Part(OsdCardLayout.Icon, glyphHost);
+            Part(OsdCardLayout.Name, _lapp);
+            PartMade(OsdCardLayout.Bar, CustomSliderBar);
+            Part(OsdCardLayout.Value, valueHost);
         }
 
         public void UpdateVolume(string name, int pct, bool muted)
         {
+            _lastVolume = (name, pct, muted);
             string clean = name.Replace(".exe", "");
             if (clean.Length > 20) clean = clean[..20] + "…";
             pct = Math.Clamp(pct, 0, 100);
@@ -638,6 +688,7 @@ namespace KnobFlyout.Osd
                 else if (IsMaterial) UpdateMaterial(clean, pct, muted);
                 else if (IsHud) UpdateHud(clean, pct, muted);
                 else if (IsHardware) UpdateHardware(clean, pct, muted);
+                else if (IsKnob) UpdateKnob(clean, pct, muted);
                 else UpdateIsland(clean, pct, muted);
                 return;
             }
@@ -662,15 +713,15 @@ namespace KnobFlyout.Osd
             _lpct.Text = $"{pct}%";
             _barBg.Fill = UiColor.Brush(_cfg.ColorBarBg);
             _barFill.Fill = UiColor.Brush(pct > 55 ? _cfg.ColorBarHi : pct > 20 ? _cfg.ColorBarMid : _cfg.ColorBarLo);
-            _barFill.Width = _darkBarW * pct / 100.0;
+            _barFill.Width = _trackW * pct / 100.0;
         }
 
         private void UpdateModern(string clean, int pct, bool muted)
         {
             if (_lapp == null || _lpct == null || _glyph == null || _barFill == null || _thumb == null) return;
 
-            double trackLeft = _win11 ? Win11TrackLeft : TrackLeft;
-            double trackW = _win11 ? Win11TrackW : ModernTrackW;
+            double trackLeft = _trackLeft;
+            double trackW = _trackW;
 
             _lapp.Text = clean;
             double fillWidth;
@@ -728,6 +779,13 @@ namespace KnobFlyout.Osd
             };
             valueHost.Children.Add(_lpct);
             Place(valueHost, _w - 48, 0);
+
+            _trackLeft = Win11TrackLeft;
+            _trackW = Win11TrackW;
+            Part(OsdCardLayout.Icon, glyphHost);
+            Part(OsdCardLayout.Name, _lapp);
+            PartMade(OsdCardLayout.Bar, CustomSliderBar);
+            Part(OsdCardLayout.Value, valueHost);
         }
 
         /// <summary>Fluent-Symbol in Textfarbe (Info-Karten).</summary>
@@ -753,12 +811,16 @@ namespace KnobFlyout.Osd
             iconHost.Children.Add(icon);
             Place(iconHost, 0, 0);
 
-            Place(new TextBlock
+            var titleText = new TextBlock
             {
                 Text = title, FontFamily = UiFont, FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = _fg,
                 Width = _w - Win11TrackLeft - 16, TextTrimming = TextTrimming.CharacterEllipsis,
-            }, Win11TrackLeft, 9);
-            Place(new TextBlock { Text = subtitle, FontFamily = UiFont, FontSize = 12, Foreground = _sub }, Win11TrackLeft, 29);
+            };
+            Place(titleText, Win11TrackLeft, 9);
+            var subText = new TextBlock { Text = subtitle, FontFamily = UiFont, FontSize = 12, Foreground = _sub };
+            Place(subText, Win11TrackLeft, 29);
+            Part(OsdCardLayout.Icon, iconHost);
+            Part(OsdCardLayout.Name, titleText, subText);
         }
 
         private void BuildProfileWin11()
@@ -782,18 +844,23 @@ namespace KnobFlyout.Osd
             // Unverändertes Standard-Profil: Emoji wie bisher, sonst das gewählte Logo in Profilfarbe.
             var profiles = ProfileDefinitions.For(_cfg);
             var def = profiles.FirstOrDefault(p => p.Key == _cfg.ActiveProfile) ?? profiles.FirstOrDefault();
-            Place(icon.Length > 0 || def == null
+            FrameworkElement logo = icon.Length > 0 || def == null
                 ? new TextBlock { Text = icon, FontFamily = UiFont, FontSize = Pt(18), Foreground = UiColor.Brush(pcolor) }
-                : def.CreateLogo(Pt(18), UiColor.Brush(pcolor)), 14, 10);
+                : def.CreateLogo(Pt(18), UiColor.Brush(pcolor));
+            Place(logo, 14, 10);
 
-            Place(new TextBlock
+            var name = new TextBlock
             {
                 Text = label, FontFamily = UiFont, FontSize = Pt(13), FontWeight = FontWeights.Bold,
                 Foreground = UiColor.Brush(_cfg.ColorProfText),
-            }, 46, 14);
+            };
+            Place(name, 46, 14);
 
             Place(new Rectangle { Width = _w - 28, Height = 5, Fill = UiColor.Brush(_cfg.ColorBarBg) }, 14, CardH - 14);
             Place(new Rectangle { Width = _w - 28, Height = 5, Fill = UiColor.Brush(pcolor) }, 14, CardH - 14);
+            Part(OsdCardLayout.Icon, logo);
+            Part(OsdCardLayout.Name, name);
+            PartMade(OsdCardLayout.Bar, () => StaticBar(1, UiColor.Brush(_cfg.ColorBarBg), UiColor.Brush(pcolor), 5, 0));
         }
 
         // ── Info-Karten Modern (Profil, Position): ein gemeinsamer Aufbau ──────
@@ -808,16 +875,21 @@ namespace KnobFlyout.Osd
             glyphHost.Children.Add(icon);
             Place(glyphHost, 4, 10);
 
-            Place(new TextBlock
+            var titleText = new TextBlock
             {
                 Text = title, FontFamily = UiFont, FontSize = 15, FontWeight = FontWeights.SemiBold, Foreground = _fg,
                 Width = _w - TrackLeft - 16, TextTrimming = TextTrimming.CharacterEllipsis,
-            }, TrackLeft, 10);
-            Place(new TextBlock { Text = subtitle, FontFamily = UiFont, FontSize = 12, Foreground = _sub }, TrackLeft, 31);
+            };
+            Place(titleText, TrackLeft, 10);
+            var subText = new TextBlock { Text = subtitle, FontFamily = UiFont, FontSize = 12, Foreground = _sub };
+            Place(subText, TrackLeft, 31);
 
             double barW = _w - TrackLeft - 16;
             Place(new Rectangle { Width = barW, Height = 4, RadiusX = 2, RadiusY = 2, Fill = _trackBrush }, TrackLeft, CardH - 16);
             Place(new Rectangle { Width = barW * Math.Clamp(fraction, 0, 1), Height = 4, RadiusX = 2, RadiusY = 2, Fill = barFill }, TrackLeft, CardH - 16);
+            Part(OsdCardLayout.Icon, glyphHost);
+            Part(OsdCardLayout.Name, titleText, subText);
+            PartMade(OsdCardLayout.Bar, () => StaticBar(fraction, _trackBrush, barFill, 4, 2));
         }
 
         private void BuildProfileModern()
@@ -835,25 +907,35 @@ namespace KnobFlyout.Osd
         // ── Feststelltasten: schlicht wie die Windows-Anzeige (Schloss + "… ist an"), modern und Win11 ──
         private void BuildLockKeyClean(string name, bool on)
         {
-            string label = name switch
-            {
-                "CapsLock" => on ? Loc.T("Feststelltaste ist an", "Caps Lock is on") : Loc.T("Feststelltaste ist aus", "Caps Lock is off"),
-                "NumLock" => on ? Loc.T("Nummernblock ist an", "Num Lock is on") : Loc.T("Nummernblock ist aus", "Num Lock is off"),
-                _ => on ? Loc.T("Rollen ist an", "Scroll Lock is on") : Loc.T("Rollen ist aus", "Scroll Lock is off"),
-            };
+            string label = LockKeyName(_cfg, name) + (on ? Loc.T(" ist an", " is on") : Loc.T(" ist aus", " is off"));
 
             var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            row.Children.Add(new TextBlock
+            var icon = new TextBlock
             {
                 Text = on ? LockGlyph : UnlockGlyph, FontFamily = IconFont, FontSize = 15, Foreground = _fg,
                 VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0),
-            });
-            row.Children.Add(new TextBlock { Text = label, FontFamily = UiFont, FontSize = 14, Foreground = _fg, VerticalAlignment = VerticalAlignment.Center });
+            };
+            row.Children.Add(icon);
+            var text = new TextBlock { Text = label, FontFamily = UiFont, FontSize = 14, Foreground = _fg, VerticalAlignment = VerticalAlignment.Center };
+            row.Children.Add(text);
 
             var host = new Grid { Width = _w, Height = _h };
             host.Children.Add(row);
             Place(host, 0, 0);
+            Part(OsdCardLayout.Icon, icon);
+            Part(OsdCardLayout.Name, text);
         }
+
+        /// <summary>Name der Feststelltaste im OSD: eigener Text aus den Einstellungen (lock_key_names), sonst der Standardname.</summary>
+        internal static string LockKeyName(AppConfig cfg, string key) =>
+            cfg.LockKeyNames != null && cfg.LockKeyNames.TryGetValue(key, out var own) && !string.IsNullOrWhiteSpace(own) ? own.Trim() : DefaultLockKeyName(key);
+
+        internal static string DefaultLockKeyName(string key) => key switch
+        {
+            "CapsLock" => Loc.T("Feststelltaste", "Caps Lock"),
+            "NumLock" => Loc.T("Nummernblock", "Num Lock"),
+            _ => Loc.T("Rollen", "Scroll Lock"),
+        };
 
         private const string LockGlyph = "\uE72E";   // Lock
         private const string UnlockGlyph = "\uE785"; // Unlock
@@ -872,28 +954,29 @@ namespace KnobFlyout.Osd
         private void BuildLockKey(string name, bool on)
         {
             string icon = name switch { "CapsLock" => "⇪", "NumLock" => "🔢", _ => "⤓" };
-            string label = name switch
-            {
-                "CapsLock" => Loc.T("Feststelltaste", "Caps Lock"),
-                "NumLock" => Loc.T("Nummernblock", "Num Lock"),
-                _ => Loc.T("Rollen", "Scroll Lock"),
-            };
+            string label = LockKeyName(_cfg, name);
             string stateColor = on ? "#4ade80" : "#f87171";
 
-            Place(new TextBlock
+            var iconText = new TextBlock
             {
                 Text = icon, FontFamily = UiFont, FontSize = Pt(18),
                 Foreground = _modern ? _fg : UiColor.Brush("#aaaadd"),
-            }, 14, 10);
+            };
+            Place(iconText, 14, 10);
 
-            Place(new TextBlock
+            var title = new TextBlock
             {
                 Text = $"{label} {(on ? Loc.T("AN", "ON") : Loc.T("AUS", "OFF"))}", FontFamily = UiFont, FontSize = Pt(12), FontWeight = FontWeights.Bold,
                 Foreground = UiColor.Brush(stateColor),
-            }, 46, 14);
+            };
+            Place(title, 46, 14);
 
-            Place(new Rectangle { Width = _w - 28, Height = 5, Fill = _modern ? _trackBrush : UiColor.Brush(_cfg.ColorBarBg) }, 14, CardH - 14);
+            var track = _modern ? _trackBrush : UiColor.Brush(_cfg.ColorBarBg);
+            Place(new Rectangle { Width = _w - 28, Height = 5, Fill = track }, 14, CardH - 14);
             Place(new Rectangle { Width = on ? _w - 28 : 0, Height = 5, Fill = UiColor.Brush(stateColor) }, 14, CardH - 14);
+            Part(OsdCardLayout.Icon, iconText);
+            Part(OsdCardLayout.Name, title);
+            PartMade(OsdCardLayout.Bar, () => StaticBar(on ? 1 : 0, track, UiColor.Brush(stateColor), 5, 0));
         }
 
         // ── Snap-Position-Karte (entspricht show_snap_move) ────────────────────
@@ -902,20 +985,26 @@ namespace KnobFlyout.Osd
             string borderColor = _cfg.ColorSnapBorder;
             string textColor = _cfg.ColorSnapText;
 
-            Place(new TextBlock
+            var icon = new TextBlock
             {
                 Text = "📍", FontFamily = UiFont, FontSize = Pt(18),
                 Foreground = UiColor.Brush(textColor),
-            }, 14, 10);
+            };
+            Place(icon, 14, 10);
 
-            Place(new TextBlock
+            var name = new TextBlock
             {
                 Text = $"Position {index + 1}/{total}", FontFamily = UiFont, FontSize = Pt(13), FontWeight = FontWeights.Bold,
                 Foreground = UiColor.Brush(textColor),
-            }, 46, 14);
+            };
+            Place(name, 46, 14);
 
-            Place(new Rectangle { Width = _w - 28, Height = 5, Fill = _modern ? _trackBrush : UiColor.Brush(_cfg.ColorBarBg) }, 14, CardH - 14);
+            var track = _modern ? _trackBrush : UiColor.Brush(_cfg.ColorBarBg);
+            Place(new Rectangle { Width = _w - 28, Height = 5, Fill = track }, 14, CardH - 14);
             Place(new Rectangle { Width = _w - 28, Height = 5, Fill = UiColor.Brush(borderColor) }, 14, CardH - 14);
+            Part(OsdCardLayout.Icon, icon);
+            Part(OsdCardLayout.Name, name);
+            PartMade(OsdCardLayout.Bar, () => StaticBar(1, track, UiColor.Brush(borderColor), 5, 0));
         }
 
         // ── Hilfen ────────────────────────────────────────────────────────────

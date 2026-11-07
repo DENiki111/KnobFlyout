@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -23,8 +23,8 @@ namespace KnobFlyout.Audio
     /// <summary>
     /// Ersetzt SpotifyController (spotipy) aus knob_service.py: OAuth-Authorization-Code-Flow
     /// gegen die echte Spotify-Web-API, Token-Cache als .spotify_cache neben der exe, Lautstärke
-    /// mit sofort gecachtem Wert + 80ms-Debounce für den echten API-Call (wie im Original),
-    /// Hintergrund-Sync alle 5s. redirect_uri ist wie im Python-Original fest verdrahtet
+    /// mit sofort gecachtem Wert + gedrosseltem echten API-Call (Senderate passt sich an, siehe ScheduleFlush),
+    /// Hintergrund-Abgleich alle 10 s, nur wenn Spotify läuft. redirect_uri ist wie im Python-Original fest verdrahtet
     /// ("http://127.0.0.1:5000/callback/" inkl. Trailing-Slash wegen HttpListener) – dieselbe
     /// Adresse muss im Spotify-Dashboard als Redirect-URI eingetragen sein.
     /// </summary>
@@ -47,7 +47,7 @@ namespace KnobFlyout.Audio
         public SpotifyController()
         {
             LoadCacheFromDisk();
-            _syncTimer = new Timer(_ => SyncLoopTick(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+            _syncTimer = new Timer(_ => SyncLoopTick(), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
             _debounceTimer = new Timer(_ => _ = FlushVolumeAsync(), null, Timeout.Infinite, Timeout.Infinite);
         }
 
@@ -331,7 +331,28 @@ namespace KnobFlyout.Audio
             }
         }
 
-        /// <summary>Entspricht change_volume(delta): sofort gecachter Wert, echter API-Call debounced (80ms).</summary>
+        // ── Senderate ──
+        // Spotify zählt Anfragen in einem gleitenden 30-s-Fenster und nennt keine feste Grenze. Deshalb passt sich der
+        // Abstand selbst an: beim Drehen höchstens alle MinIntervalMs eine Anfrage (Wert folgt also schon während des
+        // Drehens), immer nur eine gleichzeitig und immer der neueste Wert. Meldet Spotify 429, wird bis Retry-After
+        // pausiert und der Abstand verdoppelt; ohne weitere 429 sinkt er langsam wieder. Gedreht wird während einer
+        // Pause trotzdem: Die Anzeige zeigt sofort den neuen Wert, gesendet wird der letzte Stand danach.
+        private const int CoalesceMs = 30;      // Rasten eines schnellen Drehs zusammenfassen
+        private const int MinIntervalMs = 200;  // schnellster Abstand zwischen zwei Anfragen (Start zu Start, also höchstens 5/s)
+        private const int MaxIntervalMs = 1600;
+        private int _intervalMs = MinIntervalMs;
+        private DateTime _flushAt = DateTime.MinValue; // geplanter Sendezeitpunkt
+        private int _sentVol = 50; // = _pendingVol am Anfang: nichts zu senden
+        private bool _sending;
+        private DateTime _lastSendAt = DateTime.MinValue;
+        private DateTime _blockedUntil = DateTime.MinValue;
+        private DateTime _last429 = DateTime.MinValue;
+        private DateTime _lastChange = DateTime.MinValue;
+        private long _changeSeq;
+        private AppConfig? _cfg;
+        private long _cfgStamp;
+
+        /// <summary>Entspricht change_volume(delta): sofort gecachter Wert, echter API-Call gedrosselt (siehe Senderate).</summary>
         public int? ChangeVolume(int delta)
         {
             if (!HasToken) return null;
@@ -341,34 +362,98 @@ namespace KnobFlyout.Audio
                 updated = Math.Clamp(_cachedVol + delta, 0, 100);
                 _cachedVol = updated;
                 _pendingVol = updated;
+                _lastChange = DateTime.UtcNow;
+                _changeSeq++;
             }
-
-            // Ein Timer für alle Drehungen: Change() startet die 80 ms neu (statt pro Rast einen neuen Timer).
-            try { _debounceTimer.Change(80, Timeout.Infinite); }
-            catch (ObjectDisposedException) { /* App wird beendet */ }
+            ScheduleFlush();
             return updated;
+        }
+
+        /// <summary>Nächste Anfrage planen: frühestens nach dem Abstand zur letzten bzw. nach einer 429-Pause.</summary>
+        private void ScheduleFlush()
+        {
+            int delay;
+            lock (_lock)
+            {
+                if (_sending) return; // die laufende Anfrage plant danach selbst nach
+                var now = DateTime.UtcNow;
+                if (_flushAt != DateTime.MinValue) return; // schon geplant (Timer kann etwas später feuern): weitere Rasten verschieben den Termin nicht, sonst käme beim schnellen Drehen nie etwas an
+                double wait = Math.Max(CoalesceMs, (_lastSendAt.AddMilliseconds(_intervalMs) - now).TotalMilliseconds);
+                wait = Math.Max(wait, (_blockedUntil - now).TotalMilliseconds);
+                delay = (int)Math.Ceiling(wait);
+                _flushAt = now.AddMilliseconds(delay);
+            }
+            try { _debounceTimer.Change(delay, Timeout.Infinite); }
+            catch (ObjectDisposedException) { /* App wird beendet */ }
+        }
+
+        private AppConfig CurrentConfig()
+        {
+            if (_cfg == null || ConfigManager.ChangedSince(ref _cfgStamp)) _cfg = ConfigManager.Load();
+            return _cfg;
         }
 
         private async Task FlushVolumeAsync()
         {
             int target;
-            lock (_lock) { target = _pendingVol; }
+            lock (_lock)
+            {
+                _flushAt = DateTime.MinValue;
+                if (_sending || _pendingVol == _sentVol) return;
+                target = _pendingVol;
+                _sending = true;
+                _lastSendAt = DateTime.UtcNow; // Abstand zählt von Start zu Start
+            }
+            bool again = false;
             try
             {
-                var cfg = ConfigManager.Load();
-                var accessToken = await EnsureAccessTokenAsync(cfg);
-                if (accessToken == null) return;
+                var accessToken = await EnsureAccessTokenAsync(CurrentConfig());
+                if (accessToken == null) { lock (_lock) _sentVol = target; return; }
 
                 using var req = new HttpRequestMessage(HttpMethod.Put, $"https://api.spotify.com/v1/me/player/volume?volume_percent={target}");
                 req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
                 using var resp = await _http.SendAsync(req);
-                if (!resp.IsSuccessStatusCode)
-                    Logger.Error($"Spotify Volume-Flush: {resp.StatusCode}");
+                var now = DateTime.UtcNow;
+                lock (_lock)
+                {
+                    if ((int)resp.StatusCode == 429)
+                    {
+                        double retry = resp.Headers.RetryAfter?.Delta?.TotalSeconds
+                            ?? (resp.Headers.RetryAfter?.Date is DateTimeOffset d ? (d - DateTimeOffset.UtcNow).TotalSeconds : 1);
+                        retry = Math.Clamp(retry, 0.5, 60);
+                        _blockedUntil = now.AddSeconds(retry);
+                        _intervalMs = Math.Min(MaxIntervalMs, _intervalMs * 2);
+                        _last429 = now;
+                        Logger.Info($"Spotify bremst (429): {retry:0.#} s Pause, danach Abstand {_intervalMs} ms");
+                    }
+                    else if (resp.IsSuccessStatusCode)
+                    {
+                        _sentVol = target;
+                        // 30 s ohne 429: Abstand langsam wieder verkürzen
+                        if (_intervalMs > MinIntervalMs && now - _last429 > TimeSpan.FromSeconds(30))
+                            _intervalMs = Math.Max(MinIntervalMs, _intervalMs - 50);
+                    }
+                    else
+                    {
+                        _sentVol = target; // anderer Fehler (z. B. kein aktives Gerät): nicht endlos wiederholen
+                        Logger.Error($"Spotify Volume-Flush: {resp.StatusCode}");
+                    }
+                }
             }
             catch (Exception ex)
             {
+                lock (_lock) _sentVol = target; // z. B. kein Netz: nicht endlos wiederholen, der nächste Dreh sendet neu
                 Logger.Error($"Spotify Volume-Flush: {ex.Message}");
             }
+            finally
+            {
+                lock (_lock)
+                {
+                    _sending = false;
+                    again = _pendingVol != _sentVol;
+                }
+            }
+            if (again) ScheduleFlush();
         }
 
         /// <summary>Entspricht toggle_mute().</summary>
@@ -389,24 +474,49 @@ namespace KnobFlyout.Audio
             return false;
         }
 
+        /// <summary>
+        /// Abgleich mit dem echten Spotify-Wert (falls in Spotify selbst geregelt wurde). Nur wenn Spotify hier läuft,
+        /// nicht kurz nach eigenem Drehen (sonst springt der Wert zurück) und nicht während einer 429-Pause.
+        /// </summary>
         private void SyncLoopTick()
         {
             if (!HasToken) return;
+            lock (_lock)
+            {
+                var now = DateTime.UtcNow;
+                if (_sending || _pendingVol != _sentVol || now - _lastChange < TimeSpan.FromSeconds(4) || now < _blockedUntil) return;
+            }
+            if (!SpotifyRunning()) return;
             _ = FetchRealVolumeAsync();
+        }
+
+        private static bool SpotifyRunning()
+        {
+            var procs = System.Diagnostics.Process.GetProcessesByName("Spotify");
+            foreach (var p in procs) p.Dispose();
+            return procs.Length > 0;
         }
 
         private async Task FetchRealVolumeAsync()
         {
             try
             {
-                var cfg = ConfigManager.Load();
+                var cfg = CurrentConfig();
                 if (!cfg.SpotifyUseApi) return;
+                long seq;
+                lock (_lock) seq = _changeSeq;
                 var accessToken = await EnsureAccessTokenAsync(cfg);
                 if (accessToken == null) return;
 
                 using var req = new HttpRequestMessage(HttpMethod.Get, "https://api.spotify.com/v1/me/player");
                 req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
                 using var resp = await _http.SendAsync(req);
+                if ((int)resp.StatusCode == 429)
+                {
+                    double retry = Math.Clamp(resp.Headers.RetryAfter?.Delta?.TotalSeconds ?? 5, 1, 60);
+                    lock (_lock) _blockedUntil = DateTime.UtcNow.AddSeconds(retry);
+                    return;
+                }
                 if (resp.StatusCode == HttpStatusCode.NoContent || !resp.IsSuccessStatusCode) return;
 
                 var body = await resp.Content.ReadAsStringAsync();
@@ -414,7 +524,12 @@ namespace KnobFlyout.Audio
                 if (doc.RootElement.TryGetProperty("device", out var device) &&
                     device.TryGetProperty("volume_percent", out var vp) && vp.ValueKind == JsonValueKind.Number)
                 {
-                    lock (_lock) { _cachedVol = vp.GetInt32(); }
+                    lock (_lock)
+                    {
+                        // Inzwischen gedreht: der eigene Wert ist neuer als die Antwort
+                        if (seq != _changeSeq || _sending) return;
+                        _cachedVol = _pendingVol = _sentVol = vp.GetInt32();
+                    }
                 }
             }
             catch (Exception ex)

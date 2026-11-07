@@ -30,6 +30,7 @@ namespace KnobFlyout.Osd
             "material" => new(SourcesLast, false, false, false, "left", 64, 16, "top", "center", false, false), // Knopfgruppe füllt die Breite
             "hud" => new(SourcesLast, false, false, false, "left", 60, 18, "top", "center", false, true),
             "hardware" => new(new[] { "info", "controls", "sources" }, true, true, false, "left", 56, 14, "controls", "left", false, true),
+            "knob" => new(SourcesLast, false, false, true, "left", 60, 15, "top", "center", false, true),
             _ => new(Standard, false, false, true, "right", 64, 14, "controls", "center", true, true), // ModernFlyouts
         };
 

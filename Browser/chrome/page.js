@@ -37,12 +37,23 @@
     if (!c) return null;
     const md = navigator.mediaSession && navigator.mediaSession.metadata;
     return {
+      site: "YouTube",
       volume: c.p.getVolume(),
       muted: c.p.isMuted(),
       // getPlayerState() liefert während Werbung -1, deshalb das video-Element fragen
       playing: !c.v.paused && !c.v.ended,
       title: (md && md.title) || document.title,
     };
+  }
+
+  // Sprung um by Sekunden über den Player (seekTo puffert wie die Pfeiltasten); Livestreams → seeked: false
+  function seek(c, by) {
+    const dur = c.p.getDuration();
+    const live = typeof c.p.getVideoData === "function" && c.p.getVideoData().isLive;
+    if (live || !isFinite(dur) || dur <= 0 || !isFinite(by)) return { ...state(), seeked: false };
+    const pos = Math.max(0, Math.min(dur - 0.25, c.p.getCurrentTime() + by));
+    c.p.seekTo(pos, true);
+    return { ...state(), seeked: true, pos, dur };
   }
 
   function push() {
@@ -62,7 +73,8 @@
     let s = null;
     try {
       const c = current();
-      if (c) {
+      if (c && m.op === "seek") s = seek(c, Number(m.value));
+      else if (c) {
         if (m.op === "set") c.p.setVolume(Math.max(0, Math.min(100, Math.round(m.value))));
         else if (m.op === "mute") m.value ? c.p.mute() : c.p.unMute();
         s = state();

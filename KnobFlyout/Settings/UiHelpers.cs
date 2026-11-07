@@ -64,7 +64,8 @@ namespace KnobFlyout.Settings
             ThumbBg = light ? B("#B4B4B4") : B("#606060");
             ThumbHoverBg = light ? B("#8E8E8E") : B("#8a8a8a");
             TrackBg = light ? B("#C2C2C2") : B("#5a5a5a");
-            SwitchTemplate = BuildSwitchTemplate();
+            SwitchTemplate = BuildSwitchTemplate(true);
+            SwitchTemplateStill = BuildSwitchTemplate(false);
         }
 
         public static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
@@ -204,15 +205,20 @@ namespace KnobFlyout.Settings
                 Padding = new Thickness(48, 10, 16, 12), Child = content,
             };
 
-            void Apply()
+            // Pfeil nach unten, dreht sich beim Aufklappen (statt das Zeichen zu tauschen)
+            chevron.Text = "\uE70D"; // ChevronDown
+            var turn = new RotateTransform(expanded ? 180 : 0);
+            chevron.RenderTransformOrigin = new Point(0.5, 0.5);
+            chevron.RenderTransform = turn;
+            body.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+            head.MouseEnter += (_, _) => Motion.Fade(head, HoverBg);
+            head.MouseLeave += (_, _) => Motion.Fade(head, Brushes.Transparent);
+            head.MouseLeftButtonUp += (_, _) =>
             {
-                body.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
-                chevron.Text = expanded ? "\uE70E" : "\uE70D"; // ChevronUp / ChevronDown
-            }
-            Apply();
-            head.MouseEnter += (_, _) => head.Background = HoverBg;
-            head.MouseLeave += (_, _) => head.Background = Brushes.Transparent;
-            head.MouseLeftButtonUp += (_, _) => { expanded = !expanded; Apply(); onExpandedChanged?.Invoke(expanded); };
+                expanded = !expanded;
+                Motion.Expand(body, turn, expanded, head.ActualWidth);
+                onExpandedChanged?.Invoke(expanded);
+            };
 
             var panel = new StackPanel();
             panel.Children.Add(head);
@@ -237,8 +243,8 @@ namespace KnobFlyout.Settings
                 };
                 if (!on)
                 {
-                    seg.MouseEnter += (_, _) => seg.Background = HoverBg;
-                    seg.MouseLeave += (_, _) => seg.Background = Brushes.Transparent;
+                    seg.MouseEnter += (_, _) => Motion.Fade(seg, HoverBg);
+                    seg.MouseLeave += (_, _) => Motion.Fade(seg, Brushes.Transparent);
                     seg.MouseLeftButtonUp += (_, _) => pick(chosen);
                 }
                 row.Children.Add(seg);
@@ -264,8 +270,8 @@ namespace KnobFlyout.Settings
             };
             if (!on)
             {
-                chip.MouseEnter += (_, _) => chip.Background = HoverBg;
-                chip.MouseLeave += (_, _) => chip.Background = FieldBg;
+                chip.MouseEnter += (_, _) => Motion.Fade(chip, HoverBg);
+                chip.MouseLeave += (_, _) => Motion.Fade(chip, FieldBg);
             }
             chip.MouseLeftButtonUp += (_, _) => click();
             return chip;
@@ -289,10 +295,43 @@ namespace KnobFlyout.Settings
             string On() => Loc.T("Ein", "On");
             string Off() => Loc.T("Aus", "Off");
             var cb = new CheckBox { IsChecked = value, Foreground = Fg, Content = value ? On() : Off(), Cursor = System.Windows.Input.Cursors.Hand };
-            if (SwitchTemplate != null) cb.Template = SwitchTemplate;
-            cb.Checked += (_, _) => { cb.Content = On(); onChange(true); };
-            cb.Unchecked += (_, _) => { cb.Content = Off(); onChange(false); };
+            var template = Motion.Enabled ? SwitchTemplate : SwitchTemplateStill;
+            if (template != null) cb.Template = template;
+            cb.Loaded += (_, _) => SwitchState(cb, false); // beim Erscheinen sofort richtig, nicht gleitend
+            cb.Checked += (_, _) => { cb.Content = On(); SwitchState(cb, true); onChange(true); };
+            cb.Unchecked += (_, _) => { cb.Content = Off(); SwitchState(cb, true); onChange(false); };
             return cb;
+        }
+
+        /// <summary>Schalter-Knopf an seine Stelle (an = rechts, Füllung in Akzentfarbe); animate = gleitend.</summary>
+        private static void SwitchState(CheckBox cb, bool animate)
+        {
+            if (cb.Template?.FindName("Thumb", cb) is not FrameworkElement thumb) return;
+            if (thumb.RenderTransform is not TransformGroup group || group.Children.Count < 2) return;
+            if (group.IsFrozen) { group = group.Clone(); thumb.RenderTransform = group; }
+            if (group.Children[1] is not TranslateTransform tt) return;
+            bool on = cb.IsChecked == true;
+            if (!Motion.Enabled) animate = false;
+            void Set(System.Windows.Media.Animation.Animatable target, DependencyProperty dp, double value, double ms)
+            {
+                if (animate)
+                    target.BeginAnimation(dp, new System.Windows.Media.Animation.DoubleAnimation(value, TimeSpan.FromMilliseconds(ms))
+                    { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } });
+                else
+                {
+                    target.BeginAnimation(dp, null);
+                    target.SetValue(dp, value);
+                }
+            }
+            void SetEl(UIElement? el, double value, double ms)
+            {
+                if (el == null) return;
+                if (animate) el.BeginAnimation(UIElement.OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(value, TimeSpan.FromMilliseconds(ms)));
+                else { el.BeginAnimation(UIElement.OpacityProperty, null); el.Opacity = value; }
+            }
+            Set(tt, TranslateTransform.XProperty, on ? 20 : 0, 180);
+            SetEl(cb.Template.FindName("OnFill", cb) as UIElement, on ? 1 : 0, 150);
+            SetEl(cb.Template.FindName("ThumbOn", cb) as UIElement, on ? 1 : 0, 150);
         }
 
         /// <summary>
@@ -334,8 +373,8 @@ namespace KnobFlyout.Settings
                 Background = Brushes.Transparent, BorderThickness = new Thickness(0), Foreground = SubFg,
                 ToolTip = tooltip, Cursor = System.Windows.Input.Cursors.Hand, VerticalAlignment = VerticalAlignment.Center,
             };
-            b.MouseEnter += (_, _) => b.Background = HoverBg;
-            b.MouseLeave += (_, _) => b.Background = Brushes.Transparent;
+            b.MouseEnter += (_, _) => Motion.Fade(b, HoverBg);
+            b.MouseLeave += (_, _) => Motion.Fade(b, Brushes.Transparent);
             b.Click += (_, _) => onClick();
             return b;
         }
@@ -394,12 +433,21 @@ namespace KnobFlyout.Settings
         // Toggle-Schalter wie in den Windows-Einstellungen ("Ein"/"Aus" links, Schalter rechts). Wird als
         // XAML-Vorlage zur Laufzeit geparst; schlägt das fehl, bleibt es still beim normalen CheckBox-Look.
         private static ControlTemplate? SwitchTemplate;
+        private static ControlTemplate? SwitchTemplateStill; // Animationen aus: Knopf wächst/streckt sich sofort
 
-        private static ControlTemplate? BuildSwitchTemplate()
+        private static ControlTemplate? BuildSwitchTemplate(bool animated)
         {
             try
             {
                 string off = Light ? "#6b6b6b" : "#c8c8c8";
+                // Schalter gleitet (TranslateTransform), Füllung und Knopffarbe blenden über, Knopf wächst beim Überfahren
+                // und streckt sich beim Drücken – wie in Windows 11.
+                const string ease = "<DoubleAnimation.EasingFunction><CubicEase EasingMode=\"EaseOut\"/></DoubleAnimation.EasingFunction>";
+                string Anim(string target, string prop, string to, string ms) =>
+                    $"<DoubleAnimation Storyboard.TargetName=\"{target}\" Storyboard.TargetProperty=\"{prop}\" To=\"{to}\" Duration=\"0:0:0.{(animated ? ms : "0")}\">{ease}</DoubleAnimation>";
+                string Story(params string[] anims) => "<BeginStoryboard><Storyboard>" + string.Concat(anims) + "</Storyboard></BeginStoryboard>";
+                const string SX = "(UIElement.RenderTransform).(TransformGroup.Children)[0].(ScaleTransform.ScaleX)";
+                const string SY = "(UIElement.RenderTransform).(TransformGroup.Children)[0].(ScaleTransform.ScaleY)";
                 string xaml =
                     "<ControlTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
                     "xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\" TargetType=\"CheckBox\">" +
@@ -407,16 +455,22 @@ namespace KnobFlyout.Settings
                     "<ContentPresenter VerticalAlignment=\"Center\" Margin=\"0,0,12,0\"/>" +
                     "<Grid Width=\"40\" Height=\"20\" VerticalAlignment=\"Center\">" +
                     $"<Border x:Name=\"Track\" CornerRadius=\"10\" BorderThickness=\"1\" BorderBrush=\"{off}\" Background=\"Transparent\"/>" +
-                    $"<Ellipse x:Name=\"Thumb\" Width=\"12\" Height=\"12\" Fill=\"{off}\" HorizontalAlignment=\"Left\" Margin=\"4,0,0,0\"/>" +
+                    "<Border x:Name=\"OnFill\" CornerRadius=\"10\" Background=\"#0078D4\" Opacity=\"0\"/>" +
+                    "<Grid x:Name=\"Thumb\" Width=\"12\" Height=\"12\" HorizontalAlignment=\"Left\" Margin=\"4,0,0,0\" RenderTransformOrigin=\"0.5,0.5\">" +
+                    "<Grid.RenderTransform><TransformGroup><ScaleTransform ScaleX=\"1\" ScaleY=\"1\"/><TranslateTransform X=\"0\"/></TransformGroup></Grid.RenderTransform>" +
+                    $"<Ellipse Fill=\"{off}\"/>" +
+                    "<Ellipse x:Name=\"ThumbOn\" Fill=\"White\" Opacity=\"0\"/>" +
+                    "</Grid>" +
                     "</Grid>" +
                     "</StackPanel>" +
                     "<ControlTemplate.Triggers>" +
-                    "<Trigger Property=\"IsChecked\" Value=\"True\">" +
-                    "<Setter TargetName=\"Track\" Property=\"Background\" Value=\"#0078D4\"/>" +
-                    "<Setter TargetName=\"Track\" Property=\"BorderBrush\" Value=\"#0078D4\"/>" +
-                    "<Setter TargetName=\"Thumb\" Property=\"Fill\" Value=\"White\"/>" +
-                    "<Setter TargetName=\"Thumb\" Property=\"HorizontalAlignment\" Value=\"Right\"/>" +
-                    "<Setter TargetName=\"Thumb\" Property=\"Margin\" Value=\"0,0,4,0\"/>" +
+                    "<Trigger Property=\"IsMouseOver\" Value=\"True\">" +
+                    "<Trigger.EnterActions>" + Story(Anim("Thumb", SX, "1.17", "12"), Anim("Thumb", SY, "1.17", "12")) + "</Trigger.EnterActions>" +
+                    "<Trigger.ExitActions>" + Story(Anim("Thumb", SX, "1", "15"), Anim("Thumb", SY, "1", "15")) + "</Trigger.ExitActions>" +
+                    "</Trigger>" +
+                    "<Trigger Property=\"IsPressed\" Value=\"True\">" +
+                    "<Trigger.EnterActions>" + Story(Anim("Thumb", SX, "1.45", "08")) + "</Trigger.EnterActions>" +
+                    "<Trigger.ExitActions>" + Story(Anim("Thumb", SX, "1.17", "12")) + "</Trigger.ExitActions>" +
                     "</Trigger>" +
                     "</ControlTemplate.Triggers>" +
                     "</ControlTemplate>";
@@ -477,6 +531,7 @@ namespace KnobFlyout.Settings
             w.Resources["ThemeTrack"] = TrackBg;
             if (w.Resources.MergedDictionaries.Count > 0) return;
 
+            Motion.Enabled = Config.ConfigManager.Load().SettingsAnimations;
             try
             {
                 w.Resources.MergedDictionaries.Add(new ResourceDictionary
@@ -487,6 +542,24 @@ namespace KnobFlyout.Settings
             catch (Exception ex)
             {
                 KnobFlyout.Logger.Error($"Theme.xaml: {ex.Message}");
+            }
+            SetMotionStyles(w, Motion.Enabled);
+        }
+
+        private static readonly Uri MotionStyles = new("/KnobFlyout;component/Settings/ThemeMotion.xaml", UriKind.Relative);
+
+        /// <summary>Animierte Scrollleiste und Knöpfe (ThemeMotion.xaml) über die ruhigen Stile legen bzw. wieder entfernen.</summary>
+        public static void SetMotionStyles(Window w, bool on)
+        {
+            try
+            {
+                var have = w.Resources.MergedDictionaries.FirstOrDefault(d => d.Source != null && d.Source.OriginalString == MotionStyles.OriginalString);
+                if (on && have == null) w.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = MotionStyles });
+                else if (!on && have != null) w.Resources.MergedDictionaries.Remove(have);
+            }
+            catch (Exception ex)
+            {
+                KnobFlyout.Logger.Error($"ThemeMotion.xaml: {ex.Message}");
             }
         }
 

@@ -164,8 +164,8 @@ namespace KnobFlyout.Osd
             if (buttons[0] is Border { Child: TextBlock prev }) prev.FontSize = 15;
             if (buttons[4] is Border { Child: TextBlock next }) next.FontSize = 15;
             _playPauseGlyph.FontSize = 15;
-            HwSkipLabel(_skipBackBtn, "−10");
-            HwSkipLabel(_skipFwdBtn, "+10");
+            HwSkipLabel(_skipBackBtn, SkipText(-1));
+            HwSkipLabel(_skipFwdBtn, SkipText(+1));
             controls.ColumnDefinitions.Clear();
             controls.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             controls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });

@@ -296,8 +296,32 @@ namespace KnobFlyout.Osd
             AppearFadeMs = 150, ContentDelayMs = 0, MediaAppearFromScale = 0.97,
         };
 
+        /// <summary>
+        /// Design 6 · Drehknopf: wie der Hardware-Regler, aber schlicht – kein Display, keine Schrauben, kein Rändel, kein Leuchten.
+        /// Flacher runder Knopf mit Zeiger und dünnem Pegel-Bogen (KnobParts), daneben normale Schrift; flache Fläche, ein Akzent.
+        /// </summary>
+        public static readonly DesignSpec Knob = new()
+        {
+            Key = "knob", NameDe = "Drehknopf", NameEn = "Knob",
+            Dark = new(Bg: "#1D1E21", Fg: "#ECECEA", Sub: "#8E9095", Track: "#34363B", Fill: "#FF7A33",
+                Button: "#2A2C30", Edge: "#1FFFFFFF", Mute: "#FF5A4E", On: "#FF7A33", OnText: "#1D1E21",
+                Off: "#34363B", OffText: "#8E9095", ArtPlaceholder: "#2A2C30",
+                Tile: "#2A2C30", OnAccent: "#1D1E21", MutedFill: "#4A4C52"),
+            Light = new(Bg: "#F5F5F3", Fg: "#1C1C1C", Sub: "#74757A", Track: "#DCDCD8", Fill: "#F2611D",
+                Button: "#E8E8E4", Edge: "#1F000000", Mute: "#E5322D", On: "#F2611D", OnText: "#FFFFFF",
+                Off: "#DCDCD8", OffText: "#74757A", ArtPlaceholder: "#E8E8E4",
+                Tile: "#E8E8E4", OnAccent: "#FFFFFF", MutedFill: "#C2C2BE"),
+            OsdWidth = 354, OsdHeight = 68, OsdRadius = 16,
+            PopupWidth = 354, PopupHeight = 120, PopupRadius = 16,
+            MediaRadius = 18,
+            Font = new FontFamily("Segoe UI Variable Text, Segoe UI"),
+            CenterCombined = false,
+            AppearMs = 180, HideMs = 200, AppearFromScale = 0.97, AppearFromScaleY = 0.97,
+            AppearFadeMs = 150, ContentDelayMs = 0, MediaAppearFromScale = 0.97,
+        };
+
         /// <summary>Alle Designs des Design-Systems (Reihenfolge = Reihenfolge in den Auswahllisten).</summary>
-        public static readonly DesignSpec[] All = { Island, Mac, Material, Hud, Hardware };
+        public static readonly DesignSpec[] All = { Island, Mac, Material, Hud, Hardware, Knob };
 
         /// <summary>Design zum Schlüssel aus osd_design/media_design, null = eines der älteren Designs.</summary>
         public static DesignSpec? Get(string? key) => All.FirstOrDefault(d => d.Key == key);

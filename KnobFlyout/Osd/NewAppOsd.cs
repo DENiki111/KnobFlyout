@@ -68,6 +68,8 @@ namespace KnobFlyout.Osd
                 Content = BuildHud(cfg, spec, alpha, processName);
             else if (ReferenceEquals(spec, Designs.Hardware))
                 Content = BuildHardware(cfg, spec, alpha, processName);
+            else if (ReferenceEquals(spec, Designs.Knob))
+                Content = BuildKnob(cfg, spec, alpha, processName);
             else if (spec != null)
                 Content = BuildSpec(cfg, spec, alpha, processName);
             else

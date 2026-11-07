@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -95,9 +95,11 @@ namespace KnobFlyout.Media
                 {
                     WatchSessions();
                     if (_session == null || !IsStillValid(_session)) Rehook();
+                    UpdateSkipKeys();
                     SourcesChanged?.Invoke();
                 };
                 WatchSessions();
+                UpdateSkipKeys();
                 Rehook();
             }
             catch (Exception ex)
@@ -138,7 +140,30 @@ namespace KnobFlyout.Media
             _watched.Clear();
         }
 
-        private void OnAnyPlayback(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args) => SourcesChanged?.Invoke();
+        private void OnAnyPlayback(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args)
+        {
+            UpdateSkipKeys();
+            SourcesChanged?.Invoke();
+        }
+
+        // Die Spul-Tasten gehören KnobFlyout nur, solange etwas spielt, und noch kurz danach; sonst gehen sie an die App im Vordergrund (z. B. ein Spiel).
+        private const int SkipKeysGraceMs = 10_000;
+        private volatile bool _anyPlaying;
+        private long _skipKeysUntil;
+
+        /// <summary>Etwas spielt, oder die letzte Pause bzw. der letzte Sprung ist höchstens 10 s her. Der Tastatur-Hook fragt das bei jedem Druck ab.</summary>
+        public bool SkipKeysActive => _anyPlaying || Environment.TickCount64 < System.Threading.Volatile.Read(ref _skipKeysUntil);
+
+        private void UpdateSkipKeys()
+        {
+            bool playing;
+            try { playing = _manager?.GetSessions().Any(IsPlaying) == true; }
+            catch { return; }
+            if (_anyPlaying && !playing) KeepSkipKeys();
+            _anyPlaying = playing;
+        }
+
+        private void KeepSkipKeys() => System.Threading.Volatile.Write(ref _skipKeysUntil, Environment.TickCount64 + SkipKeysGraceMs);
 
         private void Rehook()
         {
@@ -457,6 +482,7 @@ namespace KnobFlyout.Media
                     await stream.AsStreamForRead().CopyToAsync(ms);
                     if (ms.Length > 0) info.Thumbnail = ms.ToArray();
                 }
+                FilterStaleThumbnail(info, session.SourceAppUserModelId ?? "");
                 return info;
             }
             catch (Exception ex)
@@ -464,6 +490,30 @@ namespace KnobFlyout.Media
                 Logger.Error($"Media info: {ex.Message}");
                 return null;
             }
+        }
+
+        // Titel, zu dem das zuletzt gesehene Cover eines Browsers gehört (App, Titel, Interpret, Bild)
+        private (string App, string Title, string Artist, byte[] Thumb)? _thumbOwner;
+
+        private static readonly string[] BrowserNames = { "Firefox", "Chrome", "Edge", "Opera", "Brave", "Vivaldi" };
+
+        /// <summary>
+        /// Browser behalten das Cover des vorigen Titels, wenn eine Seite kein eigenes Bild meldet (z. B. Jellyfin).
+        /// Kommt beim Browser ein anderer Titel von einem anderen Interpreten mit genau demselben Bild, ist es das alte:
+        /// dann kein Cover (das Flyout zeigt den Platzhalter), bis ein eigenes Bild kommt.
+        /// Gleicher (nicht leerer) Interpret mit gleichem Bild (Album) bleibt erlaubt.
+        /// </summary>
+        internal void FilterStaleThumbnail(MediaInfo info, string appId)
+        {
+            // Name kann „Google Chrome“, „Opera GX“ o. Ä. lauten
+            if (info.Thumbnail == null || !BrowserNames.Any(b => info.AppName.Contains(b, StringComparison.OrdinalIgnoreCase))) return;
+            if (_thumbOwner is { } owner && owner.App == appId && owner.Thumb.AsSpan().SequenceEqual(info.Thumbnail))
+            {
+                bool album = info.Artist.Length > 0 && owner.Artist == info.Artist;
+                if (owner.Title != info.Title && !album) info.Thumbnail = null; // gehört zum vorigen Titel
+                return;
+            }
+            _thumbOwner = (appId, info.Title, info.Artist, info.Thumbnail);
         }
 
         /// <summary>Liest die Zeitleiste einer Session; null, wenn keine (z.B. Livestream ohne Dauer).</summary>
@@ -562,18 +612,27 @@ namespace KnobFlyout.Media
         /// <summary>Aktuelle Zeitleiste der gewählten Session (leichtgewichtig, ohne Cover/Titel).</summary>
         public MediaTimeline? GetTimeline() => _session == null ? null : ReadTimeline(_session);
 
-        /// <summary>Sprungweite für die ±-Knöpfe und die Skip-Hotkeys.</summary>
-        public const int SkipSeconds = 10;
+        /// <summary>
+        /// Sprung im Browser-Video über die Browser-Erweiterung (von App gesetzt): Browser ("firefox"/"chrome"/"opera"),
+        /// Sekunden, Titel und „spielt“ laut Windows → neue Position und Dauer, oder null, wenn es dort nicht ging.
+        /// </summary>
+        public Func<string, double, string?, bool, Task<(double Pos, double Dur)?>>? BrowserSkip { get; set; }
 
         /// <summary>
         /// Springt relativ zur aktuellen Stelle (z.B. +10 s / -10 s). Die Position wird aus der
         /// Zeitleiste hochgerechnet (Position + seit dem letzten Update vergangene Zeit, falls
         /// gerade gespielt wird) und auf 0..Dauer begrenzt. Zeigt danach das Flyout kurz erneut.
         /// </summary>
-        public void SkipBy(TimeSpan delta)
+        public async void SkipBy(TimeSpan delta)
         {
             var session = _session;
             if (session == null) return;
+            KeepSkipKeys();
+
+            // Browser: zuerst über die Erweiterung direkt im Video (klappt auch, wenn der Browser Windows keine
+            // Zeitleiste meldet); geht es dort nicht, wie bisher über Windows
+            if (await SkipInBrowserAsync(session, delta)) return;
+            if (_session != session) return; // inzwischen andere Quelle
 
             var tl = ReadTimeline(session);
             if (tl == null)
@@ -601,6 +660,37 @@ namespace KnobFlyout.Media
                 await Task.Delay(400);
                 Changed?.Invoke();
             });
+        }
+
+        private async Task<bool> SkipInBrowserAsync(GlobalSystemMediaTransportControlsSession session, TimeSpan delta)
+        {
+            var skip = BrowserSkip;
+            if (skip == null) return false;
+            string app = session.SourceAppUserModelId;
+            var browser = Audio.YouTubeBridge.BrowserOf(FriendlyAppName(app));
+            if (browser == null) return false;
+            try
+            {
+                string? title = null;
+                try { title = (await session.TryGetMediaPropertiesAsync())?.Title; } catch { /* ohne Titel: spielender Tab */ }
+                bool playing = IsPlaying(session);
+                var r = await skip(browser, delta.TotalSeconds, title, playing);
+                if (r == null) return false;
+                // Position merken, bis der Browser sie selbst meldet (Firefox meldet manchmal gar keine)
+                _manualPos = (TimeSpan.FromSeconds(r.Value.Pos), DateTimeOffset.Now);
+                _manualApp = app;
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(400);
+                    Changed?.Invoke();
+                });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Skip über Browser-Erweiterung: {ex.Message}");
+                return false;
+            }
         }
 
         /// <summary>Springt an eine Stelle (relativ zum Anfang) – nur sinnvoll, wenn die Quelle das erlaubt (CanSeek).</summary>

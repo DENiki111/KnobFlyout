@@ -36,7 +36,8 @@ namespace KnobFlyout.Osd
             const double lcdW = 88, lcdH = 46;
             double lcdX = _w - 2 - HwPad - lcdW;
             _lapp = PrintText("", 12, _fg);
-            Place(Labels(_lapp, HudParts.Caps(Loc.T("Lautstärke", "Volume")), lcdX - 12 - HwText), HwText, 0);
+            var labels = Labels(_lapp, HudParts.Caps(Loc.T("Lautstärke", "Volume")), lcdX - 12 - HwText);
+            Place(labels, HwText, 0);
 
             _hwSeg = new SevenSegment(hw);
             _hwMuteText = new TextBlock
@@ -52,6 +53,11 @@ namespace KnobFlyout.Osd
             lcd.Width = lcdW;
             lcd.Height = lcdH;
             Place(lcd, lcdX, (_h - 2 - lcdH) / 2);
+
+            _stretchBar = false; // der Drehknopf behält seine Größe, der Name füllt
+            Part(OsdCardLayout.Bar, _hwKnob);
+            Part(OsdCardLayout.Name, labels);
+            Part(OsdCardLayout.Value, lcd);
         }
 
         private void UpdateHardware(string clean, int pct, bool muted)
@@ -69,12 +75,15 @@ namespace KnobFlyout.Osd
             var hw = Hw;
             var profiles = ProfileDefinitions.For(_cfg);
             int idx = Math.Max(0, profiles.ToList().FindIndex(p => p.Key == _cfg.ActiveProfile));
-            Place(new DialView(hw, profiles, profiles.Count > 0 ? idx : -1), 9, 5);
+            var dial = new DialView(hw, profiles, profiles.Count > 0 ? idx : -1);
+            Place(dial, 9, 5);
             var name = LcdText(profiles.Count > 0 ? profiles[idx].Name.ToUpperInvariant() : "PROFILE", 19, hw);
             var lcd = HardwareParts.Lcd(hw, _pal!.Hi ?? "#00000000", name, new Thickness(12, 0, 12, 0));
             lcd.Width = _w - 2 - HwText - HwPad;
             lcd.Height = 44;
             Place(lcd, HwText, (_h - 2 - 44) / 2);
+            Part(OsdCardLayout.Icon, dial);
+            Part(OsdCardLayout.Name, lcd);
         }
 
         /// <summary>Feststelltasten: LED (grün leuchtend bzw. matt) · NAME / Tastenname · Display „AN“/„AUS“.</summary>
@@ -82,17 +91,15 @@ namespace KnobFlyout.Osd
         {
             var pal = _pal!;
             var hw = Hw;
-            var (label, code) = name switch
-            {
-                "CapsLock" => (Loc.T("Feststelltaste", "Caps Lock"), "Caps Lock"),
-                "NumLock" => (Loc.T("Nummernblock", "Num Lock"), "Num Lock"),
-                _ => (Loc.T("Rollen", "Scroll Lock"), "Scroll Lock"),
-            };
-            Place(HardwareParts.Led(14, on ? pal.On : null, hw), 17, (_h - 2 - 14) / 2);
+            string label = LockKeyName(_cfg, name);
+            string code = name switch { "CapsLock" => "Caps Lock", "NumLock" => "Num Lock", _ => "Scroll Lock" };
+            var led = HardwareParts.Led(14, on ? pal.On : null, hw);
+            Place(led, 17, (_h - 2 - 14) / 2);
             const double lcdW = 64, lcdH = 36;
             double lcdX = _w - 2 - HwPad - lcdW;
             var title = PrintText(HudParts.Caps(label), 13, _fg);
-            Place(Labels(title, HudParts.Caps(Loc.T(code, "Lock key")), lcdX - 12 - 45), 45, 0);
+            var labels = Labels(title, HudParts.Caps(Loc.T(code, "Lock key")), lcdX - 12 - 45);
+            Place(labels, 45, 0);
             var state = LcdText(on ? Loc.T("AN", "ON") : Loc.T("AUS", "OFF"), 16, hw);
             state.HorizontalAlignment = HorizontalAlignment.Center;
             if (!on)
@@ -104,6 +111,9 @@ namespace KnobFlyout.Osd
             lcd.Width = lcdW;
             lcd.Height = lcdH;
             Place(lcd, lcdX, (_h - 2 - lcdH) / 2);
+            Part(OsdCardLayout.Icon, led);
+            Part(OsdCardLayout.Name, labels);
+            Part(OsdCardLayout.State, lcd);
         }
 
         /// <summary>Positionswechsel: „POSITION“ / „2 VON 3“ · Speichertasten 1–N (aktive gedrückt mit LED); ab 9 Positionen „2/12“ im Display.</summary>
@@ -112,7 +122,8 @@ namespace KnobFlyout.Osd
             var hw = Hw;
             const double left = 21;
             var title = PrintText(HudParts.Caps("Position"), 13, _fg);
-            Place(Labels(title, HudParts.Caps(Loc.T($"{index + 1} von {total}", $"{index + 1} of {total}")), 100), left, 0);
+            var labels = Labels(title, HudParts.Caps(Loc.T($"{index + 1} von {total}", $"{index + 1} of {total}")), 100);
+            Place(labels, left, 0);
 
             var host = new Grid { Width = _w - 2 - HwPad - left - 110, Height = _h - 2 };
             if (total <= 8)
@@ -145,6 +156,8 @@ namespace KnobFlyout.Osd
                 host.Children.Add(lcd);
             }
             Place(host, left + 110, 0);
+            Part(OsdCardLayout.Name, labels);
+            Part(OsdCardLayout.Bar, host);
         }
 
         /// <summary>Beschriftung wie aufgedruckt: Titel und kleine graue Unterzeile, senkrecht mittig in der Kartenhöhe.</summary>

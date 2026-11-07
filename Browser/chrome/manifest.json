@@ -1,25 +1,40 @@
 {
   "manifest_version": 3,
-  "name": "KnobFlyout YT-Bridge",
-  "version": "1.0.2",
-  "description": "Lets KnobFlyout change the volume of the YouTube player itself instead of the whole browser.",
+  "name": "KnobFlyout Browser-Bridge",
+  "version": "1.2.0",
+  "description": "Lets KnobFlyout change the volume of the video player itself (YouTube, Twitch, TikTok, Instagram, Netflix, Prime Video, Disney+, Crunchyroll, Joyn, VOE, Jellyfin) instead of the whole browser.",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "background": { "service_worker": "background.js" },
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/*"],
-      "js": ["page.js"],
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://m.youtube.com/*",
+        "https://www.youtube-nocookie.com/*"
+      ],
+      "js": [
+        "page.js"
+      ],
       "world": "MAIN",
+      "all_frames": true,
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://www.youtube.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "sites.js",
+        "content.js"
+      ],
+      "all_frames": true,
       "run_at": "document_idle"
     }
   ]

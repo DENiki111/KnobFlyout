@@ -146,7 +146,7 @@ namespace KnobFlyout.Config
         }
     }
 
-    /// <summary>Unter einem Namen gespeichertes OSD-Design: Grund-Design, eigene Farben, Deckkraft und Ecken.</summary>
+    /// <summary>Unter einem Namen gespeichertes OSD-Design: Grund-Design, Aufbau der Karten, eigene Farben, Deckkraft und Ecken.</summary>
     public sealed class SavedOsdDesign
     {
         [JsonPropertyName("name")] public string Name { get; set; } = "";
@@ -155,6 +155,7 @@ namespace KnobFlyout.Config
         [JsonPropertyName("opacity")] public double Opacity { get; set; }
         [JsonPropertyName("content_opacity")] public int ContentOpacity { get; set; }
         [JsonPropertyName("corner_radius")] public int CornerRadius { get; set; }
+        [JsonPropertyName("layout"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public OsdCardLayout? Layout { get; set; }
 
         /// <summary>Felder des Designs „Eigenes“, in der Reihenfolge von Fields.</summary>
         [JsonPropertyName("custom")] public List<string> Custom { get; set; } = new();
@@ -183,6 +184,7 @@ namespace KnobFlyout.Config
             Opacity = c.WinAlpha,
             ContentOpacity = c.OsdContentOpacity,
             CornerRadius = c.OsdCornerRadius,
+            Layout = c.CardLayout() is { IsEmpty: false } layout ? layout : null,
             Custom = Fields.Select(f => f.Get(c)).ToList(),
         };
 

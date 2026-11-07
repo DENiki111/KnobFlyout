@@ -14,6 +14,11 @@ namespace KnobFlyout.Config
         [JsonPropertyName("y")] public int Y { get; set; }
         [JsonPropertyName("media_x")] public int? MediaX { get; set; }
         [JsonPropertyName("media_y")] public int? MediaY { get; set; }
+        // Kachel und Bildschirm, aus denen der Punkt per Auswahl entstand (für die Anzeige in den Kacheln); fehlt bei älteren Punkten
+        [JsonPropertyName("osd_tile"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? OsdTile { get; set; }
+        [JsonPropertyName("osd_device"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? OsdDevice { get; set; }
+        [JsonPropertyName("media_tile"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? MediaTile { get; set; }
+        [JsonPropertyName("media_device"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? MediaDevice { get; set; }
     }
 
     /// <summary>Gespeicherter Arbeitsbereich eines Bildschirms (WPF-Einheiten), um Auflösungswechsel zu erkennen.</summary>
@@ -42,6 +47,12 @@ namespace KnobFlyout.Config
         [JsonPropertyName("osd_duration")] public int OsdDuration { get; set; } = 2500;
         /// <summary>OSD für Feststell-, Num- und Rollen-Taste anzeigen.</summary>
         [JsonPropertyName("lock_keys_osd")] public bool LockKeysOsd { get; set; } = true;
+        /// <summary>Lautstärke-/Media-Flyout von Windows 10 ausblenden (Osd/NativeFlyout).</summary>
+        [JsonPropertyName("hide_windows_flyout")] public bool HideWindowsFlyout { get; set; } = false;
+        /// <summary>Animationen in Einstellungen und Tutorial (Überblenden, Klick, Seitenwechsel, Schalter, Aufklappen).</summary>
+        [JsonPropertyName("settings_animations")] public bool SettingsAnimations { get; set; } = true;
+        /// <summary>Eigener Text je Feststelltaste im OSD (CapsLock/NumLock/ScrollLock → Name); fehlt/leer = Standardname.</summary>
+        [JsonPropertyName("lock_key_names")] public Dictionary<string, string> LockKeyNames { get; set; } = new();
         [JsonPropertyName("osd_x")] public int? OsdX { get; set; }
         [JsonPropertyName("osd_y")] public int? OsdY { get; set; }
 
@@ -52,6 +63,8 @@ namespace KnobFlyout.Config
 
         /// <summary>YT-Bridge: spielt in Firefox/Chrome ein YouTube-Video, regelt der Knopf den YouTube-Player statt der Browser-Session (braucht die Erweiterung aus Browser/firefox bzw. Browser/chrome).</summary>
         [JsonPropertyName("youtube_bridge")] public bool YoutubeBridge { get; set; } = false;
+        /// <summary>Browser-Addon: Webseiten, deren Player der Knopf NICHT regeln soll (Namen wie in YouTubeBridge.Sites) – dort regelt er wie ohne Addon den Browser.</summary>
+        [JsonPropertyName("bridge_sites_off")] public List<string> BridgeSitesOff { get; set; } = new();
 
         /// <summary>Einführung: Häkchen „Nicht mehr anzeigen“ – ohne es erscheint sie bei jedem Öffnen der Einstellungen.</summary>
         [JsonPropertyName("tutorial_hidden")] public bool TutorialHidden { get; set; } = false;
@@ -181,7 +194,23 @@ namespace KnobFlyout.Config
         {
             OsdSavedActive = "";
             ClearOsdColors();
+            OsdLayouts.Remove(OsdColorKey);
             if (OsdDesign == "dark") SavedOsdDesign.ResetCustom(this);
+        }
+
+        /// <summary>Aufbau der OSD-Karten je Design (Design → Aufbau); in der Praxis nur im Entwurf von „Design anpassen“ belegt, gespeichert wird als eigenes Design.</summary>
+        [JsonPropertyName("osd_layouts")] public Dictionary<string, OsdCardLayout> OsdLayouts { get; set; } = new();
+
+        /// <summary>Aufbau der OSD-Karten des gewählten Designs (bei einem eigenen Design dessen); Änderungen über SetCardLayout.</summary>
+        public OsdCardLayout CardLayout() => ActiveOsdDesign is { } own ? own.Layout?.Clone() ?? new OsdCardLayout()
+            : OsdLayouts.TryGetValue(OsdColorKey, out var layout) ? layout.Clone() : new OsdCardLayout();
+
+        public void SetCardLayout(OsdCardLayout layout)
+        {
+            var value = layout.IsEmpty ? null : layout;
+            if (ActiveOsdDesign is { } own) own.Layout = value;
+            else if (value == null) OsdLayouts.Remove(OsdColorKey);
+            else OsdLayouts[OsdColorKey] = value;
         }
 
         // Bis 1.3 gab es den Aufbau nur für „Eigenes“, Zeitleiste/±10 s/„…“ galten für alle Designs: werden beim Laden in
@@ -216,15 +245,55 @@ namespace KnobFlyout.Config
 
         /// <summary>
         /// Einträge im "…"-Menü des Media-Flyouts (Reihenfolge egal): "shuffle", "repeat", "switch_source",
-        /// "keep", "skip_hotkeys", "pin", "save_position", "next_position", "reset_position", "settings", "close".
+        /// "keep", "bridge", "skip_hotkeys", "skip_playing", "pin", "save_position", "next_position", "reset_position", "settings", "close".
         /// </summary>
         [JsonPropertyName("media_more_items")] public List<string> MediaMoreItems { get; set; } = new() { "shuffle", "repeat", "keep" };
 
         /// <summary>„Dauerhaft anzeigen“ wurde einmalig ins „…“-Menü aufgenommen (danach bleibt es die Wahl des Nutzers).</summary>
         [JsonPropertyName("media_more_keep_added")] public bool MediaMoreKeepAdded { get; set; }
 
+        /// <summary>„Browser-Erweiterung an/aus“ wurde einmalig ins „…“-Menü aufgenommen.</summary>
+        [JsonPropertyName("media_more_bridge_added")] public bool MediaMoreBridgeAdded { get; set; }
+
+        /// <summary>„Skip nur bei Wiedergabe“ wurde einmalig ins „…“-Menü aufgenommen.</summary>
+        [JsonPropertyName("media_more_skip_playing_added")] public bool MediaMoreSkipPlayingAdded { get; set; }
+
+        /// <summary>Rechtsklick aufs Media-Flyout öffnet das „…“-Menü an der Maus.</summary>
+        [JsonPropertyName("media_right_click_menu")] public bool MediaRightClickMenu { get; set; } = false;
+
+        /// <summary>Lite-Modus: Der Knopf regelt nur die Windows-Lautstärke (KnobFlyout-OSD nach osd_enabled), dazu das Media-Flyout; keine Profile.</summary>
+        [JsonPropertyName("lite_mode")] public bool LiteMode { get; set; } = false;
+
+        /// <summary>Wie der Knopf gerade regelt: "apps" (Apps des aktiven Profils), "master" (Windows-Lautstärke über KnobFlyout) oder "windows" (Tasten an Windows).
+        /// Windows-Lautstärke bei ausgeschaltetem OSD geht an Windows durch, damit die normale Windows-Anzeige erscheint.</summary>
+        public string VolumeRoute()
+        {
+            string route;
+            if (LiteMode) route = "master";
+            else
+            {
+                var entry = ProfileList.FirstOrDefault(p => p.Key == ActiveProfile) ?? ProfileList.FirstOrDefault();
+                route = entry?.SystemVolume switch
+                {
+                    "knobflyout" => "master",
+                    "windows" => "windows",
+                    _ => "apps",
+                };
+            }
+            return route == "master" && !Osd ? "windows" : route;
+        }
+
         /// <summary>Hotkeys für ±10 s aktiv (per "…"-Menü schnell umschaltbar, ohne die Tasten zu löschen).</summary>
         [JsonPropertyName("media_skip_hotkeys_enabled")] public bool MediaSkipHotkeysEnabled { get; set; } = true;
+
+        /// <summary>Skip-Hotkeys nur, solange etwas spielt (und bis 10 s nach Pause/Skip); sonst geht die Taste an die App im Vordergrund. Aus = immer KnobFlyout.</summary>
+        [JsonPropertyName("media_skip_only_playing")] public bool MediaSkipOnlyPlaying { get; set; } = true;
+
+        /// <summary>Skip-Weite in Sekunden für die Skip-Hotkeys und die ±-Knöpfe im Flyout (Einstellung 5–60).</summary>
+        [JsonPropertyName("media_skip_seconds")] public int MediaSkipSeconds { get; set; } = 10;
+
+        /// <summary>Skip-Weite, auf 1–600 s begrenzt (falls in der config.json von Hand Unsinn steht).</summary>
+        public int SkipSeconds() => Math.Clamp(MediaSkipSeconds, 1, 600);
 
         /// <summary>Eckenradius in px (0 = eckig) der OSD-Karten/Neue-App-Popup bzw. des Media-Flyouts.</summary>
         [JsonPropertyName("osd_corner_radius")] public int OsdCornerRadius { get; set; } = 8;
@@ -314,6 +383,11 @@ namespace KnobFlyout.Config
         [JsonPropertyName("media_skip_forward_hotkey")] public string MediaSkipForwardHotkey { get; set; } = "";
         [JsonPropertyName("media_skip_back_hotkey")] public string MediaSkipBackHotkey { get; set; } = "";
 
+        /// <summary>Eigene Hotkeys für Lauter / Leiser / Stumm (leer = keiner), wirken wie die Lautstärke-Tasten des Drehknopfs.</summary>
+        [JsonPropertyName("volume_up_hotkey")] public string VolumeUpHotkey { get; set; } = "";
+        [JsonPropertyName("volume_down_hotkey")] public string VolumeDownHotkey { get; set; } = "";
+        [JsonPropertyName("volume_mute_hotkey")] public string VolumeMuteHotkey { get; set; } = "";
+
         /// <summary>Fortschrittsleiste im gewählten Design (Teil des Aufbaus).</summary>
         [JsonIgnore] public bool MediaShowProgress { get => Layout().Shows(MediaLayout.Progress); set => Layout().Set(MediaLayout.Progress, value); }
 
@@ -322,6 +396,8 @@ namespace KnobFlyout.Config
 
         /// <summary>„Design anpassen“: Vorschau als echtes Flyout mit dem, was gerade läuft, statt mit dem Beispiel.</summary>
         [JsonPropertyName("media_preview_live")] public bool MediaPreviewLive { get; set; } = false;
+        [JsonPropertyName("osd_preview_live")] public bool OsdPreviewLive { get; set; } = false;          // „Design anpassen“: OSD-Vorschau folgt dem echten Knopf
+        [JsonPropertyName("design_preview_screen")] public bool DesignPreviewScreen { get; set; } = false; // „Design anpassen“: Entwurf echt auf dem Bildschirm
 
         /// <summary>Quellen-Leiste im gewählten Design (Teil des Aufbaus).</summary>
         [JsonIgnore] public bool MediaShowSources { get => Layout().Shows(MediaLayout.Sources); set => Layout().Set(MediaLayout.Sources, value); }
@@ -382,11 +458,18 @@ namespace KnobFlyout.Config
             else MediaLayouts[MediaDesign] = layout;
         }
 
-        /// <summary>Voreinstellung wählen: kein eigenes Design mehr aktiv; „Eigenes“ beginnt mit den Standardfarben (seine Farben stehen in den eigenen Designs).</summary>
+        /// <summary>
+        /// Voreinstellung wählen: kein eigenes Design mehr aktiv; „Eigenes“ beginnt mit den Standardfarben (seine Farben stehen in den eigenen Designs).
+        /// Cover als Hintergrund gehört zu „Design anpassen“ und damit zu den eigenen Designs: die Voreinstellung zeigt es wie im Standard.
+        /// </summary>
         public void SelectMediaPreset(string design)
         {
             MediaDesign = design;
             MediaSavedActive = "";
+            var d = new AppConfig();
+            MediaArtBackground = d.MediaArtBackground;
+            MediaArtBlur = d.MediaArtBlur;
+            MediaArtDim = d.MediaArtDim;
             if (design == "custom") ResetCustomColors();
         }
 
@@ -475,6 +558,16 @@ namespace KnobFlyout.Config
                 MediaMoreKeepAdded = true;
                 if (!MediaMoreItems.Contains("keep")) MediaMoreItems.Add("keep");
             }
+            if (!MediaMoreBridgeAdded)
+            {
+                MediaMoreBridgeAdded = true;
+                if (!MediaMoreItems.Contains("bridge")) MediaMoreItems.Add("bridge");
+            }
+            if (!MediaMoreSkipPlayingAdded)
+            {
+                MediaMoreSkipPlayingAdded = true;
+                if (!MediaMoreItems.Contains("skip_playing")) MediaMoreItems.Add("skip_playing");
+            }
         }
 
         /// <summary>Entspricht cfg.get(f"profile_color_{key}", color) – jetzt aus profile_list.</summary>
@@ -497,5 +590,10 @@ namespace KnobFlyout.Config
         [JsonPropertyName("color")] public string Color { get; set; } = "#3b82f6";
         /// <summary>Zuweisen-Taste: weist im Neue-App-Popup die angezeigte App diesem Profil zu (leer = keine), z. B. "ctrl+alt+1".</summary>
         [JsonPropertyName("assign_hotkey")] public string AssignHotkey { get; set; } = "";
+        /// <summary>
+        /// Was das Profil regelt: "" = seine Apps; "knobflyout" = die Windows-Lautstärke über KnobFlyout (KnobFlyout-OSD);
+        /// "windows" = die Lautstärke-Tasten gehen an Windows durch (Windows regelt und zeigt sein OSD).
+        /// </summary>
+        [JsonPropertyName("system_volume")] public string SystemVolume { get; set; } = "";
     }
 }

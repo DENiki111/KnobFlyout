@@ -152,7 +152,7 @@ namespace KnobFlyout.Osd
             if (pal.HighlightOverlay(_radius - 1) is { } hi) _host.Children.Add(hi);
         }
 
-        /// <summary>±10-s-Knopf wie die SF-Symbole „gobackward.10“/„goforward.10“: Kreispfeil mit „10“ in der Mitte.</summary>
+        /// <summary>±-Knopf wie die SF-Symbole „gobackward.10“/„goforward.10“: Kreispfeil mit der Skip-Weite in der Mitte.</summary>
         private void MacSkipIcon(Border button, string arrow)
         {
             var g = new Grid();
@@ -163,7 +163,7 @@ namespace KnobFlyout.Osd
             });
             g.Children.Add(new TextBlock
             {
-                Text = "10", FontFamily = _spec!.Font, FontSize = 9, FontWeight = FontWeights.Bold, Foreground = _subBrush,
+                Text = _skipSec.ToString(), FontFamily = _spec!.Font, FontSize = 9, FontWeight = FontWeights.Bold, Foreground = _subBrush,
                 HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 1, 0, 0),
             });

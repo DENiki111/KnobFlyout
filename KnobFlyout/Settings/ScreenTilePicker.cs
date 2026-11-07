@@ -35,6 +35,8 @@ namespace KnobFlyout.Settings
         private bool _silent; // Set() ändert den Bildschirm, ohne Changed auszulösen
         private readonly Border _screen;
         private readonly Border[] _tiles = new Border[9];
+        private readonly TextBlock[] _labels = new TextBlock[9];
+        private List<(string Tile, string Device, string Text)> _marks = new();
         private readonly TextBlock _status;
         private readonly Button? _customButton;
         private int _hover = -1;
@@ -57,13 +59,11 @@ namespace KnobFlyout.Settings
             Device = device ?? "";
             Preset = Array.IndexOf(Tiles, preset) >= 0 ? preset! : "custom";
 
-            var items = new List<string> { T("Hauptbildschirm", "Main display") };
-            items.AddRange(monitors.Select((m, i) => Placement.MonitorLabel(m, i)));
-            _monitorCombo = Combo(width, MonitorIndex(Device), items.ToArray());
+            _monitorCombo = Combo(width, MonitorIndex(Device), MonitorItems(monitors));
             _monitorCombo.HorizontalAlignment = HorizontalAlignment.Left;
             _monitorCombo.SelectionChanged += (_, _) =>
             {
-                Device = _monitorCombo.SelectedIndex <= 0 ? "" : _monitors[_monitorCombo.SelectedIndex - 1].Device;
+                Device = DeviceAt(_monitors, _monitorCombo.SelectedIndex);
                 SizeScreen();
                 if (!_silent) Changed?.Invoke();
             };
@@ -78,10 +78,12 @@ namespace KnobFlyout.Settings
             for (int i = 0; i < Tiles.Length; i++)
             {
                 int idx = i;
+                var label = new TextBlock { FontSize = 10, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+                _labels[i] = label;
                 var tile = new Border
                 {
                     CornerRadius = new CornerRadius(3), Margin = new Thickness(2), BorderThickness = new Thickness(1),
-                    Cursor = Cursors.Hand, ToolTip = TileName(Tiles[i]),
+                    Cursor = Cursors.Hand, ToolTip = TileName(Tiles[i]), Child = label,
                 };
                 tile.MouseEnter += (_, _) => { _hover = idx; Paint(); };
                 tile.MouseLeave += (_, _) => { if (_hover == idx) _hover = -1; Paint(); };
@@ -144,9 +146,37 @@ namespace KnobFlyout.Settings
             Paint();
         }
 
-        /// <summary>Eintrag in der Bildschirm-Auswahl: 0 = Hauptbildschirm, sonst Position in der Liste + 1.</summary>
-        private int MonitorIndex(string? device) =>
-            string.IsNullOrEmpty(device) ? 0 : Math.Max(0, _monitors.FindIndex(m => m.Device == device) + 1);
+        /// <summary>Beschriftungen in den Kacheln (z. B. Nummern gespeicherter Positionen); nur die des angezeigten Bildschirms erscheinen.</summary>
+        public void SetMarks(IEnumerable<(string Tile, string Device, string Text)> marks)
+        {
+            _marks = marks.ToList();
+            Paint();
+        }
+
+        private bool SameDevice(string a, string b)
+        {
+            string Norm(string d) => string.IsNullOrEmpty(d) ? _monitors.FirstOrDefault(m => m.Primary)?.Device ?? "" : d;
+            return string.Equals(Norm(a), Norm(b), StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Einträge der Bildschirm-Auswahl: jeder Bildschirm einmal, der Hauptbildschirm mit „(Haupt)“.</summary>
+        internal static string[] MonitorItems(List<MonitorArea> monitors) => monitors.Count == 0
+            ? new[] { T("Hauptbildschirm", "Main display") }
+            : monitors.Select((m, i) => Placement.MonitorLabel(m, i)).ToArray();
+
+        /// <summary>Eintrag zu einem Gerätenamen; "" und Unbekanntes = Hauptbildschirm.</summary>
+        internal static int MonitorIndexOf(List<MonitorArea> monitors, string? device)
+        {
+            int i = string.IsNullOrEmpty(device) ? -1 : monitors.FindIndex(m => m.Device == device);
+            if (i < 0) i = monitors.FindIndex(m => m.Primary);
+            return Math.Max(0, i);
+        }
+
+        /// <summary>Gerätename zum Eintrag; der Hauptbildschirm wird als "" gespeichert (folgt einem Wechsel des Hauptbildschirms).</summary>
+        internal static string DeviceAt(List<MonitorArea> monitors, int index) =>
+            index < 0 || index >= monitors.Count || monitors[index].Primary ? "" : monitors[index].Device;
+
+        private int MonitorIndex(string? device) => MonitorIndexOf(_monitors, device);
 
         public static string TileName(string preset) => preset switch
         {
@@ -187,6 +217,8 @@ namespace KnobFlyout.Settings
                 bool selected = Tiles[i] == Preset;
                 _tiles[i].Background = selected ? Accent : i == _hover ? HoverBg : FieldBg;
                 _tiles[i].BorderBrush = selected ? Accent : FieldBorder;
+                _labels[i].Text = string.Join("\n", _marks.Where(m => m.Tile == Tiles[i] && SameDevice(m.Device, Device)).Select(m => m.Text));
+                _labels[i].Foreground = selected ? Brushes.White : Fg;
             }
             bool custom = Preset == "custom";
             _status.Text = custom ? T("Eigene Position", "Own position") : TileName(Preset);

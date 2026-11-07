@@ -17,3 +17,6 @@ CLAUDE.md
 
 # Pakete
 *.zip
+
+# Signierschlüssel für Erweiterungen (Opera/Chrome)
+*.pem

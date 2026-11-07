@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
+using KnobFlyout.Config;
 using KnobFlyout.Profiles;
 
 namespace KnobFlyout.Osd
@@ -60,6 +61,21 @@ namespace KnobFlyout.Osd
             };
             track.Children.Add(_glyph);
             Place(track, MacPad, 32);
+
+            Part(OsdCardLayout.Icon, _glyph);
+            Part(OsdCardLayout.Name, _lapp);
+            PartMade(OsdCardLayout.Bar, () =>
+            {
+                Detach(track);
+                track.Width = mover.Width = double.NaN;
+                Track(track, w =>
+                {
+                    track.Clip = new RectangleGeometry(new Rect(0, 0, w, MacSlider), MacSlider / 2, MacSlider / 2);
+                    _macTravel = w - MacSlider;
+                });
+                return track;
+            });
+            Part(OsdCardLayout.Value, _lpct);
         }
 
         private void UpdateMac(string clean, int pct, bool muted)
@@ -86,34 +102,42 @@ namespace KnobFlyout.Osd
             var profiles = ProfileDefinitions.For(_cfg);
             var def = profiles.FirstOrDefault(p => p.Key == _cfg.ActiveProfile) ?? profiles.FirstOrDefault();
             var row = MacRow(GridLength.Auto, new GridLength(1, GridUnitType.Star));
-            Cell(row, def != null ? MacParts.ProfileTile(def, MacTileSize, 18)
-                : MacParts.GlyphTile("\uE734", MacTileSize, 18, UiColor.Brush(_pal!.Tile ?? _pal.Button), _fg), 0);
+            FrameworkElement tile = def != null ? MacParts.ProfileTile(def, MacTileSize, 18)
+                : MacParts.GlyphTile("\uE734", MacTileSize, 18, UiColor.Brush(_pal!.Tile ?? _pal.Button), _fg);
+            Cell(row, tile, 0);
             var name = MacText(def?.Name ?? "Profile", 15, _fg, FontWeights.SemiBold);
             name.Margin = new Thickness(12, 0, 0, 0);
             Cell(row, name, 1);
+            Part(OsdCardLayout.Icon, tile);
+            Part(OsdCardLayout.Name, name);
         }
 
         /// <summary>Feststelltasten: Schloss-Kachel · Name + „Ein“/„Aus“ · Schalter.</summary>
         private void BuildLockKeyMac(string name, bool on)
         {
-            string label = name switch
-            {
-                "CapsLock" => Loc.T("Feststelltaste", "Caps Lock"),
-                "NumLock" => Loc.T("Nummernblock", "Num Lock"),
-                _ => Loc.T("Rollen", "Scroll Lock"),
-            };
+            string label = LockKeyName(_cfg, name);
             var row = MacRow(GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto);
-            Cell(row, MacParts.GlyphTile(on ? LockGlyph : UnlockGlyph, MacTileSize, 18, UiColor.Brush(_pal!.Tile ?? _pal.Button), _fg), 0);
-            Cell(row, MacTitle(label, on ? Loc.T("An", "On") : Loc.T("Aus", "Off")), 1);
-            Cell(row, MacParts.Switch(on, _pal), 2);
+            FrameworkElement icon = MacParts.GlyphTile(on ? LockGlyph : UnlockGlyph, MacTileSize, 18, UiColor.Brush(_pal!.Tile ?? _pal.Button), _fg);
+            Cell(row, icon, 0);
+            var title = MacTitle(label, on ? Loc.T("An", "On") : Loc.T("Aus", "Off"));
+            Cell(row, title, 1);
+            FrameworkElement state = MacParts.Switch(on, _pal);
+            Cell(row, state, 2);
+            Part(OsdCardLayout.Icon, icon);
+            Part(OsdCardLayout.Name, title);
+            Part(OsdCardLayout.State, state);
         }
 
         /// <summary>Positionswechsel: Stecknadel-Kachel · „Position n“ + „von N“ · Seitenpunkte (bis 8).</summary>
         private void BuildSnapInfoMac(int index, int total)
         {
             var row = MacRow(GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto);
-            Cell(row, MacParts.GlyphTile("\uE707", MacTileSize, 18, UiColor.Brush(_pal!.Tile ?? _pal.Button), _fg), 0); // MapPin
-            Cell(row, MacTitle($"Position {index + 1}", Loc.T($"von {total}", $"of {total}")), 1);
+            FrameworkElement icon = MacParts.GlyphTile("\uE707", MacTileSize, 18, UiColor.Brush(_pal!.Tile ?? _pal.Button), _fg); // MapPin
+            Cell(row, icon, 0);
+            var title = MacTitle($"Position {index + 1}", Loc.T($"von {total}", $"of {total}"));
+            Cell(row, title, 1);
+            Part(OsdCardLayout.Icon, icon);
+            Part(OsdCardLayout.Name, title);
             if (total > 8) return;
             var dots = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             for (int i = 0; i < total; i++)
@@ -123,6 +147,7 @@ namespace KnobFlyout.Osd
                     Fill = i == index ? _fg : _trackBrush,
                 });
             Cell(row, dots, 2);
+            Part(OsdCardLayout.Bar, dots);
         }
 
         /// <summary>Zeile über die ganze Karte (Innenabstand 14 px), senkrecht mittig.</summary>

@@ -94,22 +94,26 @@ namespace KnobFlyout
             _hook.VolumeUp += (_, _) => { ToTutorial(t => t.OnKnobKey()); _worker.EnqueueVolume(+1, ApplyVolume); };
             _hook.VolumeDown += (_, _) => { ToTutorial(t => t.OnKnobKey()); _worker.EnqueueVolume(-1, ApplyVolume); };
             _hook.MutePressed += (_, _) => { ToTutorial(t => t.OnKnobKey()); _worker.Enqueue(ApplyMute); };
-            _hook.ProfileHotkeyPressed += (_, _) => Task.Run(() => { CycleProfile(); ToTutorial(t => t.OnProfileHotkey()); });
+            _hook.ProfileHotkeyPressed += (_, _) => Task.Run(() => { CycleProfile(); UpdateVolumeRouting(ConfigManager.Load()); ToTutorial(t => t.OnProfileHotkey()); });
             // Zuweisen-Taste im offenen Neue-App-Popup: angezeigte App diesem Profil zuweisen.
             _hook.ProfileAssignRequested += key => Dispatcher.BeginInvoke(new Action(() => _newAppOsd?.AssignTo(key)));
             _hook.LockKeyToggled += (name, on) => Dispatcher.BeginInvoke(new Action(() => { _osd?.ShowLockKey(name, on); _tutorial?.OnLockKey(name, on); }));
             _hook.SnapCycleRequested += (_, _) => Dispatcher.BeginInvoke(new Action(() => { CycleSnapPosition(); _tutorial?.OnSnapCycle(); }));
             _hook.MediaSourceSwitchRequested += (_, _) => Dispatcher.BeginInvoke(new Action(() => { _media.CycleSource(); _tutorial?.OnMediaGesture("source"); }));
             _hook.MediaNextRequested += (_, _) => Dispatcher.BeginInvoke(new Action(() => { _media.Next(); _tutorial?.OnMediaGesture("next"); }));
+            _hook.SkipKeysAllowed = () => _media.SkipKeysActive;
             _hook.MediaSkipRequested += dir => Dispatcher.BeginInvoke(new Action(() =>
             {
-                _media.SkipBy(TimeSpan.FromSeconds(Media.MediaController.SkipSeconds * dir));
+                _media.SkipBy(TimeSpan.FromSeconds(ConfigManager.Load().SkipSeconds() * dir));
                 _tutorial?.OnSkipKey(dir);
             }));
+            UpdateVolumeRouting(ConfigManager.Load());
+            Osd.NativeFlyout.Apply(ConfigManager.Load().HideWindowsFlyout);
             _hook.Install();
 
             StartNewAppDetection();
             _ = InitializeMediaAsync();
+            ScheduleTrim(TimeSpan.FromSeconds(20)); // Speicher vom Start zurückgeben
 
             // Auflösung/Monitore: beim Start mit dem gespeicherten Aufbau vergleichen, danach live verfolgen.
             OnDisplayChanged();
@@ -236,6 +240,8 @@ namespace KnobFlyout
                     catch (Exception ex) { Logger.Error($"Media: {ex.Message}"); }
                 }));
                 _media.SourcesChanged += () => Dispatcher.BeginInvoke(new Action(RefreshKeep));
+                // Skip im Browser-Video zuerst über die Browser-Erweiterung, sonst über Windows
+                _media.BrowserSkip = (browser, seconds, title, playing) => _youtube.SeekAsync(browser, seconds, title, playing);
                 _keepRecheck.Tick += (_, _) =>
                 {
                     _keepRecheck.Stop();
@@ -388,6 +394,7 @@ namespace KnobFlyout
             m.ConfigChanged += () =>
             {
                 _hook?.ReloadConfig();
+                _youtube.Apply(ConfigManager.Load()); // „…“-Menü: Browser-Erweiterung an oder aus
                 RefreshKeep(); // „…“-Menü: Daueranzeige an oder aus
             };
             m.MenuActionRequested += OnMediaMenuAction;
@@ -439,21 +446,47 @@ namespace KnobFlyout
             }
         }
 
+        /// <summary>Profil „Windows-Lautstärke über Windows“: Lautstärke-Tasten gehen an Windows durch.</summary>
+        private void UpdateVolumeRouting(AppConfig cfg)
+        {
+            if (_hook != null) _hook.PassVolumeKeys = cfg.VolumeRoute() == "windows";
+        }
+
         /// <summary>Entspricht _exec() in _do_vol().</summary>
         private void ApplyVolume(int steps)
         {
             var cfg = ConfigManager.Load();
+            if (cfg.VolumeRoute() == "master")
+            {
+                // Lite-Modus bzw. Profil „Windows-Lautstärke über KnobFlyout“
+                var master = new List<(string Name, int Value)> { ("Windows", SessionVolumeController.ChangeMaster(steps * cfg.Step)) };
+                _osd?.Show(master, false);
+                ToTutorial(t => t.OnVolumeResult(master, steps));
+                ToSettings(w => w.OnVolumeResult(master));
+                return;
+            }
             var results = _audio.ChangeVolume(cfg, steps, _spotify, _youtube);
             if (results.Count > 0) _osd?.Show(results, false);
             ToTutorial(t => t.OnVolumeResult(results, steps));
+            ToSettings(w => w.OnVolumeResult(results));
         }
 
         /// <summary>Entspricht _exec() in _do_mute().</summary>
         private void ApplyMute()
         {
             var cfg = ConfigManager.Load();
+            if (cfg.VolumeRoute() == "master")
+            {
+                bool muted = SessionVolumeController.ToggleMasterMute();
+                var m = new List<(string Name, bool Muted)> { ("Windows", muted) };
+                ToTutorial(t => t.OnMuteResult(m));
+                ToSettings(w => w.OnMuteResult(m));
+                _osd?.Show(new List<(string, int)> { ("Windows", SessionVolumeController.ReadMaster()) }, muted);
+                return;
+            }
             var r = _audio.ToggleMute(cfg, _spotify, _youtube);
             ToTutorial(t => t.OnMuteResult(r));
+            ToSettings(w => w.OnMuteResult(r));
             if (r.Count == 0) return;
             _osd?.Show(r.Select(x => (x.Name, 0)).ToList(), r[0].Muted);
         }
@@ -461,6 +494,7 @@ namespace KnobFlyout
         /// <summary>Entspricht _do_profile_cycle()/_do_profile_cycle_impl() inkl. Skip-Modus.</summary>
         private void CycleProfile()
         {
+            if (ConfigManager.Load().LiteMode) return; // Lite-Modus: keine Profile
             if (!Monitor.TryEnter(_profileLock)) return; // läuft schon ein Wechsel → ignorieren
             try
             {
@@ -480,7 +514,8 @@ namespace KnobFlyout
 
                 _audio.InvalidateCache();
                 var sess = _audio.GetSessions();
-                var active = keys.Where(k => _audio.ProfileHasActive(k, cfg, sess)).ToList();
+                // Profile mit Windows-Lautstärke haben keine Apps, sind aber immer „belegt“
+                var active = keys.Where(k => cfg.ProfileList.Any(p => p.Key == k && p.SystemVolume.Length > 0) || _audio.ProfileHasActive(k, cfg, sess)).ToList();
 
                 if (active.Count == 0)
                 {
@@ -545,6 +580,7 @@ namespace KnobFlyout
             try
             {
                 var cfg = ConfigManager.Load();
+                if (cfg.LiteMode) return; // Lite-Modus: keine Profile, also auch nichts einzusortieren
                 var seen = cfg.SeenApps.Select(a => a.ToLowerInvariant()).ToHashSet();
                 var excluded = cfg.Exclude.Select(a => a.ToLowerInvariant()).ToHashSet();
                 var assigned = cfg.Profiles.Values.SelectMany(v => v).Select(a => a.ToLowerInvariant()).ToHashSet();
@@ -714,9 +750,11 @@ namespace KnobFlyout
             t.Closed += (_, _) =>
             {
                 _tutorial = null;
-                bool open = _settingsAfterTutorial || t.RequestedSettingsPage != null;
+                bool open = _settingsAfterTutorial || t.RequestedSettingsPage != null || t.RequestedTour;
                 _settingsAfterTutorial = false;
-                if (open) OpenSettingsWindow(t.RequestedSettingsPage ?? "general");
+                if (!open) { ScheduleTrim(TimeSpan.FromSeconds(2)); return; }
+                var window = OpenSettingsWindow(t.RequestedSettingsPage ?? "general");
+                if (t.RequestedTour) window.Dispatcher.BeginInvoke(new Action(window.StartTour), System.Windows.Threading.DispatcherPriority.ContextIdle);
             };
             _tutorial = t;
             t.Show();
@@ -731,7 +769,7 @@ namespace KnobFlyout
             _tutorial = t;
             t.ShowDialog();
             _tutorial = null;
-            return t.RequestedSettingsPage;
+            return t.RequestedTour ? Settings.SettingsWindow.TourPage : t.RequestedSettingsPage;
         }
 
         private Settings.TutorialWindow NewTutorial()
@@ -753,12 +791,20 @@ namespace KnobFlyout
             Dispatcher.BeginInvoke(new Action(() => { if (_tutorial != null) action(_tutorial); }));
         }
 
-        private void OpenSettingsWindow(string page)
+        /// <summary>Wirkung des Knopfs an die offenen Einstellungen (Live-OSD in „Design anpassen“).</summary>
+        private void ToSettings(Action<Settings.SettingsWindow> action)
+        {
+            if (_settingsWindow == null) return;
+            Dispatcher.BeginInvoke(new Action(() => { if (_settingsWindow != null) action(_settingsWindow); }));
+        }
+
+        private Settings.SettingsWindow OpenSettingsWindow(string page)
         {
             var window = new Settings.SettingsWindow(_spotify, _youtube, null, page, _media);
             AttachSettings(window);
             window.Show();
             window.Activate();
+            return window;
         }
 
         /// <summary>
@@ -772,16 +818,39 @@ namespace KnobFlyout
             window.Closed += (_, _) =>
             {
                 if (ReferenceEquals(_settingsWindow, window)) _settingsWindow = null;
+                ScheduleTrim(TimeSpan.FromSeconds(2));
             };
             window.Replaced += AttachSettings;
             window.ConfigApplied += OnSettingsConfigApplied;
             window.TutorialRequested += ShowTutorialDialog;
         }
 
+        private System.Windows.Threading.DispatcherTimer? _trimTimer;
+
+        /// <summary>Speicher freigeben, sobald Einstellungen und Einführung zu sind (Hintergrundbetrieb bleibt schlank).</summary>
+        private void ScheduleTrim(TimeSpan delay)
+        {
+            if (_trimTimer == null)
+            {
+                _trimTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                _trimTimer.Tick += (_, _) =>
+                {
+                    _trimTimer.Stop();
+                    if (_settingsWindow != null || _tutorial != null) return;
+                    MemoryTrim.Run();
+                };
+            }
+            _trimTimer.Stop();
+            _trimTimer.Interval = delay;
+            _trimTimer.Start();
+        }
+
         /// <summary>Settings hat gespeichert, Positionen zurückgesetzt oder die Config neu geladen: Sprache übernehmen, Flyouts neu ausrichten.</summary>
         private void OnSettingsConfigApplied()
         {
             var cfg = ConfigManager.Load();
+            UpdateVolumeRouting(cfg);
+            Osd.NativeFlyout.Apply(cfg.HideWindowsFlyout);
             Loc.Apply(cfg);
             _hook?.ReloadConfig();
             _osdFollowsMedia = cfg.OsdFollowsMedia();
@@ -805,6 +874,7 @@ namespace KnobFlyout
         protected override void OnExit(ExitEventArgs e)
         {
             IsExiting = true;
+            Osd.NativeFlyout.Apply(false); // Windows-Flyout nach dem Beenden wieder normal
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             _newAppTimer?.Stop();
             _newAppOsd?.Close();

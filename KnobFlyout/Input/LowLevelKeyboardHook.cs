@@ -25,6 +25,7 @@ namespace KnobFlyout.Input
         private LowLevelKeyboardProc? _procRef;
         private DispatcherTimer? _watchdog;
         private DispatcherTimer? _cfgTimer;
+        private long _cfgStamp; // Stand der config.json beim letzten Nachladen
         private bool _loggedInstall;
 
         private readonly HashSet<int> _modsHeld = new();
@@ -44,6 +45,14 @@ namespace KnobFlyout.Input
         private HashSet<int> _skipBackMods = new();
         private int _skipBackMain;
         private bool _skipBackDown;
+        private volatile bool _skipOnlyPlaying = true; // aus: Skip-Hotkeys gehören immer KnobFlyout, auch wenn nichts spielt
+
+        // Eigene Hotkeys für Lauter/Leiser/Stumm (leer = keiner); wirken wie die Lautstärke-Tasten des Knopfs.
+        // Lauter/Leiser wiederholen beim Halten wie die echten Tasten, Stumm einmal pro Druck.
+        private HashSet<int> _volUpMods = new(), _volDownMods = new(), _volMuteMods = new();
+        private int _volUpMain, _volDownMain, _volMuteMain;
+        private bool _volUpDown, _volDownDown, _volMuteDown;
+        private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
 
         /// <summary>
         /// Eine Medien-Aktion auf Taste + Geste. Taste = Medien-Play/Pause (wird NICHT geblockt, Windows
@@ -90,6 +99,9 @@ namespace KnobFlyout.Input
             _gestures = new[] { _switchGesture, _nextGesture };
         }
 
+        /// <summary>Lautstärke-Tasten nicht abfangen (Profil „Windows-Lautstärke über Windows“): Windows regelt und zeigt sein OSD.</summary>
+        public volatile bool PassVolumeKeys;
+
         public event EventHandler? VolumeUp;
         public event EventHandler? VolumeDown;
         public event EventHandler? MutePressed;
@@ -107,8 +119,10 @@ namespace KnobFlyout.Input
         /// <summary>Geste für "Nächster Titel" erkannt (media_next_enabled/_key/_gesture).</summary>
         public event EventHandler? MediaNextRequested;
 
-        /// <summary>Feuert bei einem der Skip-Hotkeys: +1 = 10 s vor, -1 = 10 s zurück. Die Taste wird geblockt.</summary>
+        /// <summary>Feuert bei einem der Skip-Hotkeys: +1 = 10 s vor, -1 = 10 s zurück. Die Taste wird geblockt, solange SkipKeysAllowed zustimmt (oder media_skip_only_playing aus ist); sonst geht sie an die App im Vordergrund.</summary>
         public event Action<int>? MediaSkipRequested;
+
+        public Func<bool>? SkipKeysAllowed { get; set; }
 
         /// <summary>Zuweisen-Taste eines Profils im offenen Neue-App-Popup gedrückt (Argument = Profil-Key). Die Taste wird geblockt.</summary>
         public event Action<string>? ProfileAssignRequested;
@@ -128,7 +142,7 @@ namespace KnobFlyout.Input
             // Hotkey-Config regelmäßig außerhalb des Hook-Callbacks nachladen: Datei-I/O im Callback
             // kann LowLevelHooksTimeout überschreiten, dann entfernt Windows den Hook stillschweigend.
             _cfgTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(HotkeyCfgRefreshMs) };
-            _cfgTimer.Tick += (_, _) => RefreshHotkeyTarget();
+            _cfgTimer.Tick += (_, _) => { if (Config.ConfigManager.ChangedSince(ref _cfgStamp)) RefreshHotkeyTarget(); };
             _cfgTimer.Start();
         }
 
@@ -166,6 +180,10 @@ namespace KnobFlyout.Input
                 // Abgeschaltet: wie "kein Hotkey" behandeln (Main = 0), die Tasten bleiben gespeichert.
                 (_skipFwdMods, _skipFwdMain) = HotkeyParser.Parse(cfg.MediaSkipHotkeysEnabled ? cfg.MediaSkipForwardHotkey : "");
                 (_skipBackMods, _skipBackMain) = HotkeyParser.Parse(cfg.MediaSkipHotkeysEnabled ? cfg.MediaSkipBackHotkey : "");
+                _skipOnlyPlaying = cfg.MediaSkipOnlyPlaying;
+                (_volUpMods, _volUpMain) = HotkeyParser.Parse(cfg.VolumeUpHotkey);
+                (_volDownMods, _volDownMain) = HotkeyParser.Parse(cfg.VolumeDownHotkey);
+                (_volMuteMods, _volMuteMain) = HotkeyParser.Parse(cfg.VolumeMuteHotkey);
                 Configure(_switchGesture, cfg.MediaSwitchEnabled, cfg.MediaSwitchKey, cfg.MediaSwitchGesture);
                 Configure(_nextGesture, cfg.MediaNextEnabled, cfg.MediaNextKey, cfg.MediaNextGesture);
                 _mediaHoldMs = cfg.MediaSwitchHoldMs;
@@ -213,17 +231,17 @@ namespace KnobFlyout.Input
                         {
                             _modsHeld.Add(vkNorm);
                         }
-                        else if (vk == VK_VOLUME_UP)
+                        else if (vk == VK_VOLUME_UP && !PassVolumeKeys)
                         {
                             VolumeUp?.Invoke(this, EventArgs.Empty);
                             return (IntPtr)1;
                         }
-                        else if (vk == VK_VOLUME_DOWN)
+                        else if (vk == VK_VOLUME_DOWN && !PassVolumeKeys)
                         {
                             VolumeDown?.Invoke(this, EventArgs.Empty);
                             return (IntPtr)1;
                         }
-                        else if (vk == VK_VOLUME_MUTE)
+                        else if (vk == VK_VOLUME_MUTE && !PassVolumeKeys)
                         {
                             MutePressed?.Invoke(this, EventArgs.Empty);
                             return (IntPtr)1;
@@ -249,15 +267,33 @@ namespace KnobFlyout.Input
                         }
                         if (blockGesture) return (IntPtr)1;
 
-                        if (_skipFwdMain != 0 && vk == _skipFwdMain && _skipFwdMods.IsSubsetOf(_modsHeld))
+                        if (_skipFwdMain != 0 && vk == _skipFwdMain && _skipFwdMods.IsSubsetOf(_modsHeld) && (_skipFwdDown || !_skipOnlyPlaying || SkipKeysAllowed?.Invoke() != false))
                         {
                             if (!_skipFwdDown) { _skipFwdDown = true; MediaSkipRequested?.Invoke(+1); }
                             return (IntPtr)1;
                         }
 
-                        if (_skipBackMain != 0 && vk == _skipBackMain && _skipBackMods.IsSubsetOf(_modsHeld))
+                        if (_skipBackMain != 0 && vk == _skipBackMain && _skipBackMods.IsSubsetOf(_modsHeld) && (_skipBackDown || !_skipOnlyPlaying || SkipKeysAllowed?.Invoke() != false))
                         {
                             if (!_skipBackDown) { _skipBackDown = true; MediaSkipRequested?.Invoke(-1); }
+                            return (IntPtr)1;
+                        }
+
+                        if (_volUpMain != 0 && vk == _volUpMain && _volUpMods.IsSubsetOf(_modsHeld))
+                        {
+                            _volUpDown = true;
+                            VolumeHotkey(VK_VOLUME_UP);
+                            return (IntPtr)1;
+                        }
+                        if (_volDownMain != 0 && vk == _volDownMain && _volDownMods.IsSubsetOf(_modsHeld))
+                        {
+                            _volDownDown = true;
+                            VolumeHotkey(VK_VOLUME_DOWN);
+                            return (IntPtr)1;
+                        }
+                        if (_volMuteMain != 0 && vk == _volMuteMain && _volMuteMods.IsSubsetOf(_modsHeld))
+                        {
+                            if (!_volMuteDown) { _volMuteDown = true; VolumeHotkey(VK_VOLUME_MUTE); }
                             return (IntPtr)1;
                         }
 
@@ -287,6 +323,9 @@ namespace KnobFlyout.Input
                         _lockKeysDown.Remove(vk);
                         if (_skipFwdMain != 0 && vk == _skipFwdMain && _skipFwdDown) { _skipFwdDown = false; return (IntPtr)1; }
                         if (_skipBackMain != 0 && vk == _skipBackMain && _skipBackDown) { _skipBackDown = false; return (IntPtr)1; }
+                        if (_volUpDown && vk == _volUpMain) { _volUpDown = false; return (IntPtr)1; }
+                        if (_volDownDown && vk == _volDownMain) { _volDownDown = false; return (IntPtr)1; }
+                        if (_volMuteDown && vk == _volMuteMain) { _volMuteDown = false; return (IntPtr)1; }
                         foreach (var b in _profileBindings)
                             if (b.Down && vk == b.Main) { b.Down = false; return (IntPtr)1; }
 
@@ -328,6 +367,26 @@ namespace KnobFlyout.Input
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Eigener Lautstärke-Hotkey: wie die Lautstärke-Taste des Knopfs. Gehen die Lautstärke-Tasten gerade an Windows
+        /// (PassVolumeKeys), wird die echte Taste nachgeschickt (außerhalb des Hook-Aufrufs) – Windows regelt und zeigt sein OSD.
+        /// </summary>
+        private void VolumeHotkey(int volumeVk)
+        {
+            if (PassVolumeKeys)
+            {
+                _dispatcher.BeginInvoke(new Action(() =>
+                {
+                    keybd_event((byte)volumeVk, 0, KEYEVENTF_EXTENDEDKEY, UIntPtr.Zero);
+                    keybd_event((byte)volumeVk, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, UIntPtr.Zero);
+                }));
+                return;
+            }
+            if (volumeVk == VK_VOLUME_UP) VolumeUp?.Invoke(this, EventArgs.Empty);
+            else if (volumeVk == VK_VOLUME_DOWN) VolumeDown?.Invoke(this, EventArgs.Empty);
+            else MutePressed?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>

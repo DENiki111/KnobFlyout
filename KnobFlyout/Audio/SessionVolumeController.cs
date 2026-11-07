@@ -180,7 +180,7 @@ namespace KnobFlyout.Audio
                     if (yv.HasValue)
                     {
                         youtubeDone.Add(browser);
-                        results.Add(("YouTube", yv.Value));
+                        results.Add((youtube.PlayingSite(browser) ?? "YouTube", yv.Value));
                         continue;
                     }
                 }
@@ -199,6 +199,59 @@ namespace KnobFlyout.Audio
                 }
             }
             return results;
+        }
+
+        /// <summary>Gesamtlautstärke von Windows (Standard-Wiedergabegerät) um delta Prozentpunkte ändern; liefert den neuen Wert.</summary>
+        public static int ChangeMaster(int delta)
+        {
+            try
+            {
+                using var enumerator = new MMDeviceEnumerator();
+                using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                var vol = device.AudioEndpointVolume;
+                float next = Math.Clamp(vol.MasterVolumeLevelScalar + delta / 100f, 0f, 1f);
+                vol.MasterVolumeLevelScalar = next;
+                if (delta > 0 && vol.Mute) vol.Mute = false; // lauter drehen hebt Stumm auf, wie bei Windows
+                return (int)Math.Round(next * 100);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"ChangeMaster: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>Windows-Lautstärke stumm/laut; liefert den neuen Zustand (true = stumm).</summary>
+        public static bool ToggleMasterMute()
+        {
+            try
+            {
+                using var enumerator = new MMDeviceEnumerator();
+                using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                var vol = device.AudioEndpointVolume;
+                vol.Mute = !vol.Mute;
+                return vol.Mute;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"ToggleMasterMute: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>Aktuelle Windows-Lautstärke in Prozent (nur lesen).</summary>
+        public static int ReadMaster()
+        {
+            try
+            {
+                using var enumerator = new MMDeviceEnumerator();
+                using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                return (int)Math.Round(device.AudioEndpointVolume.MasterVolumeLevelScalar * 100);
+            }
+            catch
+            {
+                return 0;
+            }
         }
 
         /// <summary>Aktuelle Lautstärke der Apps, die der Knopf gerade regeln würde (nur lesen).</summary>
@@ -232,7 +285,7 @@ namespace KnobFlyout.Audio
                     if (m.HasValue)
                     {
                         youtubeDone.Add(browser);
-                        results.Add(("YouTube", m.Value));
+                        results.Add((youtube.PlayingSite(browser) ?? "YouTube", m.Value));
                         continue;
                     }
                 }
