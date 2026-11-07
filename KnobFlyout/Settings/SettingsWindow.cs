@@ -155,7 +155,7 @@ namespace KnobFlyout.Settings
             Motion.EnablePress(this); // Klick drückt kurz ein
 
             var root = new Grid();
-            _navColumn = new ColumnDefinition { Width = new GridLength(NavWidthExpanded) };
+            _navColumn = new ColumnDefinition { Width = GridLength.Auto }; // Breite steht an der Navigation selbst (animierbar)
             root.ColumnDefinitions.Add(_navColumn);
             root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             Content = root;
@@ -360,7 +360,7 @@ namespace KnobFlyout.Settings
         // ── Navigation ──────────────────────────────────────────────────────
         private DockPanel BuildNav()
         {
-            var host = new DockPanel { Background = NavBg };
+            var host = new DockPanel { Background = NavBg, Width = _navExpanded ? NavWidthExpanded : NavWidthCollapsed, ClipToBounds = true };
 
             // Oben: Hamburger zum Ein-/Ausklappen der Beschriftungen
             var burger = new Border { Height = 44, Width = NavWidthCollapsed, Background = Brushes.Transparent, Cursor = System.Windows.Input.Cursors.Hand };
@@ -441,14 +441,15 @@ namespace KnobFlyout.Settings
         private static bool IsSelected(Border item) =>
             ((item.Child as Grid)?.Children.OfType<Border>().FirstOrDefault(b => (b.Tag as string) == "bar")?.Visibility) == Visibility.Visible;
 
+        /// <summary>Navigation auf- bzw. zuklappen: Breite gleitet, Beschriftungen und Suche blenden ein bzw. aus (Animationen aus: sofort).</summary>
         private void ToggleNav()
         {
             _navExpanded = !_navExpanded;
-            if (_navColumn != null) _navColumn.Width = new GridLength(_navExpanded ? NavWidthExpanded : NavWidthCollapsed);
-            var vis = _navExpanded ? Visibility.Visible : Visibility.Collapsed;
-            foreach (var l in _navLabels) l.Visibility = vis;
-            if (_searchHost != null) _searchHost.Visibility = vis;
             if (!_navExpanded) CloseSearchPopup();
+            if (_nav == null) return;
+            var fading = new List<FrameworkElement>(_navLabels);
+            if (_searchHost != null) fading.Add(_searchHost);
+            Motion.Pane(_nav, _navExpanded ? NavWidthExpanded : NavWidthCollapsed, fading, _navExpanded);
         }
 
         private void SelectPage(string key)

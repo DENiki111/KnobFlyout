@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -139,6 +140,51 @@ namespace KnobFlyout.Settings
                 tt.BeginAnimation(TranslateTransform.YProperty, To(0, 260));
             }
             catch (InvalidOperationException) { /* nicht im selben Baum */ }
+        }
+
+        // ── Navigation auf-/zuklappen ─────────────────────────────────────────
+        private static int _paneVersion;
+
+        /// <summary>
+        /// Seitenleiste auf eine neue Breite gleiten lassen. Aufklappen: Beschriftungen erscheinen gleich und blenden
+        /// leicht verzögert ein; zuklappen: sie blenden schnell aus und verschwinden am Ende.
+        /// </summary>
+        public static void Pane(FrameworkElement pane, double width, IList<FrameworkElement> labels, bool open)
+        {
+            int version = ++_paneVersion;
+            void Finish()
+            {
+                pane.BeginAnimation(FrameworkElement.WidthProperty, null);
+                pane.Width = width;
+                foreach (var l in labels)
+                {
+                    l.BeginAnimation(UIElement.OpacityProperty, null);
+                    l.Opacity = 1;
+                    l.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+            if (!Enabled || !pane.IsLoaded)
+            {
+                Finish();
+                return;
+            }
+            double from = pane.ActualWidth > 0 ? pane.ActualWidth : pane.Width;
+            var anim = To(width, open ? 240 : 200, from);
+            anim.Completed += (_, _) => { if (version == _paneVersion) Finish(); };
+            foreach (var l in labels)
+            {
+                if (open)
+                {
+                    l.Visibility = Visibility.Visible;
+                    l.BeginAnimation(UIElement.OpacityProperty, null);
+                    l.Opacity = 0; // sonst blitzt die Beschriftung vor dem verzögerten Einblenden kurz voll auf
+                    l.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160))
+                        { BeginTime = TimeSpan.FromMilliseconds(70), EasingFunction = Out, FillBehavior = FillBehavior.HoldEnd });
+                }
+                else
+                    l.BeginAnimation(UIElement.OpacityProperty, To(0, 90));
+            }
+            pane.BeginAnimation(FrameworkElement.WidthProperty, anim);
         }
 
         // ── Aufklappen ────────────────────────────────────────────────────────
