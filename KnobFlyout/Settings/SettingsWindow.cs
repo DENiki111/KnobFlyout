@@ -3363,12 +3363,13 @@ namespace KnobFlyout.Settings
             page.Children.Add(SettingCard("\uE714", T("Lautstärke im Video-Player regeln", "Control volume in the video player"), T("Firefox, Chrome und Opera", "Firefox, Chrome and Opera"),
                 Toggle(_cfg.YoutubeBridge, v => _cfg.YoutubeBridge = v)));
 
-            // Je Webseite abschaltbar: dort regelt der Knopf dann wie ohne Addon den ganzen Browser
-            page.Children.Add(SectionTitle(T("Webseiten", "Websites")));
+            // Je Webseite abschaltbar: dort regelt der Knopf dann wie ohne Addon den ganzen Browser.
+            // Alle Schalter in einer aufklappbaren Karte (zugeklappt), damit die Seite nicht so lang ist.
+            var sites = new StackPanel();
             foreach (var site in YouTubeBridge.Sites)
             {
                 string key = site;
-                page.Children.Add(SettingCard("\uE774", key, null,
+                sites.Children.Add(OptionRow(key,
                     Toggle(!_cfg.BridgeSitesOff.Contains(key, StringComparer.OrdinalIgnoreCase), on =>
                     {
                         var list = _cfg.BridgeSitesOff.Where(s => !s.Equals(key, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -3376,6 +3377,7 @@ namespace KnobFlyout.Settings
                         _cfg.BridgeSitesOff = list;
                     })));
             }
+            page.Children.Add(ExpanderCard("\uE774", T("Webseiten", "Websites"), null, sites));
 
             // Status live (1 s), damit man beim Installieren der Erweiterung sieht, wann sie sich verbindet
             var status = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13, Margin = new Thickness(0, 2, 0, 2) };

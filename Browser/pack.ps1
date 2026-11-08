@@ -1,4 +1,5 @@
-# Packt die YT-Bridge-Erweiterungen zum Hochladen: Firefox (addons.mozilla.org) und Chrome (Chrome Web Store)
+# Packt die YT-Bridge-Erweiterungen zum Hochladen: Firefox (addons.mozilla.org), Chrome (Chrome Web Store) und
+# Opera (Ordner zum Packen und Laden, kommt ins GitHub-Release)
 # -> dist\knobflyout-yt-bridge-<browser>-<version>.zip. Zip-Einträge selbst mit "/" anlegen: Compress-Archive
 # in PowerShell 5.1 schreibt "\" in die Pfade (icons\icon-48.png), das lehnt addons.mozilla.org ab.
 $ErrorActionPreference = 'Stop'
@@ -7,10 +8,10 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dist = Join-Path (Split-Path -Parent $root) 'dist'
 New-Item -ItemType Directory -Force $dist | Out-Null
 
-foreach ($browser in 'firefox', 'chrome') {
+foreach ($browser in 'firefox', 'chrome', 'Opera') {
     $src = Join-Path $root $browser
     $version = (Get-Content (Join-Path $src 'manifest.json') -Raw | ConvertFrom-Json).version
-    $zip = Join-Path $dist "knobflyout-yt-bridge-$browser-$version.zip"
+    $zip = Join-Path $dist "knobflyout-yt-bridge-$($browser.ToLower())-$version.zip"
     if (Test-Path $zip) { Remove-Item $zip }
     $archive = [System.IO.Compression.ZipFile]::Open($zip, 'Create')
     try {
