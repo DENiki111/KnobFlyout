@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
 using KnobFlyout.Config;

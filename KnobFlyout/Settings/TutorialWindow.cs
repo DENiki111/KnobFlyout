@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -75,8 +72,6 @@ namespace KnobFlyout.Settings
 
         /// <summary>Am Ende „Tour durch die Einstellungen“ gewählt: danach die Einstellungen mit der Tour öffnen.</summary>
         public bool RequestedTour { get; private set; }
-
-        public int PageCount => _pages.Count;
 
         /// <summary>Erster Programmstart (auch nach einem Update, wenn sie noch nie zu sehen war).</summary>
         public static bool ShowOnStart(AppConfig cfg) => !cfg.TutorialHidden && !cfg.TutorialStarted;

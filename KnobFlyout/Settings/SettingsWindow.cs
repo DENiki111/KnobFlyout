@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using KnobFlyout.Audio;
 using KnobFlyout.Config;
-using KnobFlyout.Input;
 using KnobFlyout.Osd;
 using KnobFlyout.Profiles;
 using static KnobFlyout.Loc;
@@ -1759,48 +1755,6 @@ namespace KnobFlyout.Settings
                 combo.SelectedIndex = def > 0 ? 1 : 0;
                 set(def > 0 ? lastRound : 0);
             });
-        }
-
-        /// <summary>
-        /// Hex-Farbfeld: Text, Vorschau (Klick öffnet den Farbkreis) und ↺-Knopf (setzt auf defaultValue
-        /// zurück). Das Textfeld wird unter key (JSON-Name, z.B. "color_bg") für Farbprofile registriert.
-        /// </summary>
-        private static void AddColorField(StackPanel host, Dictionary<string, TextBox> boxes, string key, string label,
-            string value, string defaultValue, Action<string> onChange)
-        {
-            var box = TextField(value, 100);
-            box.Margin = new Thickness(0);
-            boxes[key] = box;
-
-            var swatch = new Border
-            {
-                Width = 24, Height = 24, Margin = new Thickness(8, 0, 0, 0), CornerRadius = new CornerRadius(6),
-                BorderBrush = FieldBorder, BorderThickness = new Thickness(1),
-                Cursor = System.Windows.Input.Cursors.Hand, ToolTip = T("Farbe auswählen", "Pick a color"),
-            };
-            void Update()
-            {
-                try { swatch.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(box.Text)); }
-                catch { swatch.Background = Brushes.Transparent; }
-            }
-            Update();
-            box.TextChanged += (_, _) => { onChange(box.Text.Trim()); Update(); };
-
-            var reset = ResetButton(() => box.Text = defaultValue); // TextChanged übernimmt Wert + Vorschau
-            reset.Margin = new Thickness(8, 0, 0, 0);
-
-            var row = Row(new TextBlock { Text = label, Width = 160, Foreground = Fg, VerticalAlignment = VerticalAlignment.Center }, box, swatch, reset);
-            row.Margin = new Thickness(0, 0, 0, 4);
-
-            swatch.MouseLeftButtonUp += (_, _) =>
-            {
-                // Im Fensterbaum einhängen, damit Slider/Textfeld die Theme-Stile bekommen.
-                var picker = new ColorWheelPopup(swatch, box.Text, hex => box.Text = hex);
-                row.Children.Add(picker);
-                picker.Closed += (_, _) => row.Children.Remove(picker);
-                picker.IsOpen = true;
-            };
-            host.Children.Add(row);
         }
 
         /// <summary>

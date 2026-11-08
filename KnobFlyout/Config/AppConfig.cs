@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace KnobFlyout.Config
@@ -66,7 +65,6 @@ namespace KnobFlyout.Config
         [JsonPropertyName("spotify_use_api")] public bool SpotifyUseApi { get; set; } = false;
         [JsonPropertyName("spotify_client_id")] public string SpotifyClientId { get; set; } = "";
         [JsonPropertyName("spotify_client_secret")] public string SpotifyClientSecret { get; set; } = "";
-        [JsonPropertyName("spotify_redirect_uri")] public string SpotifyRedirectUri { get; set; } = "http://localhost:5000/callback";
 
         /// <summary>YT-Bridge: spielt in Firefox/Chrome ein YouTube-Video, regelt der Knopf den YouTube-Player statt der Browser-Session (braucht die Erweiterung aus Browser/firefox bzw. Browser/chrome).</summary>
         [JsonPropertyName("youtube_bridge")] public bool YoutubeBridge { get; set; } = false;
@@ -576,10 +574,6 @@ namespace KnobFlyout.Config
                 if (!MediaMoreItems.Contains("skip_playing")) MediaMoreItems.Add("skip_playing");
             }
         }
-
-        /// <summary>Entspricht cfg.get(f"profile_color_{key}", color) – jetzt aus profile_list.</summary>
-        public string GetProfileColor(string key, string fallback) =>
-            global::KnobFlyout.Profiles.ProfileDefinitions.For(this).FirstOrDefault(p => p.Key == key)?.Color ?? fallback;
     }
 
     /// <summary>Ein Eintrag in cfg.profile_list (siehe ProfileDefinitions).</summary>

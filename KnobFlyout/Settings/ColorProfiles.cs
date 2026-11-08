@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Windows.Media;
 using KnobFlyout.Config;
 using KnobFlyout.Osd;

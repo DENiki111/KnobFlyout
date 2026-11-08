@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows;
 using KnobFlyout.Config;
 
@@ -72,12 +69,6 @@ namespace KnobFlyout.Osd
             if (list.Count == 0)
                 list.Add(new MonitorArea("", SystemParameters.WorkArea, (int)SystemParameters.PrimaryScreenWidth, (int)SystemParameters.PrimaryScreenHeight, true));
             return list;
-        }
-
-        public static Rect PrimaryWork()
-        {
-            var mons = Monitors();
-            return (mons.FirstOrDefault(m => m.Primary) ?? mons[0]).Work;
         }
 
         /// <summary>Arbeitsbereich des Bildschirms mit diesem Gerätenamen (leer/unbekannt = Hauptbildschirm).</summary>

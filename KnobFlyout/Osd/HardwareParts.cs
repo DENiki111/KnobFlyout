@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -121,7 +119,7 @@ namespace KnobFlyout.Osd
         }
 
         /// <summary>Knopf (Kante + Fläche mit Verlauf) als Kreise um die Mitte.</summary>
-        public static void AddKnobBody(Panel host, double size, double kr, HwColors c)
+        public static void AddKnobBody(Panel host, double kr, HwColors c)
         {
             host.Children.Add(new Ellipse { Width = (kr + 2) * 2, Height = (kr + 2) * 2, Fill = UiColor.Brush(c.KnobEdge) });
             var face = new RadialGradientBrush(UiColor.Brush(c.KnobTop).Color, UiColor.Brush(c.KnobBottom).Color)
@@ -168,7 +166,7 @@ namespace KnobFlyout.Osd
             }
             Children.Add(back);
             Children.Add(front);
-            HardwareParts.AddKnobBody(this, size, kr, c);
+            HardwareParts.AddKnobBody(this, kr, c);
 
             // Rändel + Zeiger drehen sich gemeinsam
             var turn = new Canvas { Width = size, Height = size, RenderTransform = _rot };
@@ -238,7 +236,7 @@ namespace KnobFlyout.Osd
                 dots.Children.Add(dot);
             }
             Children.Add(dots);
-            HardwareParts.AddKnobBody(this, size, kr, c);
+            HardwareParts.AddKnobBody(this, kr, c);
             if (active < 0 || active >= profiles.Count) return;
             var activeColor = UiColor.Brush(profiles[active].Color);
             var a = HardwareParts.OnCircle(cx, cx, kr - 6, AngleOf(active));

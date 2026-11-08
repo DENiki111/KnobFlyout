@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using KnobFlyout.Config;
@@ -17,8 +14,6 @@ namespace KnobFlyout.Profiles
     public static class AppClassifier
     {
         public const string Games = "games", Browsers = "browsers", Music = "music", Comms = "comms";
-
-        public static readonly string[] Categories = { Games, Browsers, Music, Comms };
 
         /// <summary>Standard-Profil je Art; nicht mehr vorhanden = nachfragen.</summary>
         public static string DefaultProfile(string category) => category switch

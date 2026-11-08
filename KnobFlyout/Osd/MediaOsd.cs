@@ -1,5 +1,4 @@
-﻿using System;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -225,7 +224,8 @@ namespace KnobFlyout.Osd
             {
                 host.Clip = CardClip(e.NewSize.Width, e.NewSize.Height);
                 // Hintergrundbild immer exakt so groß wie die Karte (+ Überstand für den weichen Rand).
-                _bgImage.Width = e.NewSize.Width + 80;
+                // _bgImage wird weiter unten im Konstruktor gesetzt, bevor die Größe sich ändern kann.
+                _bgImage!.Width = e.NewSize.Width + 80;
                 _bgImage.Height = e.NewSize.Height + 80;
             };
             Content = _card = new Border
