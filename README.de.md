@@ -236,7 +236,7 @@ Die Erweiterungen sprechen nur lokal mit KnobFlyout (`ws://127.0.0.1:8975`, ange
 
 | Seite | Inhalt |
 |---|---|
-| Allgemein | Sprache, hell oder dunkel, Animationen an / aus, Lite-Modus (+ OSD anzeigen), Zuweisungs-OSD an / aus, Windows-Flyout ausblenden (nur Windows 10: die Lautstärke- und Media-Anzeige von Windows), mit Windows starten, Tutorial, Einstellungen neu laden |
+| Allgemein | Sprache, hell oder dunkel, Design der Einstellungen (Klassisch, Mitternacht mit Verlauf aus zwei eigenen Farben, Farbkacheln hell oder dunkel; auch im Tutorial unter „Such dir einen Look aus“), Animationen an / aus, Lite-Modus (+ OSD anzeigen), Zuweisungs-OSD an / aus, Windows-Flyout ausblenden (nur Windows 10: die Lautstärke- und Media-Anzeige von Windows), mit Windows starten, Tutorial, Einstellungen neu laden |
 | Lautstärke | Schrittweite, Schrittweite Spotify, eigene Hotkeys für Lauter / Leiser / Stumm |
 | Profile & Apps | Profil-Hotkey, gesteuerte Apps, leere Profile überspringen, Profile bearbeiten, Zuweisungs-OSD an / aus, automatisch einsortieren, Zuweisen-Hotkeys, App-Liste mit Profil-Zuweisung, ignorierte Apps |
 | OSD | An / aus, Anzeigedauer, per Klick ausblenden, Design (anpassbar: Aufbau jeder Karte, Farben, Deckkraft, Vorlagen, eigene gespeicherte Designs) |

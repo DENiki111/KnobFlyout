@@ -236,7 +236,7 @@ Open by left-clicking the tray icon, via right-click → **Settings**, or by sta
 
 | Page | Contents |
 |---|---|
-| General | Language, light or dark, animations on / off, lite mode (+ show OSD), assignment OSD on / off, hide Windows flyout (Windows 10 only: the volume and media indicator of Windows), start with Windows, introduction, reload settings |
+| General | Language, light or dark, settings design (Classic, Midnight with a gradient of two colors of your choice, Tiles in light or dark; also in the introduction under “Pick a look”), animations on / off, lite mode (+ show OSD), assignment OSD on / off, hide Windows flyout (Windows 10 only: the volume and media indicator of Windows), start with Windows, introduction, reload settings |
 | Volume | Step size, Spotify step size, own hotkeys for volume up / down / mute |
 | Profiles & apps | Switch key, controlled apps, skip empty profiles, edit profiles, assignment OSD on / off, sort automatically, assign keys, app list with profile assignment, ignored apps |
 | OSD | On / off, duration, click to dismiss, design (customizable: layout of every card, colors, opacity, templates, your own saved designs) |

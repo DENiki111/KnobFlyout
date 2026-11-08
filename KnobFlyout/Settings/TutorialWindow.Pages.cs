@@ -1274,6 +1274,85 @@ namespace KnobFlyout.Settings
             });
 
             body.Children.Add(SettingCard("\uE790", T("Theme", "Color scheme"), null, ThemeChoice(cfg.Theme)));
+            body.Children.Add(SettingsDesignCard(cfg));
+        }
+
+        /// <summary>
+        /// Design der Einstellungen (und dieses Tutorials): Klassisch, Mitternacht oder Farbkacheln, wirkt sofort.
+        /// Bei Mitternacht darunter die zwei Farben des Verlaufs (Klick öffnet den Farbkreis, übernommen beim Schließen).
+        /// </summary>
+        private Border SettingsDesignCard(AppConfig cfg)
+        {
+            var choice = Segments(new[] { ("classic", T("Klassisch", "Classic")), ("midnight", T("Mitternacht", "Midnight")), ("tiles", T("Farbkacheln", "Tiles")) },
+                cfg.SettingsDesign, key =>
+                {
+                    if (key == Cfg().SettingsDesign) return;
+                    Update(c => c.SettingsDesign = key);
+                    Dispatcher.BeginInvoke(new Action(Rebuild)); // Tutorial wechselt gleich mit
+                });
+            string title = T("Einstellungen", "Settings");
+            if (cfg.SettingsDesign != "midnight") return SettingCard("\uE771", title, null, choice);
+
+            // Die zwei Farbfelder dort, wo Platz ist (eine eigene Zeile wäre für die Seite zu hoch): steht die Auswahl neben dem
+            // Titel, unter dem Titel (statt einer Beschreibung); rutscht sie unter den Titel, gleich neben die Auswahl.
+            var control = new StackPanel { Orientation = Orientation.Horizontal };
+            control.Children.Add(choice);
+            var card = SettingCard("\uE771", title, null, control);
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            row.Children.Add(FadeSwatch(cfg.SettingsFadeTop, T("Verlauf oben, auch Akzentfarbe", "Gradient top, also the accent color"), (c, hex) => c.SettingsFadeTop = hex, row));
+            row.Children.Add(FadeSwatch(cfg.SettingsFadeBottom, T("Verlauf unten", "Gradient bottom"), (c, hex) => c.SettingsFadeBottom = hex, row));
+            if (card.Child is Grid header && header.Children.OfType<StackPanel>().FirstOrDefault(p => Grid.GetColumn(p) == 1) is { } text)
+            {
+                text.Children.Add(row);
+                header.SizeChanged += (_, _) => // läuft nach dem Umbruch-Handler der Kopfzeile
+                {
+                    bool below = Grid.GetRow(control) == 1, beside = control.Children.Contains(row);
+                    if (below && !beside)
+                    {
+                        text.Children.Remove(row);
+                        row.Margin = new Thickness(10, 0, 0, 0);
+                        control.Children.Add(row);
+                    }
+                    else if (!below && beside)
+                    {
+                        control.Children.Remove(row);
+                        row.Margin = new Thickness(0, 4, 0, 0);
+                        text.Children.Add(row);
+                    }
+                };
+            }
+            return card;
+        }
+
+        /// <summary>Farbfeld einer Verlaufsfarbe: Klick öffnet den Farbkreis, beim Schließen gespeichert und das Tutorial neu gebaut.</summary>
+        private Border FadeSwatch(string hex, string tip, Action<AppConfig, string> set, Panel host)
+        {
+            Brush Fill(string h)
+            {
+                try { return new SolidColorBrush((Color)ColorConverter.ConvertFromString(h)); }
+                catch { return Brushes.Transparent; }
+            }
+            var swatch = new Border
+            {
+                Width = 22, Height = 22, CornerRadius = new CornerRadius(6), Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center,
+                BorderBrush = FieldBorder, BorderThickness = new Thickness(1), Background = Fill(hex),
+                Cursor = System.Windows.Input.Cursors.Hand, ToolTip = tip,
+            };
+            swatch.MouseLeftButtonUp += (_, _) =>
+            {
+                string picked = hex;
+                var picker = new ColorWheelPopup(swatch, hex, h => { picked = h; swatch.Background = Fill(h); });
+                host.Children.Add(picker); // im Fensterbaum, damit Regler und Feld die Theme-Stile bekommen
+                picker.Closed += (_, _) =>
+                {
+                    host.Children.Remove(picker);
+                    if (string.Equals(picked, hex, StringComparison.OrdinalIgnoreCase)) return;
+                    Update(c => set(c, picked));
+                    Dispatcher.BeginInvoke(new Action(Rebuild));
+                };
+                picker.IsOpen = true;
+            };
+            return swatch;
         }
 
         private FrameworkElement ThemeChoice(string current) =>

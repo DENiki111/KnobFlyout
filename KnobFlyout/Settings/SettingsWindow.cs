@@ -148,7 +148,7 @@ namespace KnobFlyout.Settings
             Height = 680;
             MinWidth = 820;
             MinHeight = 440;
-            Background = ContentBg;
+            Background = WindowBg; // Mitternacht: Verlauf
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             SourceInitialized += (_, _) => ApplyDarkTitleBar();
             ApplyControlTheme();
@@ -159,6 +159,12 @@ namespace KnobFlyout.Settings
             root.ColumnDefinitions.Add(_navColumn);
             root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             Content = root;
+            if (Backdrop() is { } backdrop) // Mitternacht: Lichtschein oben, hinter allem
+            {
+                Grid.SetColumnSpan(backdrop, 2);
+                Panel.SetZIndex(backdrop, -1);
+                root.Children.Add(backdrop);
+            }
 
             var nav = _nav = BuildNav();
             Grid.SetColumn(nav, 0);
@@ -174,7 +180,7 @@ namespace KnobFlyout.Settings
 
             _pinnedTop = new Border
             {
-                Visibility = Visibility.Collapsed, Background = ContentBg,
+                Visibility = Visibility.Collapsed, Background = PaneBg,
                 BorderBrush = CardBorder, BorderThickness = new Thickness(0, 0, 0, 1),
             };
             DockPanel.SetDock(_pinnedTop, Dock.Top);
@@ -228,7 +234,7 @@ namespace KnobFlyout.Settings
             onDisk.Theme = theme;
             ConfigManager.Save(onDisk);
 
-            SetTheme(ThemeHelper.IsLight(_cfg));
+            ApplyTheme(_cfg);
             ReopenWith(_cfg);
         }
 
@@ -328,7 +334,7 @@ namespace KnobFlyout.Settings
             string? page = TutorialRequested?.Invoke(this);
             TutorialWindow.CopyChangedFields(before, ConfigManager.Load(), _cfg);
             Loc.Apply(_cfg);
-            SetTheme(ThemeHelper.IsLight(_cfg));
+            ApplyTheme(_cfg);
             bool tour = page == TourPage;
             if (page != null && !tour) _currentPage = page;
             var next = ReopenWith(_cfg);
@@ -412,8 +418,20 @@ namespace KnobFlyout.Settings
                 Text = entry.Glyph, FontFamily = IconFont, FontSize = 15, Foreground = Fg,
                 HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             };
-            Grid.SetColumn(icon, 1);
-            grid.Children.Add(icon);
+            UIElement iconEl = icon;
+            if (IconTiles)
+            {
+                // Farbkacheln: jede Seite mit eigener Farbe
+                icon.FontSize = 13;
+                icon.Foreground = Brushes.White;
+                iconEl = new Border
+                {
+                    Width = 26, Height = 26, CornerRadius = new CornerRadius(7), Background = PageTileBrush(entry.Key), Child = icon,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                };
+            }
+            Grid.SetColumn(iconEl, 1);
+            grid.Children.Add(iconEl);
 
             var label = new TextBlock
             {
@@ -508,9 +526,20 @@ namespace KnobFlyout.Settings
             catch { return Guid.NewGuid().ToString(); } // im Zweifel neu aufbauen
         }
 
+        /// <summary>Farbkacheln: Farbe je Seite (Navigation und Kartensymbole; Unterseiten nehmen die ihrer Herkunftsseite).</summary>
+        private static readonly Dictionary<string, string> PageColors = new()
+        {
+            ["general"] = "#3B82F6", ["volume"] = "#14B8A6", ["profiles"] = "#8B5CF6", ["osd"] = "#6366F1", ["media"] = "#EC4899",
+            ["position"] = "#F59E0B", ["design"] = "#F43F5E", ["hotkeys"] = "#64748B", ["spotify"] = "#1DB954", ["youtube"] = "#EF4444", ["info"] = "#8A8A93",
+        };
+
+        private static Brush PageTileBrush(string key) =>
+            PageColors.TryGetValue(key, out var hex) ? new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)) : Accent;
+
         private UIElement BuildPage(string key)
         {
             var page = new StackPanel { Margin = new Thickness(32, 22, 32, 16), MaxWidth = 960 };
+            if (IconTiles) page.Resources["PageTile"] = PageTileBrush(IsSubPage(key) ? _subParent : key);
             switch (key)
             {
                 case "general": BuildGeneralPage(page); break;
@@ -634,7 +663,7 @@ namespace KnobFlyout.Settings
             btnRow.Children.Add(save);
             btnRow.Children.Add(close);
             bar.Children.Add(btnRow);
-            return new Border { Child = bar, Background = ContentBg, BorderBrush = CardBorder, BorderThickness = new Thickness(0, 1, 0, 0) };
+            return new Border { Child = bar, Background = PaneBg, BorderBrush = CardBorder, BorderThickness = new Thickness(0, 1, 0, 0) };
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -656,6 +685,7 @@ namespace KnobFlyout.Settings
             page.Children.Add(SettingCard("\uE774", T("Sprache", "Language"), null, langCombo));
 
             page.Children.Add(ThemeCard());
+            page.Children.Add(SettingsDesignCard());
             page.Children.Add(SettingCard("\uE7AD", T("Animationen", "Animations"), null,
                 Toggle(_cfg.SettingsAnimations, v => Dispatcher.BeginInvoke(new Action(() => SetAnimations(v))))));
 
@@ -707,6 +737,7 @@ namespace KnobFlyout.Settings
 
             page.Children.Add(SectionTitle(T("Theme", "Color scheme")));
             page.Children.Add(ThemeCard());
+            page.Children.Add(SettingsDesignCard());
 
             AddOsdAppearance(page, T("OSD – Aussehen", "OSD – appearance"), designPage: true);
             AddMediaAppearance(page, T("Media-Flyout – Aussehen", "Media flyout – appearance"), designPage: true);
@@ -722,6 +753,96 @@ namespace KnobFlyout.Settings
         }
 
         /// <summary>Farbschema System/Hell/Dunkel (Seiten „Allgemein“ und „Design“); ein Wechsel baut das Fenster neu auf.</summary>
+        /// <summary>
+        /// Aussehen der Einstellungen (Allgemein und Design): Klassisch, Mitternacht (Verlauf aus zwei eigenen Farben)
+        /// oder Farbkacheln. Wirkt sofort, das Fenster baut sich wie beim Theme neu auf.
+        /// </summary>
+        private Border SettingsDesignCard()
+        {
+            string[] keys = { "classic", "midnight", "tiles" };
+            var combo = Combo(160, Math.Max(0, Array.IndexOf(keys, _cfg.SettingsDesign)),
+                T("Klassisch", "Classic"), T("Mitternacht", "Midnight"), T("Farbkacheln", "Tiles"));
+            combo.SelectionChanged += (_, _) =>
+            {
+                string chosen = keys[Math.Max(0, combo.SelectedIndex)];
+                if (chosen == _cfg.SettingsDesign) return;
+                Dispatcher.BeginInvoke(new Action(() => ReopenWithDesign(chosen, null, null)));
+            };
+            var control = WithReset(combo, () => combo.SelectedIndex = 0);
+            string title = T("Design der Einstellungen", "Settings design");
+            if (_cfg.SettingsDesign != "midnight") return SettingCard("\uE771", title, null, control);
+
+            // Mitternacht: die zwei Farben des Verlaufs
+            var body = new StackPanel();
+            body.Children.Add(FadeColorRow(T("Verlauf oben", "Gradient top"), _cfg.SettingsFadeTop, AppConfig.DefaultFadeTop,
+                hex => ReopenWithDesign("midnight", hex, null)));
+            body.Children.Add(FadeColorRow(T("Verlauf unten", "Gradient bottom"), _cfg.SettingsFadeBottom, AppConfig.DefaultFadeBottom,
+                hex => ReopenWithDesign("midnight", null, hex)));
+            return ContentCard("\uE771", title, T("Die obere Farbe ist auch die Akzentfarbe", "The top color is also the accent color"), body, control);
+        }
+
+        /// <summary>
+        /// Farbe des Verlaufs: Hex-Feld, Vorschau (Klick öffnet den Farbkreis) und ↺. Übernommen wird erst, wenn der Farbkreis
+        /// zugeht oder das Feld verlassen bzw. mit Enter bestätigt wird – sonst baute sich das Fenster bei jeder Bewegung neu auf.
+        /// </summary>
+        private FrameworkElement FadeColorRow(string label, string value, string defaultValue, Action<string> apply)
+        {
+            var box = TextField(value, 100);
+            box.Margin = new Thickness(0);
+            var swatch = new Border
+            {
+                Width = 24, Height = 24, Margin = new Thickness(8, 0, 0, 0), CornerRadius = new CornerRadius(6),
+                BorderBrush = FieldBorder, BorderThickness = new Thickness(1),
+                Cursor = System.Windows.Input.Cursors.Hand, ToolTip = T("Farbe auswählen", "Pick a color"),
+            };
+            Color? Parse(string text)
+            {
+                try { return (Color)ColorConverter.ConvertFromString(text.Trim()); }
+                catch { return null; }
+            }
+            void Update() => swatch.Background = Parse(box.Text) is { } c ? new SolidColorBrush(c) : Brushes.Transparent;
+            Update();
+            bool applied = false;
+            void Commit()
+            {
+                if (applied || Parse(box.Text) is not { } c) return;
+                string hex = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+                if (string.Equals(hex, value, StringComparison.OrdinalIgnoreCase)) return;
+                applied = true;
+                Dispatcher.BeginInvoke(new Action(() => apply(hex)));
+            }
+            box.TextChanged += (_, _) => Update();
+            box.LostKeyboardFocus += (_, _) => Commit();
+            box.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) Commit(); };
+            var reset = ResetButton(() => { box.Text = defaultValue; Commit(); });
+            reset.Margin = new Thickness(8, 0, 0, 0);
+            var row = Row(new TextBlock { Text = label, Width = 160, Foreground = Fg, VerticalAlignment = VerticalAlignment.Center }, box, swatch, reset);
+            row.Margin = new Thickness(0, 0, 0, 4);
+            swatch.MouseLeftButtonUp += (_, _) =>
+            {
+                var picker = new ColorWheelPopup(swatch, box.Text, hex => box.Text = hex);
+                row.Children.Add(picker);
+                picker.Closed += (_, _) => { row.Children.Remove(picker); Commit(); };
+                picker.IsOpen = true;
+            };
+            return row;
+        }
+
+        /// <summary>Design der Einstellungen bzw. eine Verlaufsfarbe sofort speichern, übernehmen und das Fenster neu aufbauen.</summary>
+        private void ReopenWithDesign(string design, string? fadeTop, string? fadeBottom)
+        {
+            _cfg.SettingsDesign = design;
+            if (fadeTop != null) _cfg.SettingsFadeTop = fadeTop;
+            if (fadeBottom != null) _cfg.SettingsFadeBottom = fadeBottom;
+            var onDisk = ConfigManager.Load();
+            onDisk.SettingsDesign = _cfg.SettingsDesign;
+            onDisk.SettingsFadeTop = _cfg.SettingsFadeTop;
+            onDisk.SettingsFadeBottom = _cfg.SettingsFadeBottom;
+            ConfigManager.Save(onDisk);
+            ApplyTheme(_cfg);
+            ReopenWith(_cfg);
+        }
+
         private Border ThemeCard()
         {
             var themeCombo = Combo(160, _cfg.Theme == "light" ? 1 : _cfg.Theme == "dark" ? 2 : 0,
@@ -808,7 +929,7 @@ namespace KnobFlyout.Settings
         {
             var fresh = ConfigManager.Load();
             Loc.Apply(fresh);
-            SetTheme(ThemeHelper.IsLight(fresh));
+            ApplyTheme(fresh);
             ConfigApplied?.Invoke();
             var next = ReopenWith(null);
             if (next._status != null) next._status.Text = T("Config neu geladen ✓", "Config reloaded ✓");

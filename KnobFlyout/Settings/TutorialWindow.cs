@@ -144,16 +144,30 @@ namespace KnobFlyout.Settings
         /// <summary>Baut das Fenster (auch nach einem Wechsel von Sprache oder Farbschema).</summary>
         private void BuildShell()
         {
-            SetTheme(ThemeHelper.IsLight(Cfg()));
+            ApplyTheme(Cfg());
             ApplyControlTheme(this);
             ApplyDarkTitleBar(this);
             Title = T("KnobFlyout – Tutorial", "KnobFlyout – Introduction");
             Background = ContentBg;
 
-            var root = new Grid { Width = DesignW, Height = DesignH, Background = ContentBg };
+            // Design der Einstellungen gilt auch hier: Mitternacht = Verlauf mit Lichtschein hinter der rechten Seite
+            var root = new Grid { Width = DesignW, Height = DesignH, Background = WindowBg };
             root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(StageW) });
             root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             root.Children.Add(BuildStageShell());
+            if (Backdrop() is Grid backdrop)
+            {
+                // Lichtschein an die rechte obere Ecke (die Bühne links deckt den Rest ab)
+                if (backdrop.Children.Count > 0 && backdrop.Children[0] is FrameworkElement glow)
+                {
+                    glow.Width = 760;
+                    glow.Height = 440;
+                    glow.HorizontalAlignment = HorizontalAlignment.Right;
+                    glow.Margin = new Thickness(0, -250, -220, 0);
+                }
+                Grid.SetColumn(backdrop, 1);
+                root.Children.Add(backdrop);
+            }
 
             var right = BuildRight();
             Grid.SetColumn(right, 1);
@@ -316,8 +330,8 @@ namespace KnobFlyout.Settings
                     "<ControlTemplate.Triggers>" +
                     $"<Trigger Property=\"IsMouseOver\" Value=\"True\"><Setter TargetName=\"Box\" Property=\"BorderBrush\" Value=\"{hover}\"/></Trigger>" +
                     "<Trigger Property=\"IsChecked\" Value=\"True\">" +
-                    "<Setter TargetName=\"Box\" Property=\"Background\" Value=\"#0078D4\"/>" +
-                    "<Setter TargetName=\"Box\" Property=\"BorderBrush\" Value=\"#0078D4\"/>" +
+                    $"<Setter TargetName=\"Box\" Property=\"Background\" Value=\"{AccentHex}\"/>" +
+                    $"<Setter TargetName=\"Box\" Property=\"BorderBrush\" Value=\"{AccentHex}\"/>" +
                     "<Setter TargetName=\"Check\" Property=\"Visibility\" Value=\"Visible\"/>" +
                     "</Trigger>" +
                     "</ControlTemplate.Triggers>" +
@@ -426,6 +440,7 @@ namespace KnobFlyout.Settings
         private static StackPanel BuildBody(Page page, Action<StackPanel> body)
         {
             var panel = new StackPanel();
+            if (IconTiles) panel.Resources["PageTile"] = UiColor.Brush(page.Hue); // Farbkacheln: Kartensymbole in der Farbe des Schritts
             panel.Children.Add(new TextBlock
             {
                 Text = page.Title(), FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI"), FontSize = 29,

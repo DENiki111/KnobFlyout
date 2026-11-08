@@ -28,7 +28,18 @@ namespace KnobFlyout.Settings
         public static Brush NavBg = Brushes.Black;
         public static Brush NavSelectedBg = Brushes.Black;
         public static Brush NavHoverBg = Brushes.Black;
-        public static readonly Brush Accent = B("#0078D4");
+        public static Brush Accent = B("#0078D4");
+        public static string AccentHex = "#0078D4"; // für Vorlagen aus XAML-Text (Schalter, Häkchen)
+
+        /// <summary>Aussehen der Einstellungen: "classic", "midnight" oder "tiles" (siehe ApplyTheme).</summary>
+        public static string Design { get; private set; } = "classic";
+        /// <summary>Farbkacheln: Kartensymbole stehen in einer Kachel, Farbe aus der Ressource "PageTile" (je Seite).</summary>
+        public static bool IconTiles => Design == "tiles";
+        public static double CardRadius = 8;
+        /// <summary>Fensterhintergrund (Mitternacht: Verlauf) und Hintergrund der angedockten Leisten (Mitternacht: durchsichtig).</summary>
+        public static Brush WindowBg = Brushes.Black;
+        public static Brush PaneBg = Brushes.Black;
+        private static Color _fadeTop = Colors.Black;
         public static Brush ButtonBg = Brushes.Gray;
         public static Brush HoverBg = Brushes.Gray;
         public static Brush PressedBg = Brushes.Gray;
@@ -38,13 +49,145 @@ namespace KnobFlyout.Settings
 
         static UiHelpers()
         {
-            SetTheme(Config.ThemeHelper.IsLight(Config.ConfigManager.Load()));
+            ApplyTheme(Config.ConfigManager.Load());
         }
 
-        /// <summary>Stellt alle Theme-Farben (und die Toggle-Vorlage) auf hell oder dunkel um.</summary>
-        public static void SetTheme(bool light)
+        /// <summary>Theme (hell/dunkel) und Design der Einstellungen aus der Config übernehmen.</summary>
+        public static void ApplyTheme(Config.AppConfig cfg) =>
+            SetTheme(Config.ThemeHelper.IsLight(cfg), cfg.SettingsDesign, cfg.SettingsFadeTop, cfg.SettingsFadeBottom);
+
+        private static Color Hex(string? hex, string fallback)
+        {
+            try { return (Color)ColorConverter.ConvertFromString(string.IsNullOrWhiteSpace(hex) ? fallback : hex.Trim()); }
+            catch { return (Color)ColorConverter.ConvertFromString(fallback); }
+        }
+
+        private static Color Mix(Color a, Color b, double t) => Color.FromRgb(
+            (byte)Math.Round(a.R + (b.R - a.R) * t), (byte)Math.Round(a.G + (b.G - a.G) * t), (byte)Math.Round(a.B + (b.B - a.B) * t));
+
+        private static double Lum(Color c) => (0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B) / 255.0;
+
+        private static SolidColorBrush C(Color c) => new(c);
+
+        /// <summary>Stellt alle Theme-Farben (und die Toggle-Vorlage) auf hell oder dunkel und das gewählte Design um.</summary>
+        public static void SetTheme(bool light, string design = "classic", string? fadeTop = null, string? fadeBottom = null)
+        {
+            Design = design is "midnight" or "tiles" ? design : "classic";
+            if (Design == "midnight")
+                SetMidnight(Hex(fadeTop, Config.AppConfig.DefaultFadeTop), Hex(fadeBottom, Config.AppConfig.DefaultFadeBottom));
+            else
+                SetClassic(light);
+            SwitchTemplate = BuildSwitchTemplate(true);
+            SwitchTemplateStill = BuildSwitchTemplate(false);
+        }
+
+        private static void SetAccent(Color c)
+        {
+            Accent = C(c);
+            AccentHex = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+        }
+
+        /// <summary>
+        /// Mitternacht: Hintergrund verläuft von oben (Farbe 1, dazu ein Lichtschein) nach unten (Farbe 2). Karten, Felder
+        /// und Navigation werden daraus abgeleitet; Akzent = Farbe 1, aufgehellt. Ist Farbe 2 hell, wird alles hell.
+        /// </summary>
+        private static void SetMidnight(Color top, Color bottom)
+        {
+            _fadeTop = top;
+            bool light = Lum(bottom) > 0.6;
+            Light = light;
+            CardRadius = 10;
+            var w = Colors.White;
+            var k = Colors.Black;
+            if (!light)
+            {
+                var card = Mix(Mix(bottom, top, 0.07), w, 0.02);
+                Fg = C(Color.FromRgb(0xEE, 0xF1, 0xF8));
+                SubFg = C(Mix(Color.FromRgb(0xA4, 0xA8, 0xB4), top, 0.22));
+                CardBg = C(card);
+                CardBorder = C(Mix(card, w, 0.05));
+                ButtonBorder = C(Mix(card, w, 0.14));
+                FieldBg = C(Mix(bottom, top, 0.05));
+                FieldBorder = C(Mix(card, w, 0.14));
+                ContentBg = C(Mix(bottom, top, 0.06));
+                NavBg = C(Mix(bottom, k, 0.3));
+                NavSelectedBg = C(Mix(bottom, top, 0.22));
+                NavHoverBg = C(Mix(bottom, top, 0.1));
+                ButtonBg = C(Mix(card, w, 0.05));
+                HoverBg = C(Mix(card, w, 0.1));
+                PressedBg = C(Mix(card, w, 0.16));
+                ThumbBg = C(Mix(card, w, 0.25));
+                ThumbHoverBg = C(Mix(card, w, 0.4));
+                TrackBg = C(Mix(card, w, 0.18));
+            }
+            else
+            {
+                var card = Mix(bottom, w, 0.75);
+                Fg = C(Color.FromRgb(0x1B, 0x1B, 0x1F));
+                SubFg = C(Color.FromRgb(0x5E, 0x5E, 0x66));
+                CardBg = C(card);
+                CardBorder = C(Mix(card, k, 0.08));
+                ButtonBorder = C(Mix(card, k, 0.15));
+                FieldBg = C(Mix(bottom, w, 0.85));
+                FieldBorder = C(Mix(card, k, 0.15));
+                ContentBg = C(Mix(bottom, w, 0.5));
+                NavBg = C(Mix(bottom, w, 0.35));
+                NavSelectedBg = C(Mix(bottom, w, 0.8));
+                NavHoverBg = C(Mix(bottom, w, 0.6));
+                ButtonBg = C(Mix(bottom, w, 0.85));
+                HoverBg = C(Mix(card, k, 0.05));
+                PressedBg = C(Mix(card, k, 0.1));
+                ThumbBg = C(Color.FromRgb(0xB0, 0xB0, 0xB8));
+                ThumbHoverBg = C(Color.FromRgb(0x8E, 0x8E, 0x96));
+                TrackBg = C(Color.FromRgb(0xCF, 0xCF, 0xD6));
+            }
+            // Akzent: Farbe 1 kräftig genug für Schalter und Regler (graue Farbe → Blau)
+            var (h, s) = HueSat(top);
+            SetAccent(s < 0.12 ? (light ? Color.FromRgb(0x00, 0x67, 0xC0) : Color.FromRgb(0x5B, 0x8C, 0xFF)) : FromHsl(h, Math.Clamp(s, 0.6, 0.95), light ? 0.42 : 0.66));
+            WindowBg = new LinearGradientBrush(Mix(bottom, top, light ? 0.18 : 0.12), bottom, 90);
+            PaneBg = Brushes.Transparent;
+        }
+
+        /// <summary>Farbton (0–360) und HSL-Sättigung (0–1).</summary>
+        private static (double H, double S) HueSat(Color c)
+        {
+            double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+            double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), d = max - min, l = (max + min) / 2;
+            if (d < 1e-6) return (0, 0);
+            double s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            double h = max == r ? (g - b) / d + (g < b ? 6 : 0) : max == g ? (b - r) / d + 2 : (r - g) / d + 4;
+            return (h * 60, s);
+        }
+
+        private static Color FromHsl(double h, double s, double l)
+        {
+            double c = (1 - Math.Abs(2 * l - 1)) * s, x = c * (1 - Math.Abs(h / 60 % 2 - 1)), m = l - c / 2;
+            (double r, double g, double b) = h < 60 ? (c, x, 0d) : h < 120 ? (x, c, 0d) : h < 180 ? (0d, c, x) : h < 240 ? (0d, x, c) : h < 300 ? (x, 0d, c) : (c, 0d, x);
+            return Color.FromRgb((byte)Math.Round((r + m) * 255), (byte)Math.Round((g + m) * 255), (byte)Math.Round((b + m) * 255));
+        }
+
+        /// <summary>Mitternacht: Lichtschein in Farbe 1 oben über dem Verlauf (hinter allem, fängt keine Maus). Sonst null.</summary>
+        public static FrameworkElement? Backdrop()
+        {
+            if (Design != "midnight") return null;
+            var g = new Grid { IsHitTestVisible = false, ClipToBounds = true };
+            g.Children.Add(new System.Windows.Shapes.Ellipse
+            {
+                Width = 1000, Height = 520, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(220, -300, 0, 0),
+                Fill = new RadialGradientBrush(new GradientStopCollection
+                {
+                    new GradientStop(Color.FromArgb((byte)(Light ? 0x55 : 0x40), _fadeTop.R, _fadeTop.G, _fadeTop.B), 0),
+                    new GradientStop(Colors.Transparent, 1),
+                }),
+            });
+            return g;
+        }
+
+        private static void SetClassic(bool light)
         {
             Light = light;
+            CardRadius = 8;
             // Werte angelehnt an die Windows-11-Einstellungen (Mica-Hintergrund, helle Karten darauf).
             // Hell bewusst etwas gedämpft (nicht reinweiß), damit es nicht blendet.
             Fg = light ? B("#1b1b1b") : B("#ffffff");
@@ -64,8 +207,32 @@ namespace KnobFlyout.Settings
             ThumbBg = light ? B("#B4B4B4") : B("#606060");
             ThumbHoverBg = light ? B("#8E8E8E") : B("#8a8a8a");
             TrackBg = light ? B("#C2C2C2") : B("#5a5a5a");
-            SwitchTemplate = BuildSwitchTemplate(true);
-            SwitchTemplateStill = BuildSwitchTemplate(false);
+            SetAccent(Color.FromRgb(0x00, 0x78, 0xD4));
+            if (Design == "tiles")
+            {
+                // Farbkacheln: statisch (kein Verlauf), ruhige neutrale Flächen, Karten ohne sichtbaren Rand, runder
+                CardRadius = 12;
+                Fg = light ? B("#1C1C1F") : B("#F2F2F4");
+                SubFg = light ? B("#6B6B73") : B("#A1A1A8");
+                CardBg = light ? B("#FFFFFF") : B("#1F1F23");
+                CardBorder = light ? B("#E9E9EE") : B("#232327");
+                ButtonBorder = light ? B("#DCDCE2") : B("#34343A");
+                FieldBg = light ? B("#F4F4F7") : B("#2A2A2F");
+                FieldBorder = light ? B("#DCDCE2") : B("#34343A");
+                ContentBg = light ? B("#F2F2F5") : B("#141416");
+                NavBg = ContentBg;
+                NavSelectedBg = light ? B("#FFFFFF") : B("#26262B");
+                NavHoverBg = light ? B("#E8E8EC") : B("#1D1D21");
+                ButtonBg = light ? B("#F4F4F7") : B("#2A2A2F");
+                HoverBg = light ? B("#EBEBEF") : B("#323238");
+                PressedBg = light ? B("#E0E0E6") : B("#3A3A41");
+                ThumbBg = light ? B("#B8B8C0") : B("#4A4A52");
+                ThumbHoverBg = light ? B("#94949C") : B("#6A6A73");
+                TrackBg = light ? B("#D5D5DB") : B("#3A3A41");
+                SetAccent(light ? Color.FromRgb(0x00, 0x7A, 0xFF) : Color.FromRgb(0x0A, 0x84, 0xFF));
+            }
+            WindowBg = ContentBg;
+            PaneBg = ContentBg;
         }
 
         public static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
@@ -107,7 +274,7 @@ namespace KnobFlyout.Settings
             Background = CardBg,
             BorderBrush = CardBorder,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = new CornerRadius(CardRadius),
             Margin = new Thickness(0, 0, 0, 3),
             Child = child,
         };
@@ -122,11 +289,28 @@ namespace KnobFlyout.Settings
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            var icon = new TextBlock
+            UIElement icon = new TextBlock
             {
                 Text = glyph, FontFamily = IconFont, FontSize = 16, Foreground = Fg,
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            if (IconTiles && !string.IsNullOrEmpty(glyph))
+            {
+                // Farbkacheln: Symbol weiß in einer Kachel in der Farbe der Seite (Ressource "PageTile")
+                var tile = new Border
+                {
+                    Width = 30, Height = 30, CornerRadius = new CornerRadius(8),
+                    HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
+                    Child = new TextBlock
+                    {
+                        Text = glyph, FontFamily = IconFont, FontSize = 13, Foreground = Brushes.White,
+                        HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                    },
+                };
+                tile.SetResourceReference(Border.BackgroundProperty, "PageTile");
+                icon = tile;
+                grid.ColumnDefinitions[0].Width = new GridLength(44);
+            }
             grid.Children.Add(icon);
 
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) };
@@ -198,7 +382,7 @@ namespace KnobFlyout.Settings
             var header = CardHeader(glyph, title, description, right);
             header.Margin = new Thickness(16, 9, 16, 9);
 
-            var head = new Border { Child = header, Background = Brushes.Transparent, CornerRadius = new CornerRadius(8), Cursor = System.Windows.Input.Cursors.Hand };
+            var head = new Border { Child = header, Background = Brushes.Transparent, CornerRadius = new CornerRadius(CardRadius), Cursor = System.Windows.Input.Cursors.Hand };
             var body = new Border
             {
                 BorderBrush = CardBorder, BorderThickness = new Thickness(0, 1, 0, 0),
@@ -306,6 +490,9 @@ namespace KnobFlyout.Settings
         /// <summary>Schalter-Knopf an seine Stelle (an = rechts, Füllung in Akzentfarbe); animate = gleitend.</summary>
         private static void SwitchState(CheckBox cb, bool animate)
         {
+            // In einer zugeklappten Karte ist die Vorlage beim Laden noch nicht angewendet (wird erst beim Messen gebaut):
+            // ohne das bliebe der Schalter nach dem Aufklappen auf „aus“ stehen, obwohl daneben „Ein“ steht.
+            cb.ApplyTemplate();
             if (cb.Template?.FindName("Thumb", cb) is not FrameworkElement thumb) return;
             if (thumb.RenderTransform is not TransformGroup group || group.Children.Count < 2) return;
             if (group.IsFrozen) { group = group.Clone(); thumb.RenderTransform = group; }
@@ -455,7 +642,7 @@ namespace KnobFlyout.Settings
                     "<ContentPresenter VerticalAlignment=\"Center\" Margin=\"0,0,12,0\"/>" +
                     "<Grid Width=\"40\" Height=\"20\" VerticalAlignment=\"Center\">" +
                     $"<Border x:Name=\"Track\" CornerRadius=\"10\" BorderThickness=\"1\" BorderBrush=\"{off}\" Background=\"Transparent\"/>" +
-                    "<Border x:Name=\"OnFill\" CornerRadius=\"10\" Background=\"#0078D4\" Opacity=\"0\"/>" +
+                    $"<Border x:Name=\"OnFill\" CornerRadius=\"10\" Background=\"{AccentHex}\" Opacity=\"0\"/>" +
                     "<Grid x:Name=\"Thumb\" Width=\"12\" Height=\"12\" HorizontalAlignment=\"Left\" Margin=\"4,0,0,0\" RenderTransformOrigin=\"0.5,0.5\">" +
                     "<Grid.RenderTransform><TransformGroup><ScaleTransform ScaleX=\"1\" ScaleY=\"1\"/><TranslateTransform X=\"0\"/></TransformGroup></Grid.RenderTransform>" +
                     $"<Ellipse Fill=\"{off}\"/>" +
@@ -529,6 +716,7 @@ namespace KnobFlyout.Settings
             w.Resources["ThemeThumb"] = ThumbBg;
             w.Resources["ThemeThumbHover"] = ThumbHoverBg;
             w.Resources["ThemeTrack"] = TrackBg;
+            w.Resources["PageTile"] = Accent; // Farbkacheln: Kachelfarbe außerhalb einer Seite (Seiten setzen ihre eigene)
             if (w.Resources.MergedDictionaries.Count > 0) return;
 
             Motion.Enabled = Config.ConfigManager.Load().SettingsAnimations;

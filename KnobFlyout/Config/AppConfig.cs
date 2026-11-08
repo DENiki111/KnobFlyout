@@ -51,6 +51,13 @@ namespace KnobFlyout.Config
         [JsonPropertyName("hide_windows_flyout")] public bool HideWindowsFlyout { get; set; } = false;
         /// <summary>Animationen in Einstellungen und Tutorial (Überblenden, Klick, Seitenwechsel, Schalter, Aufklappen).</summary>
         [JsonPropertyName("settings_animations")] public bool SettingsAnimations { get; set; } = true;
+
+        /// <summary>Aussehen der Einstellungen (und des Tutorials): "classic" (Windows-11-Grau), "midnight" (Verlauf aus zwei
+        /// eigenen Farben, die obere ist auch Akzent), "tiles" (Farbkacheln, statisch, hell/dunkel nach Theme).</summary>
+        [JsonPropertyName("settings_design")] public string SettingsDesign { get; set; } = "classic";
+        public const string DefaultFadeTop = "#5B8CFF", DefaultFadeBottom = "#0D1220";
+        [JsonPropertyName("settings_fade_top")] public string SettingsFadeTop { get; set; } = DefaultFadeTop;
+        [JsonPropertyName("settings_fade_bottom")] public string SettingsFadeBottom { get; set; } = DefaultFadeBottom;
         /// <summary>Eigener Text je Feststelltaste im OSD (CapsLock/NumLock/ScrollLock → Name); fehlt/leer = Standardname.</summary>
         [JsonPropertyName("lock_key_names")] public Dictionary<string, string> LockKeyNames { get; set; } = new();
         [JsonPropertyName("osd_x")] public int? OsdX { get; set; }

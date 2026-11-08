@@ -81,20 +81,15 @@ namespace KnobFlyout.Media
             try
             {
                 _manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-                _manager.CurrentSessionChanged += (_, _) =>
-                {
-                    // Nur automatisch wechseln, wenn gerade keine gültige Auswahl besteht (Start,
-                    // oder die gewählte App wurde geschlossen). Eine manuelle Auswahl per SwitchTo()
-                    // bleibt sonst bestehen, auch wenn Windows kurz eine andere Session als
-                    // "aktuell" meldet (z.B. weil ein Video kurz anspielt) - das war der Grund,
-                    // warum Umschalten in der Quellen-Leiste vorher sofort wieder rückgängig
-                    // gemacht wurde.
-                    if (_session == null || !IsStillValid(_session)) Rehook();
-                };
+                // Nur automatisch auf eine andere App wechseln, wenn gerade keine gültige Auswahl besteht (Start,
+                // oder die gewählte App wurde geschlossen). Eine manuelle Auswahl per SwitchTo() bleibt sonst bestehen,
+                // auch wenn Windows kurz eine andere Session als "aktuell" meldet (z.B. weil ein Video kurz anspielt) -
+                // das war der Grund, warum Umschalten in der Quellen-Leiste vorher sofort wieder rückgängig gemacht wurde.
+                _manager.CurrentSessionChanged += (_, _) => Revalidate();
                 _manager.SessionsChanged += (_, _) =>
                 {
                     WatchSessions();
-                    if (_session == null || !IsStillValid(_session)) Rehook();
+                    Revalidate();
                     UpdateSkipKeys();
                     SourcesChanged?.Invoke();
                 };
@@ -142,6 +137,7 @@ namespace KnobFlyout.Media
 
         private void OnAnyPlayback(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args)
         {
+            Revalidate(); // z.B. ein anderer Firefox-Tab spielt los: dessen Session vertritt jetzt die App
             UpdateSkipKeys();
             SourcesChanged?.Invoke();
         }
@@ -165,30 +161,25 @@ namespace KnobFlyout.Media
 
         private void KeepSkipKeys() => System.Threading.Volatile.Write(ref _skipKeysUntil, Environment.TickCount64 + SkipKeysGraceMs);
 
+        private readonly object _hookLock = new();
+
         private void Rehook()
         {
             try
             {
-                if (_session != null)
+                lock (_hookLock)
                 {
-                    _session.MediaPropertiesChanged -= OnPropsChanged;
-                    _session.PlaybackInfoChanged -= OnPlaybackChanged;
-                }
-
-                _session = _manager?.GetCurrentSession();
-                if (_session == null)
-                {
+                    var sessions = _manager?.GetSessions()?.ToList() ?? new();
+                    var current = _manager?.GetCurrentSession();
+                    // Die aktuelle Session als Objekt aus der Liste nehmen (GetCurrentSession liefert ein anderes Objekt
+                    // für dieselbe Session), sonst erkennt Revalidate sie nicht wieder.
+                    var next = current != null ? AppSession(sessions, SafeAppId(current)) ?? current : null;
                     // Windows meldet oft gar keine "aktuelle" Session mehr, sobald ALLES pausiert
                     // ist (z.B. Spotify pausiert, sonst läuft nichts) - dann die erste verfügbare
                     // Session nehmen, statt das Flyout komplett zu verstecken. Das war der Grund,
                     // warum das Flyout beim Pausieren verschwand.
-                    _session = _manager?.GetSessions()?.FirstOrDefault();
-                }
-
-                if (_session != null)
-                {
-                    _session.MediaPropertiesChanged += OnPropsChanged;
-                    _session.PlaybackInfoChanged += OnPlaybackChanged;
+                    next ??= sessions.FirstOrDefault();
+                    Attach(next);
                 }
                 Changed?.Invoke();
             }
@@ -198,17 +189,75 @@ namespace KnobFlyout.Media
             }
         }
 
-        /// <summary>Prüft, ob eine Session (per AppId) noch unter den aktuell laufenden Mediensessions ist.</summary>
-        private bool IsStillValid(GlobalSystemMediaTransportControlsSession s)
+        /// <summary>
+        /// Gezeigte Session noch da? Firefox legt für einen neuen Tab (oder eine neue Seite) eine neue Session mit derselben
+        /// AppId an und verwirft die alte: Dann auf die neue Session derselben App wechseln, sonst kämen von ihr keine
+        /// Meldungen und das Flyout erschiene nicht mehr. Spielt eine andere Session derselben App, während die gezeigte
+        /// nicht spielt, vertritt die spielende die App (wie in der Quellen-Leiste). Ist die App weg: aktuelle Session.
+        /// </summary>
+        private void Revalidate()
         {
+            bool changed = false, rehook = false;
             try
             {
-                var id = s.SourceAppUserModelId;
-                return _manager?.GetSessions()?.Any(x => x.SourceAppUserModelId == id) == true;
+                lock (_hookLock)
+                {
+                    if (_session == null) rehook = true;
+                    else
+                    {
+                        var sessions = _manager?.GetSessions()?.ToList() ?? new();
+                        bool present = sessions.Any(x => ReferenceEquals(x, _session));
+                        bool playing = present && IsPlaying(_session);
+                        var same = playing ? _session : AppSession(sessions, SafeAppId(_session));
+                        if (same == null) rehook = true;
+                        else if (!ReferenceEquals(same, _session) && (!present || IsPlaying(same)))
+                        {
+                            Attach(same);
+                            changed = true;
+                        }
+                    }
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                return false;
+                Logger.Error($"Media revalidate: {ex.Message}");
+                return;
+            }
+            if (rehook) Rehook();
+            else if (changed) Changed?.Invoke();
+        }
+
+        /// <summary>Session dieser App aus der Liste, die spielende zuerst; null, wenn die App keine mehr hat.</summary>
+        private static GlobalSystemMediaTransportControlsSession? AppSession(List<GlobalSystemMediaTransportControlsSession> sessions, string? appId)
+        {
+            if (appId == null) return null;
+            var same = sessions.Where(x => SafeAppId(x) == appId).ToList();
+            return same.FirstOrDefault(IsPlaying) ?? same.FirstOrDefault();
+        }
+
+        private static string? SafeAppId(GlobalSystemMediaTransportControlsSession s)
+        {
+            try { return s.SourceAppUserModelId; }
+            catch { return null; } // Session schon weg
+        }
+
+        /// <summary>Meldungen ab jetzt von dieser Session (die vorige abmelden).</summary>
+        private void Attach(GlobalSystemMediaTransportControlsSession? session)
+        {
+            if (_session != null)
+            {
+                try
+                {
+                    _session.MediaPropertiesChanged -= OnPropsChanged;
+                    _session.PlaybackInfoChanged -= OnPlaybackChanged;
+                }
+                catch { /* Session schon weg */ }
+            }
+            _session = session;
+            if (_session != null)
+            {
+                _session.MediaPropertiesChanged += OnPropsChanged;
+                _session.PlaybackInfoChanged += OnPlaybackChanged;
             }
         }
 
@@ -348,15 +397,8 @@ namespace KnobFlyout.Media
             if (session == null || ReferenceEquals(session, _session)) return; // null: Beispiel-Quelle der Vorschau
 
             var previous = _session;
-            if (previous != null)
-            {
-                _ = SafeCall(() => previous.TryPauseAsync().AsTask());
-                previous.MediaPropertiesChanged -= OnPropsChanged;
-                previous.PlaybackInfoChanged -= OnPlaybackChanged;
-            }
-            _session = session;
-            _session.MediaPropertiesChanged += OnPropsChanged;
-            _session.PlaybackInfoChanged += OnPlaybackChanged;
+            if (previous != null) _ = SafeCall(() => previous.TryPauseAsync().AsTask());
+            lock (_hookLock) Attach(session);
             _ = SafeCall(() => session.TryPlayAsync().AsTask());
             Changed?.Invoke();
         }
@@ -365,14 +407,7 @@ namespace KnobFlyout.Media
         public void ShowSource(GlobalSystemMediaTransportControlsSession session)
         {
             if (ReferenceEquals(session, _session)) return;
-            if (_session != null)
-            {
-                _session.MediaPropertiesChanged -= OnPropsChanged;
-                _session.PlaybackInfoChanged -= OnPlaybackChanged;
-            }
-            _session = session;
-            _session.MediaPropertiesChanged += OnPropsChanged;
-            _session.PlaybackInfoChanged += OnPlaybackChanged;
+            lock (_hookLock) Attach(session);
         }
 
         private static bool LooksLikeHash(string appId)
