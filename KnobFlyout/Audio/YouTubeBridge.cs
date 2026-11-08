@@ -30,7 +30,7 @@ namespace KnobFlyout.Audio
         public const string Opera = "opera";
         public static readonly string[] Browsers = { Firefox, Chrome, Opera };
         /// <summary>Webseiten, die die Erweiterung erkennt (Namen wie in sites.js), einzeln abschaltbar über bridge_sites_off.</summary>
-        public static readonly string[] Sites = { "YouTube", "Twitch", "TikTok", "Instagram", "Netflix", "Prime Video", "Disney+", "Crunchyroll", "Joyn", "VOE", "Jellyfin" };
+        public static readonly string[] Sites = { "YouTube", "Twitch", "TikTok", "Instagram", "Netflix", "Prime Video", "Disney+", "Crunchyroll", "Joyn", "VOE" };
         private const string WsGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
         private sealed class Tab
@@ -90,7 +90,8 @@ namespace KnobFlyout.Audio
         /// <summary>Server je nach youtube_bridge starten oder stoppen (beim Start und nach jedem Speichern).</summary>
         public void Apply(AppConfig cfg)
         {
-            lock (_lock) _sitesOff = new HashSet<string>(cfg.BridgeSitesOff ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+            // Nur Seiten mit Schalter (Sites) lassen sich abschalten; ein alter Eintrag einer Seite ohne Schalter (z. B. Jellyfin) gilt nicht mehr.
+            lock (_lock) _sitesOff = new HashSet<string>((cfg.BridgeSitesOff ?? new List<string>()).Where(s => Sites.Contains(s, StringComparer.OrdinalIgnoreCase)), StringComparer.OrdinalIgnoreCase);
             if (cfg.YoutubeBridge) Start();
             else Stop();
         }
