@@ -64,7 +64,7 @@ No data is sold, rented or shared with anyone. It isn't used for advertising, is
 
 ## Permissions
 
-The extension asks for exactly one thing: permission to run its script on all websites. That's needed because some supported video sites don't have a fixed address. Jellyfin runs on your own server under your own domain, and some video hosts keep switching between many mirror domains. On pages without a video the script does nothing. The extension doesn't request any other permissions (no access to tabs, history, downloads, storage or cookies).
+The extension asks for exactly one thing: permission to run its script on all websites. That's needed because Jellyfin, one of the supported video sites, doesn't have a fixed address: it runs on your own server under your own domain or a local address. On pages without a video the script does nothing. The extension doesn't request any other permissions (no access to tabs, history, downloads, storage or cookies).
 
 ## Legal basis (GDPR)
 
@@ -156,7 +156,7 @@ Daten werden weder verkauft noch vermietet noch an irgendwen weitergegeben. Sie 
 
 ## Berechtigungen
 
-Die Erweiterung fragt genau nach einer Sache: ihr Skript auf allen Webseiten ausführen zu dürfen. Das braucht sie, weil manche unterstützten Video-Seiten keine feste Adresse haben. Jellyfin läuft auf deinem eigenen Server unter deiner eigenen Adresse, und manche Video-Hoster wechseln ständig zwischen vielen Ausweich-Adressen. Auf Seiten ohne Video macht das Skript nichts. Andere Berechtigungen hat die Erweiterung nicht (kein Zugriff auf Tabs, Verlauf, Downloads, Speicher oder Cookies).
+Die Erweiterung fragt genau nach einer Sache: ihr Skript auf allen Webseiten ausführen zu dürfen. Das braucht sie, weil Jellyfin, eine der unterstützten Video-Seiten, keine feste Adresse hat: Es läuft auf deinem eigenen Server unter deiner eigenen Adresse. Auf Seiten ohne Video macht das Skript nichts. Andere Berechtigungen hat die Erweiterung nicht (kein Zugriff auf Tabs, Verlauf, Downloads, Speicher oder Cookies).
 
 ## Rechtsgrundlage (DSGVO)
 
