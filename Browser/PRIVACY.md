@@ -31,7 +31,7 @@ It also sends a few technical details to KnobFlyout:
 - which browser it is running in (Chrome, Opera or Firefox), so KnobFlyout can match it to the right app in the Windows volume mixer
 - the version of the connection protocol
 - the text of an error message if the extension's own script fails (no page content)
-- if a video plays on a site the extension doesn't know: only the host name of that site (for example `example.com`), so KnobFlyout's log shows which site isn't supported yet
+- only in the versions from GitHub, not in the one from the Chrome Web Store: if a video plays on a site the extension doesn't know, the host name of that site (for example `example.com`), so KnobFlyout's log shows which site isn't supported yet
 
 On YouTube, a small script runs inside the page so it can use the YouTube player's own volume and seek functions. It reads the same information as listed above.
 
@@ -123,7 +123,7 @@ Außerdem schickt sie ein paar technische Angaben an KnobFlyout:
 - in welchem Browser sie läuft (Chrome, Opera oder Firefox), damit KnobFlyout sie der richtigen App im Windows-Lautstärkemixer zuordnen kann
 - die Version des Verbindungsprotokolls
 - den Text einer Fehlermeldung, falls das Skript der Erweiterung selbst einen Fehler hat (kein Seiteninhalt)
-- wenn ein Video auf einer Seite spielt, die die Erweiterung nicht kennt: nur den Hostnamen dieser Seite (zum Beispiel `example.com`), damit im Protokoll von KnobFlyout steht, welche Seite noch nicht unterstützt wird
+- nur in den Versionen von GitHub, nicht in der aus dem Chrome Web Store: wenn ein Video auf einer Seite spielt, die die Erweiterung nicht kennt, den Hostnamen dieser Seite (zum Beispiel `example.com`), damit im Protokoll von KnobFlyout steht, welche Seite noch nicht unterstützt wird
 
 Auf YouTube läuft ein kleines Skript in der Seite selbst, damit es die eigenen Lautstärke- und Spul-Funktionen des YouTube-Players nutzen kann. Es liest dieselben Angaben wie oben.
 
